@@ -1,0 +1,30 @@
+# secrets
+.env
+*.env
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+build/
+.next/
+
+# big data / models
+rehab_imu_extracted/
+rehab score imu.zip
+*.zip
+rehab_platform/models/imu/classifier_ready.csv
+
+# git backups
+.git.backup.*
+
+# system/logs
+.DS_Store
+*.log

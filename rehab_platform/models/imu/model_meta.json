@@ -1,0 +1,26 @@
+{
+  "activity_names": [
+    "going_down",
+    "going_up",
+    "running",
+    "sitting",
+    "sitting_down",
+    "standing",
+    "standing_up",
+    "walking"
+  ],
+  "label_remap": {
+    "1": 0,
+    "2": 1,
+    "3": 2,
+    "4": 3,
+    "5": 4,
+    "6": 5,
+    "7": 6,
+    "9": 7
+  },
+  "val_accuracy": 0.9376,
+  "test_accuracy": 0.9457,
+  "val_f1": 0.9385,
+  "test_f1": 0.9477
+}

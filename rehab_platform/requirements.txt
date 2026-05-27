@@ -1,0 +1,22 @@
+streamlit>=1.35.0
+
+# Image diagnostics (Module 1)
+torch>=2.1.0
+torchvision>=0.16.0
+timm>=0.9.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+grad-cam>=1.4.8
+
+# IMU pipeline (Module 2)
+tensorflow>=2.15.0
+keras>=3.0.0
+joblib>=1.3.0
+PyWavelets>=1.4.0
+pyserial>=3.5
+
+# Shared
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+scikit-learn>=1.3.0

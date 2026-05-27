@@ -1,0 +1,579 @@
+"""
+api/main.py  —  OrthoScan AI  ·  FastAPI backend
+=================================================
+Endpoints
+  GET  /health       → {"status":"ok", "model":"real"|"demo"}
+  POST /predict      → image file + ?lang=en|ru|kz → full JSON report
+
+Model loading priority
+  1. Real ConvNeXt-Small checkpoint  →  rehab_platform/models/knee_oa/best_convnext.pth
+  2. Optional temperature file       →  rehab_platform/models/knee_oa/temperatures.pth
+  3. Falls back to deterministic demo analyser if checkpoint is missing
+
+Run with (from Rehabilitation/ root):
+  uvicorn api.main:app --reload --port 8000
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import logging
+import sys
+from pathlib import Path
+
+import numpy as np
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from PIL import Image
+
+log = logging.getLogger("orthoscan")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+
+# ── IMU pipeline import (rehab_platform/core/imu_pipeline.py) ─────────────────
+# Add rehab_platform/ to sys.path so we can import core.imu_pipeline directly.
+_ROOT_EARLY = Path(__file__).resolve().parent.parent
+_REHAB_DIR  = _ROOT_EARLY / "rehab_platform"
+if str(_REHAB_DIR) not in sys.path:
+    sys.path.insert(0, str(_REHAB_DIR))
+
+_HAS_IMU_PIPELINE = False
+try:
+    from core.imu_pipeline import (          # noqa: E402
+        analyze_imu_csv      as _imu_analyze,
+        score_rehab_exercise as _imu_rehab_score,
+        assets_available     as _imu_assets,
+        load_classifier      as _imu_load_clf,
+        load_scaler          as _imu_load_scl,
+        load_metadata        as _imu_load_meta,
+        load_baseline        as _imu_load_baseline,
+    )
+    _HAS_IMU_PIPELINE = True
+except Exception as _imu_import_err:
+    log.warning(f"IMU pipeline not importable: {_imu_import_err}")
+
+# ── Checkpoint paths ───────────────────────────────────────────────────────────
+_ROOT      = Path(__file__).resolve().parent.parent
+CKPT_PATH  = _ROOT / "rehab_platform" / "models" / "knee_oa" / "best_convnext.pth"
+TEMP_PATH  = _ROOT / "rehab_platform" / "models" / "knee_oa" / "temperatures.pth"
+
+# ── Notebook constants (fallbacks when not stored in checkpoint) ───────────────
+_ARCH       = "convnext_small.fb_in22k_ft_in1k"
+_MEAN       = 0.6074   # training-set X-ray pixel mean (grayscale)
+_STD        = 0.1944   # training-set X-ray pixel std
+_THRESHOLD  = 0.56     # Youden's J threshold from val set
+_INPUT_SIZE = 224
+
+# ── Global model state ────────────────────────────────────────────────────────
+# OA (Knee X-ray) model
+_model     = None   # nn.Module or None
+_threshold = _THRESHOLD
+_mean      = _MEAN
+_std       = _STD
+_T         = 1.0    # temperature scalar (1.0 = no scaling)
+_mode      = "demo" # "real" | "demo"
+
+# IMU (LSTM activity classifier) model
+_imu_clf      = None
+_imu_scaler   = None
+_imu_meta     = None
+_imu_baseline = None
+_imu_mode     = "unavailable"  # "real" | "unavailable"
+_imu_fail_reason = ""          # human-readable reason stored for /health
+
+
+# ── Exact model architecture from build_model_v3() in the notebook ─────────────
+def _build_model(arch: str, in_features: int | None = None):
+    """
+    Recreates BinaryModel exactly as defined in Cell 10 of
+    BIN_knee_ost_dropped_G1.ipynb.
+
+    Head: LayerNorm → Dropout(0.4) → Linear(feats,256) → GELU
+          → Dropout(0.3) → Linear(256,1)
+    """
+    import torch.nn as nn
+    import timm
+
+    backbone    = timm.create_model(arch, pretrained=False, num_classes=0)
+    in_features = backbone.num_features
+
+    head = nn.Sequential(
+        nn.LayerNorm(in_features),
+        nn.Dropout(p=0.4),
+        nn.Linear(in_features, 256),
+        nn.GELU(),
+        nn.Dropout(p=0.3),
+        nn.Linear(256, 1),
+    )
+
+    class BinaryModel(nn.Module):
+        def __init__(self, bb, hd):
+            super().__init__()
+            self.backbone = bb
+            self.head     = hd
+
+        def forward(self, x):
+            return self.head(self.backbone(x))
+
+    return BinaryModel(backbone, head)
+
+
+def _load_real_model() -> bool:
+    """
+    Attempts to load the ConvNeXt-Small checkpoint.
+    Returns True on success, False if the file is missing.
+    Prints a loud warning to the terminal if the file is absent.
+    """
+    global _model, _threshold, _mean, _std, _T, _mode
+
+    if not CKPT_PATH.exists():
+        log.warning("=" * 68)
+        log.warning("  CHECKPOINT NOT FOUND — running in DEMO mode.")
+        log.warning(f"  Expected path: {CKPT_PATH}")
+        log.warning("  To enable real inference:")
+        log.warning("    1. Download best_convnext_small_*.pth from Colab")
+        log.warning("    2. Rename it to  best_convnext.pth")
+        log.warning(f"    3. Place it at   {CKPT_PATH}")
+        log.warning("    4. Restart the backend (uvicorn auto-reloads)")
+        log.warning("=" * 68)
+        return False
+
+    try:
+        import torch
+
+        log.info(f"Loading checkpoint: {CKPT_PATH}")
+        ckpt = torch.load(CKPT_PATH, map_location="cpu", weights_only=False)
+
+        arch = ckpt.get("arch", _ARCH)
+        model = _build_model(arch)
+        model.load_state_dict(ckpt["model_state_dict"])
+        model.eval()
+
+        _model     = model
+        _threshold = float(ckpt.get("best_threshold", _THRESHOLD))
+        _mean      = float(ckpt.get("train_mean",     _MEAN))
+        _std       = float(ckpt.get("train_std",      _STD))
+        _mode      = "real"
+
+        log.info(f"  arch      : {arch}")
+        log.info(f"  threshold : {_threshold:.4f}  (Youden's J, from val set)")
+        log.info(f"  mean/std  : {_mean:.4f} / {_std:.4f}  (X-ray training stats)")
+        log.info(f"  val_acc   : {ckpt.get('val_accuracy', 'n/a')}")
+        log.info(f"  val_auc   : {ckpt.get('val_auc', 'n/a')}")
+
+        # Optional temperature scaling
+        if TEMP_PATH.exists():
+            calib = torch.load(TEMP_PATH, map_location="cpu", weights_only=False)
+            entry = calib.get("ConvNeXt-Small", {})
+            _T = float(entry.get("T", 1.0))
+            log.info(f"  temperature: {_T:.4f}  (from {TEMP_PATH.name})")
+        else:
+            _T = 1.0
+            log.info("  temperature: 1.0  (temperatures.pth not found, skipping)")
+
+        log.info("✓ Real ConvNeXt-Small model loaded successfully")
+        return True
+
+    except Exception as exc:
+        log.error(f"Failed to load checkpoint: {exc}")
+        log.error("Falling back to DEMO mode.")
+        _model = None
+        _mode  = "demo"
+        return False
+
+
+# ── Preprocessing — exact eval pipeline from Cell 7 of the notebook ────────────
+def _preprocess(pil_image: Image.Image) -> "torch.Tensor":
+    """
+    CLAHE (clipLimit=2.0, tileGridSize=8×8)
+    → RGB conversion (same grayscale replicated to 3 channels)
+    → Resize 224×224
+    → ToTensor  (scales to [0,1])
+    → Normalize with training X-ray stats: mean=0.6074, std=0.1944
+    Returns shape (1, 3, 224, 224).
+    """
+    import cv2
+    import torch
+    from torchvision import transforms
+
+    img_np = np.array(pil_image.convert("L"), dtype=np.uint8)
+    clahe  = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    eq     = clahe.apply(img_np)
+    # cv2.COLOR_GRAY2RGB replicates the single channel to R,G,B
+    rgb    = cv2.cvtColor(eq, cv2.COLOR_GRAY2RGB)
+    enhanced_pil = Image.fromarray(rgb)
+
+    tf = transforms.Compose([
+        transforms.Resize(_INPUT_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[_mean, _mean, _mean],
+            std =[_std,  _std,  _std ],
+        ),
+    ])
+    return tf(enhanced_pil).unsqueeze(0)   # (1, 3, 224, 224)
+
+
+# ── Real-model inference with TTA — exact logic from Cell 13 of the notebook ───
+def _infer_real(pil_image: Image.Image) -> float:
+    """
+    3-pass TTA matching collect_val_logits():
+      pass 1: original
+      pass 2: horizontal flip
+      pass 3: brightness × 1.1
+    Logits averaged, then temperature-scaled, then sigmoid → P(OA).
+    """
+    import torch
+    import torchvision.transforms.functional as TF
+
+    tensor = _preprocess(pil_image)   # (1, 3, 224, 224)
+
+    with torch.no_grad():
+        l1 = _model(tensor)
+        l2 = _model(TF.hflip(tensor))
+        l3 = _model(TF.adjust_brightness(tensor, brightness_factor=1.1))
+        logit = (l1 + l2 + l3) / 3.0          # average TTA logits
+        logit = logit / max(_T, 0.05)          # temperature scaling
+        oa_prob = float(torch.sigmoid(logit).squeeze())
+
+    return oa_prob
+
+
+# ── Demo analyser (no model required) ─────────────────────────────────────────
+def _infer_demo(pil_image: Image.Image) -> float:
+    """
+    Deterministic, per-image OA probability from image statistics.
+    Used only when the checkpoint is absent.
+    """
+    import cv2
+
+    gray     = np.array(pil_image.convert("L"), dtype=np.uint8)
+    clahe    = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    resized  = np.array(
+        Image.fromarray(enhanced).resize((_INPUT_SIZE, _INPUT_SIZE)),
+        dtype=np.float32,
+    ) / 255.0
+
+    H, W   = resized.shape
+    m      = 56
+    cx, cy = W // 2, H // 2
+    center = resized[cy - m : cy + m, cx - m : cx + m]
+
+    edges   = cv2.Canny((resized * 255).astype(np.uint8), 50, 150)
+    c_edges = edges[cy - m : cy + m, cx - m : cx + m]
+
+    h8    = hashlib.md5(pil_image.tobytes()).hexdigest()[:8]
+    noise = (int(h8, 16) % 1000) / 1000.0 * 0.10 - 0.05
+
+    raw = (
+        -0.55 * float(np.mean(center))
+        +  0.45 * float(np.mean(c_edges > 0))
+        +  0.30 * float(np.std(resized))
+        -  0.15 * float(np.std(center))
+        +  0.10 * float(np.mean(edges > 0))
+        +  0.30
+        +  noise
+    )
+    return float(np.clip(1.0 / (1.0 + np.exp(-raw * 4.5)), 0.12, 0.96))
+
+
+# ── Multilingual report content ────────────────────────────────────────────────
+_CONTENT = {
+    "en": {
+        "normal": {
+            "diagnosis": "Normal — Grade 0",
+            "findings": [
+                "Joint space width within normal limits bilaterally",
+                "No significant osteophyte formation detected",
+                "Subchondral bone density appears uniform",
+                "Tibial plateau and femoral condyles structurally intact",
+            ],
+            "recommendations": [
+                "Routine follow-up in 24 months if asymptomatic",
+                "Maintain healthy weight to preserve joint health",
+                "Low-impact physical activity (swimming, cycling) recommended",
+                "Return if symptoms such as pain or stiffness develop",
+            ],
+        },
+        "oa": {
+            "diagnosis": "Osteoarthritis Detected — Grade 2–4",
+            "findings": [
+                "Moderate joint space narrowing in medial compartment",
+                "Osteophyte formation at femoral condyle margins",
+                "Subchondral sclerosis in medial tibial plateau",
+                "Lateral compartment relatively preserved",
+            ],
+            "recommendations": [
+                "Orthopedic specialist consultation recommended",
+                "Begin supervised low-impact physiotherapy programme",
+                "Weight management to reduce mechanical joint load",
+                "Follow-up X-ray in 12–18 months to monitor progression",
+            ],
+        },
+        "scale": "Grade 1 excluded. Binary classifier: Normal vs OA (Grades 2–4).",
+    },
+    "ru": {
+        "normal": {
+            "diagnosis": "Норма — Grade 0",
+            "findings": [
+                "Ширина суставной щели в норме с обеих сторон",
+                "Значимых остеофитов не выявлено",
+                "Плотность субхондральной кости равномерная",
+                "Мыщелки бедра и плато большеберцовой кости структурно сохранны",
+            ],
+            "recommendations": [
+                "Контрольный осмотр через 24 месяца при отсутствии симптомов",
+                "Поддерживать нормальный вес для сохранения здоровья суставов",
+                "Рекомендована физическая активность с малой нагрузкой",
+                "Обратиться при появлении боли или скованности",
+            ],
+        },
+        "oa": {
+            "diagnosis": "Остеоартрит выявлен — Grade 2–4",
+            "findings": [
+                "Умеренное сужение суставной щели в медиальном отделе",
+                "Остеофиты у краёв мыщелков бедренной кости",
+                "Субхондральный склероз в медиальном отделе большеберцовой кости",
+                "Латеральный отдел сустава относительно сохранён",
+            ],
+            "recommendations": [
+                "Консультация ортопеда обязательна",
+                "Начать физиотерапию с малой нагрузкой под наблюдением специалиста",
+                "Контроль веса для снижения нагрузки на сустав",
+                "Контрольный рентген через 12–18 месяцев для мониторинга динамики",
+            ],
+        },
+        "scale": "Grade 1 исключён. Бинарный классификатор: Норма против ОА (Grade 2–4).",
+    },
+    "kz": {
+        "normal": {
+            "diagnosis": "Норма — Grade 0",
+            "findings": [
+                "Буын саңылауының ені екі жағынан да қалыпты шектерде",
+                "Маңызды остеофит түзілуі анықталмады",
+                "Субхондральды сүйек тығыздығы біркелкі",
+                "Тибиальды үстіңгі жақ пен сан мыщелктері құрылымдық жағынан сақталған",
+            ],
+            "recommendations": [
+                "Симптомсыз болса 24 айдан кейін жоспарлы бақылау",
+                "Буын денсаулығын сақтау үшін қалыпты салмақты ұстаңыз",
+                "Аз жүктемелі физикалық белсенділік (жүзу, велосипед) ұсынылады",
+                "Ауырсыну немесе қаттылық пайда болса қайта өтіңіз",
+            ],
+        },
+        "oa": {
+            "diagnosis": "Остеоартрит анықталды — Grade 2–4",
+            "findings": [
+                "Медиальды бөліктегі буын саңылауының орташа тарылуы",
+                "Сан мыщелктерінің шеттерінде остеофит түзілуі",
+                "Медиальды тибиальды үстіңгі жақта субхондральды склероз",
+                "Буынның латеральды бөлігі салыстырмалы түрде сақталған",
+            ],
+            "recommendations": [
+                "Ортопед дәрігерімен міндетті консультация",
+                "Маманның бақылауымен аз жүктемелі физиотерапия бағдарламасын бастаңыз",
+                "Буынға механикалық жүктемені азайту үшін салмақты басқарыңыз",
+                "Динамиканы бақылау үшін 12–18 айдан кейін рентген",
+            ],
+        },
+        "scale": "Grade 1 жойылды. Бинарлы жіктеуіш: Норма — ОА (Grade 2–4).",
+    },
+}
+
+_HOTSPOT_LABELS = {
+    "en": ["Joint space", "Medial compartment", "Femoral condyle", "Tibial plateau"],
+    "ru": ["Суставная щель", "Медиальный отдел", "Мыщелок бедра", "Плато б/берцовой кости"],
+    "kz": ["Буын саңылауы", "Медиальды бөлік", "Сан мыщелкі", "Тибиальды үстіңгі жақ"],
+}
+
+
+# ── Build the full response dict ───────────────────────────────────────────────
+def _build_response(pil_image: Image.Image, lang: str) -> dict:
+    # Pick inference path
+    if _model is not None:
+        oa_prob = _infer_real(pil_image)
+    else:
+        oa_prob = _infer_demo(pil_image)
+
+    grade      = 1 if oa_prob >= _threshold else 0
+    conf_pct   = round((oa_prob if grade == 1 else 1.0 - oa_prob) * 100, 1)
+    normal_pct = round((1.0 - oa_prob) * 100, 1)
+    oa_pct     = round(oa_prob * 100, 1)
+
+    lang_c  = _CONTENT.get(lang, _CONTENT["en"])
+    content = lang_c["oa" if grade == 1 else "normal"]
+    labels  = _HOTSPOT_LABELS.get(lang, _HOTSPOT_LABELS["en"])
+
+    h8   = hashlib.md5(pil_image.tobytes()).hexdigest()[:8]
+    seed = int(h8[:4], 16)
+
+    if grade == 1:
+        hotspots = [
+            {"x": 0.50, "y": 0.58, "r": 0.28, "intensity": round(min(0.96, oa_prob + 0.05), 2), "label": labels[0]},
+            {"x": round(0.35 + (seed % 10) * 0.01, 2), "y": 0.55, "r": 0.22, "intensity": round(min(0.88, oa_prob - 0.04), 2), "label": labels[1]},
+            {"x": 0.65, "y": round(0.52 + (seed % 8) * 0.01, 2), "r": 0.20, "intensity": round(min(0.75, oa_prob - 0.14), 2), "label": labels[2]},
+            {"x": 0.50, "y": 0.40, "r": 0.25, "intensity": round(max(0.30, oa_prob - 0.25), 2), "label": labels[3]},
+        ]
+    else:
+        hotspots = [
+            {"x": 0.50, "y": 0.55, "r": 0.30, "intensity": round(max(0.20, oa_prob + 0.10), 2), "label": labels[0]},
+            {"x": 0.38, "y": 0.53, "r": 0.22, "intensity": round(max(0.15, oa_prob), 2),         "label": labels[1]},
+            {"x": 0.62, "y": 0.50, "r": 0.20, "intensity": round(max(0.12, oa_prob - 0.05), 2),  "label": labels[2]},
+            {"x": 0.50, "y": 0.42, "r": 0.24, "intensity": round(max(0.10, oa_prob - 0.08), 2),  "label": labels[3]},
+        ]
+
+    return {
+        "grade"          : grade,
+        "diagnosis"      : content["diagnosis"],
+        "prob_oa"        : round(oa_prob, 4),
+        "confidence"     : conf_pct,
+        "grade_probs"    : {"0": normal_pct, "1": oa_pct},
+        "threshold"      : round(_threshold, 4),
+        "T_optimal"      : round(_T, 4),
+        "severity"       : "None" if grade == 0 else ("Moderate" if conf_pct > 80 else "Mild"),
+        "findings"       : content["findings"],
+        "recommendations": content["recommendations"],
+        "scale"          : lang_c["scale"],
+        "urgency"        : "Routine" if grade == 0 else ("Soon" if conf_pct > 85 else "Routine"),
+        "hotspots"       : hotspots,
+        "source"         : _mode,
+    }
+
+
+# ── FastAPI app ────────────────────────────────────────────────────────────────
+app = FastAPI(title="OrthoScan AI", version="3.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _load_imu_model() -> bool:
+    """Attempt to load the LSTM IMU classifier. Returns True on success."""
+    global _imu_clf, _imu_scaler, _imu_meta, _imu_baseline, _imu_mode, _imu_fail_reason
+    if not _HAS_IMU_PIPELINE:
+        _imu_fail_reason = "IMU pipeline import failed (tensorflow / joblib / pandas not installed?)"
+        log.warning(_imu_fail_reason)
+        return False
+    if not _imu_assets():
+        _imu_fail_reason = (
+            f"LSTM model files not found at {_REHAB_DIR / 'models' / 'imu'}. "
+            "Need: lstm_classifier.keras, scaler.pkl"
+        )
+        log.warning(_imu_fail_reason)
+        return False
+    try:
+        log.info("Loading IMU LSTM classifier…")
+        _imu_clf      = _imu_load_clf()
+        _imu_scaler   = _imu_load_scl()
+        _imu_meta     = _imu_load_meta()
+        _imu_baseline = _imu_load_baseline()
+        _imu_mode     = "real"
+        _imu_fail_reason = ""
+        log.info("✓ IMU LSTM model loaded successfully")
+        return True
+    except Exception as exc:
+        _imu_fail_reason = f"Model load error: {exc}"
+        log.error(_imu_fail_reason)
+        _imu_mode = "unavailable"
+        return False
+
+
+@app.on_event("startup")
+async def startup():
+    """Load OA and IMU models at startup."""
+    _load_real_model()
+    _load_imu_model()
+    if _HAS_IMU_PIPELINE:
+        log.info("✓ IMU endpoint → biomechanical rehab scorer (score_rehab_exercise)")
+    else:
+        log.warning("✗ IMU pipeline import failed — /imu/analyze will return 503")
+
+
+@app.get("/health")
+async def health():
+    resp = {
+        "status":    "ok",
+        "model":     _mode,        # OA model: "real" | "demo"
+        "threshold": _threshold,
+        "T":         _T,
+        "imu":       _imu_mode,    # IMU model: "real" | "unavailable"
+    }
+    if _imu_fail_reason:
+        resp["imu_error"] = _imu_fail_reason
+    return resp
+
+
+@app.post("/imu/analyze")
+async def imu_analyze(
+    file: UploadFile = File(...),
+    lang: str            = Query("en"),
+    sensor_location: str = Query("right_thigh"),
+):
+    """
+    Accepts a single-sensor IMU CSV and returns biomechanical rehab scores.
+
+    Scoring is done via direct signal analysis (no LSTM required):
+      - Shakiness  — gyro-magnitude std detects tremor / instability
+      - ROM        — pitch range measures knee bend completeness
+    Clinical feedback is generated from threshold logic with continuous scoring.
+    """
+    if not _HAS_IMU_PIPELINE:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "IMU pipeline unavailable — numpy/pandas not installed."},
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    valid_locations = {
+        "right_thigh", "right_shin", "right_foot",
+        "left_thigh",  "left_shin",  "left_foot",
+    }
+    if sensor_location not in valid_locations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sensor_location '{sensor_location}'. Valid: {sorted(valid_locations)}",
+        )
+
+    try:
+        log.info(f"IMU analyze: {len(data)} bytes, location={sensor_location}")
+        result = _imu_rehab_score(
+            csv_bytes=data,
+            sensor_location=sensor_location,
+        )
+        log.info(
+            f"IMU result: scorer=biomechanical "
+            f"file_hash={result['session_summary'].get('file_hash','?')} "
+            f"rows={result['session_summary']['total_samples']} "
+            f"gyro_std={result['session_summary']['gyro_std_dps']} "
+            f"rom={result['session_summary']['rom_deg']}° "
+            f"score={result['overall_score']}"
+        )
+        return result
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except Exception as exc:
+        log.error(f"IMU analysis failed: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Analysis failed. Check backend logs for details."},
+        )
+
+
+@app.post("/predict")
+async def predict(
+    file: UploadFile = File(...),
+    lang: str = Query("en"),
+):
+    data = await file.read()
+    img  = Image.open(io.BytesIO(data)).convert("RGB")
+    lang = lang if lang in ("en", "ru", "kz") else "en"
+    return _build_response(img, lang=lang)

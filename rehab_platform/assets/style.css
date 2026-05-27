@@ -1,0 +1,477 @@
+/* ── Rehabilitation Platform — Design System v2 ───────────────────────────
+   Apple-inspired: pure white surfaces, deep soft shadows, Inter typeface,
+   medical-sky-blue (#0EA5E9 / #0284C7) primary accent.
+   Injected via st.markdown at runtime.
+─────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ── Reset / Base ──────────────────────────────────────────────────────── */
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+}
+
+.stApp {
+    background: #FFFFFF !important;
+}
+
+/* ── Hide ALL Streamlit chrome completely ──────────────────────────────── */
+#MainMenu                              { display: none !important; }
+footer                                 { display: none !important; }
+header                                 { display: none !important; }
+.stDeployButton                        { display: none !important; }
+[data-testid="stToolbar"]              { display: none !important; }
+[data-testid="stStatusWidget"]         { display: none !important; }
+.stStatusWidget                        { display: none !important; }
+[data-testid="stDecoration"]           { display: none !important; }
+[data-testid="stAppViewBlockContainer"] > div:first-child > div:first-child > div > div[data-testid="stVerticalBlock"] > div:first-child[style*="height"] { display: none !important; }
+.viewerBadge_container__r5tak         { display: none !important; }
+#stConnectionStatus                    { display: none !important; }
+
+/* ── Sidebar ───────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: #FFFFFF !important;
+    border-right: 1px solid #F1F5F9 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04) !important;
+    padding-top: 2rem !important;
+}
+
+[data-testid="stSidebar"] .stMarkdown p {
+    font-size: 0.72rem !important;
+    color: #94A3B8 !important;
+    letter-spacing: 0.09em !important;
+    text-transform: uppercase !important;
+    font-weight: 700 !important;
+    padding: 0.75rem 0 0.35rem 0 !important;
+}
+
+[data-testid="stSidebarNav"] {
+    padding-top: 0.5rem !important;
+}
+
+[data-testid="stSidebarNav"] a {
+    border-radius: 12px !important;
+    margin: 3px 0 !important;
+    font-weight: 500 !important;
+    font-size: 0.95rem !important;
+    color: #475569 !important;
+    padding: 0.55rem 0.9rem !important;
+    transition: background 0.15s ease, color 0.15s ease !important;
+}
+
+[data-testid="stSidebarNav"] a:hover {
+    background: #F0F9FF !important;
+    color: #0EA5E9 !important;
+}
+
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+    background: #EFF6FF !important;
+    color: #0284C7 !important;
+    font-weight: 650 !important;
+}
+
+/* ── Main content area ─────────────────────────────────────────────────── */
+.main .block-container {
+    padding: 3rem 4rem 5rem 4rem !important;
+    max-width: 1400px !important;
+}
+
+/* ── Typography — significantly larger ─────────────────────────────────── */
+h1 {
+    font-size: 3.2rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.04em !important;
+    color: #0F172A !important;
+    line-height: 1.1 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+h2 {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.025em !important;
+    color: #1E293B !important;
+    line-height: 1.25 !important;
+}
+
+h3 {
+    font-size: 1.35rem !important;
+    font-weight: 650 !important;
+    letter-spacing: -0.01em !important;
+    color: #334155 !important;
+}
+
+p, li {
+    font-size: 1.05rem !important;
+    color: #475569 !important;
+    line-height: 1.75 !important;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+.rehab-card {
+    background: #FFFFFF;
+    border: 1px solid #F1F5F9;
+    border-radius: 20px;
+    padding: 2.25rem 2.5rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), 0 1px 4px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.rehab-card:hover {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.11), 0 2px 8px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+}
+
+.module-card {
+    background: #FFFFFF;
+    border: 1px solid #F1F5F9;
+    border-radius: 24px;
+    padding: 3rem 2.75rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.module-card:hover {
+    border-color: #BAE6FD;
+    box-shadow: 0 16px 48px rgba(14, 165, 233, 0.14), 0 4px 16px rgba(14, 165, 233, 0.08);
+    transform: translateY(-4px);
+}
+
+.module-card .icon {
+    font-size: 3.5rem;
+    margin-bottom: 1.25rem;
+    display: block;
+}
+
+.module-card h3 {
+    font-size: 1.45rem !important;
+    font-weight: 750 !important;
+    color: #0F172A !important;
+    margin-bottom: 0.75rem !important;
+    letter-spacing: -0.02em !important;
+}
+
+.module-card p {
+    font-size: 1rem !important;
+    color: #64748B !important;
+    line-height: 1.7 !important;
+    margin: 0 !important;
+}
+
+/* ── Metric tiles ──────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: #FFFFFF !important;
+    border: 1px solid #F1F5F9 !important;
+    border-radius: 18px !important;
+    padding: 1.75rem 2rem !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+    transition: box-shadow 0.2s ease !important;
+}
+
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    color: #94A3B8 !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 2.6rem !important;
+    font-weight: 800 !important;
+    color: #0F172A !important;
+    letter-spacing: -0.04em !important;
+    line-height: 1.1 !important;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.stButton > button {
+    border-radius: 12px !important;
+    font-weight: 650 !important;
+    font-size: 1rem !important;
+    padding: 0.7rem 1.75rem !important;
+    transition: all 0.18s ease !important;
+    border: 1.5px solid transparent !important;
+    letter-spacing: -0.01em !important;
+}
+
+.stButton > button[kind="primary"] {
+    background: #0EA5E9 !important;
+    color: #FFFFFF !important;
+    border-color: #0EA5E9 !important;
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35), 0 1px 2px rgba(14, 165, 233, 0.2) !important;
+}
+
+.stButton > button[kind="primary"]:hover {
+    background: #0284C7 !important;
+    border-color: #0284C7 !important;
+    box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4), 0 2px 6px rgba(14, 165, 233, 0.25) !important;
+    transform: translateY(-1px) !important;
+}
+
+.stButton > button[kind="primary"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 6px rgba(14, 165, 233, 0.3) !important;
+}
+
+.stButton > button[kind="secondary"] {
+    background: #FFFFFF !important;
+    color: #374151 !important;
+    border-color: #E2E8F0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+.stButton > button[kind="secondary"]:hover {
+    background: #F8FAFC !important;
+    border-color: #CBD5E1 !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.09) !important;
+}
+
+/* ── File uploader ──────────────────────────────────────────────────────── */
+[data-testid="stFileUploadDropzone"] {
+    background: #F8FBFF !important;
+    border: 2px dashed #BAE6FD !important;
+    border-radius: 20px !important;
+    padding: 2.5rem !important;
+    transition: all 0.2s ease !important;
+}
+
+[data-testid="stFileUploadDropzone"]:hover {
+    background: #EFF6FF !important;
+    border-color: #0EA5E9 !important;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.08) !important;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+[data-testid="stTabs"] [role="tablist"] {
+    background: #F8FAFC !important;
+    border-radius: 12px !important;
+    padding: 4px !important;
+    gap: 2px !important;
+    border: 1px solid #E2E8F0 !important;
+}
+
+[data-testid="stTabs"] [role="tab"] {
+    border-radius: 9px !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    color: #64748B !important;
+    padding: 0.45rem 1.1rem !important;
+    transition: all 0.15s ease !important;
+    border: none !important;
+}
+
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    background: #FFFFFF !important;
+    color: #0284C7 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── Progress / status bars ─────────────────────────────────────────────── */
+.stProgress > div > div {
+    background: linear-gradient(90deg, #0EA5E9, #14B8A6) !important;
+    border-radius: 99px !important;
+}
+
+/* ── Info / success / warning banners ───────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: 14px !important;
+    border-width: 1px !important;
+    font-size: 0.95rem !important;
+    padding: 1rem 1.25rem !important;
+}
+
+/* ── Select / input widgets ─────────────────────────────────────────────── */
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stTextInput"] > div > div > input,
+[data-testid="stNumberInput"] > div > div > input {
+    border-radius: 12px !important;
+    border-color: #E2E8F0 !important;
+    font-size: 0.95rem !important;
+    padding: 0.6rem 0.9rem !important;
+}
+
+[data-testid="stSelectbox"] > div > div:focus-within,
+[data-testid="stTextInput"] > div > div:focus-within {
+    border-color: #0EA5E9 !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12) !important;
+}
+
+/* ── Dataframe table ────────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    border: 1px solid #F1F5F9 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ── Expander ───────────────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+    border: 1px solid #F1F5F9 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05) !important;
+    overflow: hidden !important;
+}
+
+[data-testid="stExpander"] summary {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: #334155 !important;
+    padding: 1rem 1.25rem !important;
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────── */
+hr {
+    border: none !important;
+    border-top: 1px solid #F1F5F9 !important;
+    margin: 2.25rem 0 !important;
+}
+
+/* ── Diagnosis result cards ─────────────────────────────────────────────── */
+.result-normal {
+    background: linear-gradient(145deg, #F0FDF4 0%, #DCFCE7 100%);
+    border: 1.5px solid #86EFAC;
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(22, 163, 74, 0.1);
+}
+
+.result-oa {
+    background: linear-gradient(145deg, #FFFBEB 0%, #FEF3C7 100%);
+    border: 1.5px solid #FCD34D;
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(217, 119, 6, 0.1);
+}
+
+.result-unavailable {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    text-align: center;
+}
+
+.result-label {
+    font-size: 2.25rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    margin-bottom: 0.5rem;
+    line-height: 1.1;
+}
+
+.result-sub {
+    font-size: 1rem;
+    color: #64748B;
+    margin-top: 0.75rem;
+    line-height: 1.65;
+}
+
+/* ── Confidence bar ─────────────────────────────────────────────────────── */
+.confidence-bar-wrap {
+    background: #E2E8F0;
+    border-radius: 99px;
+    height: 10px;
+    margin: 1.25rem 0 0.6rem 0;
+    overflow: hidden;
+}
+
+.confidence-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #0EA5E9, #14B8A6);
+}
+
+/* ── Score badge ring ───────────────────────────────────────────────────── */
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    font-size: 1.55rem;
+    font-weight: 800;
+    text-align: center;
+    margin: 1rem auto;
+    letter-spacing: -0.03em;
+}
+
+.score-good   { background: #DCFCE7; color: #15803D; border: 3px solid #86EFAC; }
+.score-medium { background: #FEF9C3; color: #B45309; border: 3px solid #FDE047; }
+.score-low    { background: #FEE2E2; color: #DC2626; border: 3px solid #FCA5A5; }
+
+/* ── Section label ──────────────────────────────────────────────────────── */
+.section-label {
+    font-size: 0.74rem !important;
+    font-weight: 750 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    color: #94A3B8 !important;
+    margin-bottom: 0.9rem !important;
+}
+
+/* ── Activity chip ──────────────────────────────────────────────────────── */
+.activity-chip {
+    display: inline-block;
+    background: #E0F2FE;
+    color: #0284C7;
+    border-radius: 99px;
+    padding: 0.35rem 1.1rem;
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+/* ── Hero badge ─────────────────────────────────────────────────────────── */
+.hero-badge {
+    display: inline-block;
+    background: #EFF6FF;
+    color: #2563EB;
+    border-radius: 99px;
+    padding: 0.35rem 1rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+    border: 1px solid #BFDBFE;
+}
+
+/* ── Spinners / loading ─────────────────────────────────────────────────── */
+.stSpinner > div {
+    border-top-color: #0EA5E9 !important;
+}
+
+/* ── Line chart (IMU signal) ────────────────────────────────────────────── */
+[data-testid="stArrowVegaLiteChart"] canvas,
+[data-testid="stVegaLiteChart"] canvas {
+    border-radius: 14px !important;
+}
+
+/* ── Page link buttons ──────────────────────────────────────────────────── */
+[data-testid="stPageLink"] a {
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.15s ease !important;
+}
+
+[data-testid="stPageLink"] a:hover {
+    background: #EFF6FF !important;
+    border-color: #BAE6FD !important;
+    color: #0284C7 !important;
+}
