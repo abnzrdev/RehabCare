@@ -21,12 +21,14 @@ import io
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
+from pydantic import BaseModel, Field
 
 log = logging.getLogger("orthoscan")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
@@ -37,6 +39,22 @@ _ROOT_EARLY = Path(__file__).resolve().parent.parent
 _REHAB_DIR  = _ROOT_EARLY / "rehab_platform"
 if str(_REHAB_DIR) not in sys.path:
     sys.path.insert(0, str(_REHAB_DIR))
+
+from core.koos import calculate_koos  # noqa: E402
+from core.kl_grade import (  # noqa: E402
+    KL_MODEL_PATH,
+    _build_demo_kl_response,
+    _format_kl_prediction,
+    infer_kl_class_probs,
+    load_kl_model,
+)
+from core.storage import (
+    SessionRecord,
+    get_last_session,
+    get_patient_sessions,
+    init_db,
+    save_session,
+)  # noqa: E402
 
 _HAS_IMU_PIPELINE = False
 try:
@@ -81,6 +99,11 @@ _imu_meta     = None
 _imu_baseline = None
 _imu_mode     = "unavailable"  # "real" | "unavailable"
 _imu_fail_reason = ""          # human-readable reason stored for /health
+
+# KL (graded OA) model
+_kl_model = None
+_kl_mode = "demo_kl"          # "real_kl" | "demo_kl"
+_kl_fail_reason = ""
 
 
 # ── Exact model architecture from build_model_v3() in the notebook ─────────────
@@ -388,6 +411,140 @@ _HOTSPOT_LABELS = {
     "kz": ["Буын саңылауы", "Медиальды бөлік", "Сан мыщелкі", "Тибиальды үстіңгі жақ"],
 }
 
+KL_GRADE_MIN = 0
+KL_GRADE_MAX = 4
+PREDICTED_DELTA_COEFFS = {
+    "b0": 2.0,
+    "b1": -0.03,
+    "b2": 0.12,
+    "b3": -0.8,
+}
+
+
+class RehabReportInput(BaseModel):
+    patient_id: str
+    patient_name: str | None = None
+    exercise: str = "knee_extension"
+    koos_pre: float | None = Field(default=None, ge=0, le=100)
+    kl_grade: int | None = None
+    current_rom: float | None = None
+    previous_rom: float | None = None
+    rehab_score: float | None = None
+    image_result: dict[str, Any] | None = None
+    imu_result: dict[str, Any] | None = None
+
+
+def _build_kl_response(pil_image: Image.Image, lang: str, scale_max: int) -> dict:
+    if _kl_model is not None:
+        result = _format_kl_prediction(
+            class_probs=infer_kl_class_probs(_kl_model, pil_image),
+            source="real_kl",
+        )
+        result["lang"] = lang
+        return result
+
+    oa_prob = _infer_real(pil_image) if _model is not None else _infer_demo(pil_image)
+    result = _build_demo_kl_response(oa_prob=oa_prob)
+    result["lang"] = lang
+    return result
+
+
+def _extract_current_rom(imu_result: dict[str, Any] | None, provided_current_rom: float | None) -> float | None:
+    if provided_current_rom is not None:
+        return float(provided_current_rom)
+    if not isinstance(imu_result, dict):
+        return None
+    summary = imu_result.get("session_summary", {})
+    rom_val = summary.get("rom_deg")
+    return float(rom_val) if rom_val is not None else None
+
+
+def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
+    current_rom = _extract_current_rom(payload.imu_result, payload.current_rom)
+    previous_row = get_last_session(payload.patient_id, payload.exercise)
+
+    if payload.previous_rom is not None:
+        previous_rom = float(payload.previous_rom)
+        delta_note = "previous_ROM provided by request"
+    elif previous_row and previous_row.get("current_rom") is not None:
+        previous_rom = float(previous_row["current_rom"])
+        delta_note = "previous_ROM loaded from latest session"
+    else:
+        previous_rom = None
+        delta_note = "No previous session ROM for this patient/exercise"
+
+    delta_rom = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
+    rehab_score = payload.rehab_score
+    if rehab_score is None and isinstance(payload.imu_result, dict):
+        rehab_score = payload.imu_result.get("overall_score")
+    rehab_score = float(rehab_score) if rehab_score is not None else None
+
+    b0 = PREDICTED_DELTA_COEFFS["b0"]
+    b1 = PREDICTED_DELTA_COEFFS["b1"]
+    b2 = PREDICTED_DELTA_COEFFS["b2"]
+    b3 = PREDICTED_DELTA_COEFFS["b3"]
+    # Placeholder clinical formula scaffold; replace with validated coefficients.
+    predicted_delta_koos = None
+    if payload.koos_pre is not None and delta_rom is not None and payload.kl_grade is not None:
+        predicted_delta_koos = round(b0 + b1 * payload.koos_pre + b2 * delta_rom + b3 * payload.kl_grade, 3)
+
+    interpretation = "insufficient_data"
+    if rehab_score is not None and delta_rom is not None:
+        if rehab_score >= 75 and delta_rom > 0:
+            interpretation = "improving"
+        elif rehab_score < 50 or delta_rom < 0:
+            interpretation = "needs_attention"
+        else:
+            interpretation = "stable"
+
+    if interpretation == "improving":
+        recommendations = [
+            "Continue current rehab protocol.",
+            "Re-evaluate KOOS and ROM in next session.",
+        ]
+    elif interpretation == "needs_attention":
+        recommendations = [
+            "Review exercise technique and intensity.",
+            "Consider clinician follow-up for plan adjustment.",
+        ]
+    else:
+        recommendations = ["Collect more sessions to establish trend."]
+
+    session_info = save_session(
+        SessionRecord(
+            patient_id=payload.patient_id,
+            patient_name=payload.patient_name,
+            exercise=payload.exercise,
+            koos_pre=payload.koos_pre,
+            kl_grade=payload.kl_grade,
+            current_rom=current_rom,
+            previous_rom=previous_rom,
+            delta_rom=delta_rom,
+            rehab_score=rehab_score,
+            image_result=payload.image_result,
+            imu_result=payload.imu_result,
+        )
+    )
+
+    return {
+        "patient_id": payload.patient_id,
+        "patient_name": payload.patient_name,
+        "exercise": payload.exercise,
+        "current_ROM": current_rom,
+        "previous_ROM": previous_rom,
+        "delta_ROM": delta_rom,
+        "rehab_score": rehab_score,
+        "KOOS_pre": payload.koos_pre,
+        "KL_grade": payload.kl_grade,
+        "predicted_delta_KOOS": predicted_delta_koos,
+        "formula_coefficients": PREDICTED_DELTA_COEFFS,
+        "interpretation": interpretation,
+        "recommendations": recommendations,
+        "delta_note": delta_note,
+        "session_id": session_info["session_id"],
+        "created_at": session_info["created_at"],
+    }
+
 
 # ── Build the full response dict ───────────────────────────────────────────────
 def _build_response(pil_image: Image.Image, lang: str) -> dict:
@@ -484,10 +641,37 @@ def _load_imu_model() -> bool:
         return False
 
 
+def _load_kl_model() -> bool:
+    """Attempt to load the graded KL PyTorch classifier."""
+    global _kl_model, _kl_mode, _kl_fail_reason
+
+    if not KL_MODEL_PATH.exists():
+        _kl_model = None
+        _kl_mode = "demo_kl"
+        _kl_fail_reason = f"KL grade model not found at {KL_MODEL_PATH}"
+        log.warning(_kl_fail_reason)
+        return False
+
+    try:
+        _kl_model = load_kl_model(KL_MODEL_PATH)
+        _kl_mode = "real_kl"
+        _kl_fail_reason = ""
+        log.info(f"✓ Real KL grade model loaded successfully from {KL_MODEL_PATH.name}")
+        return True
+    except Exception as exc:
+        _kl_model = None
+        _kl_mode = "demo_kl"
+        _kl_fail_reason = f"KL grade model load failed: {exc}"
+        log.warning(_kl_fail_reason)
+        return False
+
+
 @app.on_event("startup")
 async def startup():
     """Load OA and IMU models at startup."""
+    init_db()
     _load_real_model()
+    _load_kl_model()
     _load_imu_model()
     if _HAS_IMU_PIPELINE:
         log.info("✓ IMU endpoint → biomechanical rehab scorer (score_rehab_exercise)")
@@ -500,12 +684,15 @@ async def health():
     resp = {
         "status":    "ok",
         "model":     _mode,        # OA model: "real" | "demo"
+        "kl_model":  _kl_mode,     # KL model: "real_kl" | "demo_kl"
         "threshold": _threshold,
         "T":         _T,
         "imu":       _imu_mode,    # IMU model: "real" | "unavailable"
     }
     if _imu_fail_reason:
         resp["imu_error"] = _imu_fail_reason
+    if _kl_fail_reason:
+        resp["kl_error"] = _kl_fail_reason
     return resp
 
 
@@ -577,3 +764,38 @@ async def predict(
     img  = Image.open(io.BytesIO(data)).convert("RGB")
     lang = lang if lang in ("en", "ru", "kz") else "en"
     return _build_response(img, lang=lang)
+
+
+@app.post("/predict-kl")
+async def predict_kl(
+    file: UploadFile = File(...),
+    lang: str = Query("en"),
+    kl_scale_max: int = Query(KL_GRADE_MAX, ge=1, le=5),
+):
+    data = await file.read()
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    lang = lang if lang in ("en", "ru", "kz") else "en"
+    return _build_kl_response(img, lang=lang, scale_max=kl_scale_max)
+
+
+@app.post("/koos/calculate")
+async def koos_calculate(payload: dict[str, Any] = Body(...)):
+    answers = payload.get("answers")
+    if not isinstance(answers, dict):
+        raise HTTPException(status_code=400, detail="Body must include 'answers' object.")
+    try:
+        return calculate_koos(answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/rehab/report")
+async def rehab_report(payload: RehabReportInput):
+    if payload.kl_grade is not None and not (KL_GRADE_MIN <= payload.kl_grade <= 5):
+        raise HTTPException(status_code=400, detail="kl_grade must be between 0 and 5.")
+    return _build_rehab_report(payload)
+
+
+@app.get("/sessions/{patient_id}")
+async def sessions_by_patient(patient_id: str, exercise: str | None = Query(None)):
+    return {"patient_id": patient_id, "sessions": get_patient_sessions(patient_id, exercise)}

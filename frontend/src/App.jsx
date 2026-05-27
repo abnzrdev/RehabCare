@@ -1,1310 +1,1444 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-// ─────────────────────────────────────────────────────────────
-// TRANSLATIONS  (EN · RU · KZ)
-// ─────────────────────────────────────────────────────────────
-const T = {
-  en: {
-    brand: "OrthoScan AI", brandSub: "Medical Rehabilitation Platform",
-    online: "System Online",
-    modOA:  "Knee OA",
-    modIMU: "IMU Rehab",
+const API = "/api";
 
-    // ── Module 1 (Knee OA) ──────────────────────────────────────────────────
-    heroLabel: "AI Radiology Platform · ConvNeXt-Small · BIN_KNEE_OST_G1",
-    heroTitle: "Knee OA", heroItalic: "Diagnostic Intelligence",
-    heroDesc: "Upload a knee X-ray for instant AI-powered osteoarthritis screening with bone region heatmap visualization.",
-    testAcc: "Test Accuracy", rocAuc: "ROC-AUC", recallFloor: "Recall Floor",
-    uploadTitle: "X-Ray Upload", uploadSub: "PNG · JPG · DICOM",
-    uploadCta: "Drop X-Ray Here", uploadSub2: "or click to browse",
-    remove: "Clear", analyzeBtn: "Run Diagnosis",
-    pipeline: "Pipeline", modelConn: "Model Connection",
-    checkBtn: "Check Backend", checkDesc: "Tests localhost:8000",
-    localActive: "Backend Online", demoActive: "Backend Offline",
-    checking: "Checking…", connOk: "Backend Online ✓", connFail: "Backend Offline",
-    noReport: "Awaiting X-Ray", noReportSub: "Upload an image to begin",
-    analyzing: "Analyzing…", failed: "Analysis Failed",
-    diagnosis: "Diagnosis", findings: "Findings", recs: "Recommendations",
-    classProb: "Probability", modelOut: "Model Output", meta: "Parameters",
-    normalL: "Normal", oaL: "OA", confL: "Conf",
-    sev: "Severity", temp: "Temperature", thr: "Threshold", tta: "TTA Passes",
-    followup: "Follow-up",
-    heatmapTitle: "Bone Region Analysis",
-    heatmapSub: "Thermal activation map — blue=low, red=high AI attention",
-    disclaimer: "⚠ For clinical decision support only. Confirm with qualified radiologist.",
-    steps: ["Preprocessing…", "CLAHE Enhancement…", "ConvNeXt-Small…", "TTA ×3 passes…", "T-Calibration…", "Generating report…"],
-    pipeSteps: [
-      ["CLAHE",       "clipLimit=2.0"],
-      ["Normalize",   "μ=0.6074 σ=0.1944"],
-      ["ConvNeXt-S",  "22k pretrained"],
-      ["TTA×3",       "hflip+bright"],
-      ["T-Scale",     "val-calibrated"],
-      ["Thr=0.56",    "Youden's J"],
-    ],
-    normalG: "Normal (Grade 0)", oaG: "OA (Grades 2–4)",
-    urgLabels: { Routine: "Routine", Soon: "Soon", Urgent: "Urgent" },
+const STEPS = [
+  { id: "patient" },
+  { id: "koos" },
+  { id: "kl" },
+  { id: "imu" },
+  { id: "report" },
+];
 
-    // ── Module 2 (IMU Rehab) ────────────────────────────────────────────────
-    imuHeroLabel: "LSTM Activity Classification · 94.6% Accuracy · 8 Activities",
-    imuHeroTitle: "IMU Rehab", imuHeroItalic: "Movement Intelligence",
-    imuHeroDesc: "Upload a single-sensor CSV to get LSTM-powered activity classification and knee rehabilitation ROM scoring.",
-    imuLstmAcc: "LSTM Accuracy", imuLstmF1: "LSTM F1", imuActivities: "Activities",
-    imuSensorLocLabel: "Sensor Placement",
-    imuLocations: {
-      right_thigh: "Right Thigh  (recommended)",
-      right_shin:  "Right Shin",
-      right_foot:  "Right Foot",
-      left_thigh:  "Left Thigh",
-      left_shin:   "Left Shin",
-      left_foot:   "Left Foot",
-    },
-    imuUploadTitle: "IMU Sensor CSV",
-    imuUploadSub: "CSV files only",
-    imuUploadCta: "Drop CSV Here",
-    imuUploadSub2: "or click to browse",
-    imuRemove: "Clear",
-    imuAnalyzeBtn: "Analyze Movement",
-    imuPipeline: "Pipeline",
-    imuPipeSteps: [
-      ["CSV Parse",  "expand to 38ch"],
-      ["÷ 32768",    "normalize"],
-      ["Wavelet",    "db4, level=4"],
-      ["Scaler",     "StandardScaler"],
-      ["LSTM",       "window=50, stride=25"],
-      ["ROM",        "complementary filter"],
-    ],
-    imuNoReport: "Awaiting CSV Upload",
-    imuNoReportSub: "Upload a sensor CSV to begin",
-    imuAnalyzing: "Analyzing…",
-    imuFailed: "Analysis Failed",
-    imuOverallScore: "Overall Score",
-    imuDominant: "Dominant Activity",
-    imuSummary: "Session Summary",
-    imuSamples: "Samples",
-    imuRealCh: "Real Channels",
-    imuSimCh: "Simulated",
-    imuBreakdown: "Activity Breakdown",
-    imuROMScores: "ROM Scores by Activity",
-    imuFeedbackTitle: "Rehabilitation Feedback",
-    imuHealthy: "Healthy",
-    imuScore: "Score",
-    imuROM: "ROM",
-    imuDisclaimer: "⚠ For clinical decision support only. Confirm with qualified physiotherapist.",
-    imuSteps: ["Parsing CSV…", "Expanding channels…", "Normalizing…", "Wavelet denoising…", "LSTM inference…", "Computing ROM…"],
-    imuModelUnavail: "IMU model not loaded on backend.",
-  },
+const STEP_HEADINGS = {
+  patient: [
+    { id: "patient-overview", key: "overview" },
+    { id: "patient-context", key: "patientDetails" },
+    { id: "patient-history", key: "sessionHistory" },
+  ],
+  koos: [
+    { id: "koos-overview", key: "overview" },
+    { id: "koos-progress", key: "progress" },
+    { id: "koos-current", key: "currentQuestions" },
+    { id: "koos-calculate", key: "calculateKoos" },
+  ],
+  kl: [
+    { id: "kl-overview", key: "overview" },
+    { id: "kl-upload", key: "imageUpload" },
+    { id: "kl-result", key: "klResult" },
+  ],
+  imu: [
+    { id: "imu-overview", key: "overview" },
+    { id: "imu-upload", key: "csvUpload" },
+    { id: "imu-result", key: "analysisResult" },
+  ],
+  report: [
+    { id: "report-summary", key: "summary" },
+    { id: "report-interpretation", key: "interpretation" },
+    { id: "report-recommendations", key: "recommendations" },
+    { id: "report-session", key: "sessionDetails" },
+  ],
+};
 
+const KOOS_SECTIONS = [
+  { key: "pain" },
+  { key: "symptoms" },
+  { key: "adl" },
+  { key: "sport_rec" },
+  { key: "qol" },
+];
+
+const KOOS_PAGES = [
+  { section: "pain", titleKey: "pain1", questions: [1, 2, 3, 4, 5] },
+  { section: "pain", titleKey: "pain2", questions: [6, 7, 8, 9] },
+  { section: "symptoms", titleKey: "symptoms1", questions: [10, 11, 12, 13, 14] },
+  { section: "symptoms", titleKey: "symptoms2", questions: [15, 16] },
+  { section: "adl", titleKey: "adl1", questions: [17, 18, 19, 20, 21, 22] },
+  { section: "adl", titleKey: "adl2", questions: [23, 24, 25, 26, 27, 28] },
+  { section: "adl", titleKey: "adl3", questions: [29, 30, 31, 32, 33] },
+  { section: "sport_rec", titleKey: "sport1", questions: [34, 35, 36, 37, 38] },
+  { section: "qol", titleKey: "qol1", questions: [39, 40, 41, 42] },
+];
+
+const KOOS_QUESTION_TEXT = {
+  q1: "P1. How often do you experience knee pain?",
+  q2: "P2. Twisting/pivoting on your knee",
+  q3: "P3. Straightening knee fully",
+  q4: "P4. Bending knee fully",
+  q5: "P5. Walking on flat surface",
+  q6: "P6. Going up or down stairs",
+  q7: "P7. At night while in bed",
+  q8: "P8. Sitting or lying",
+  q9: "P9. Standing upright",
+  q10: "S1. Do you have swelling in your knee?",
+  q11: "S2. Do you feel grinding, hear clicking, or any other noise when your knee moves?",
+  q12: "S3. Does your knee catch or hang up when moving?",
+  q13: "S4. Can you straighten your knee fully?",
+  q14: "S5. Can you bend your knee fully?",
+  q15: "S6. How severe is your knee joint stiffness after first wakening in the morning?",
+  q16: "S7. How severe is your knee stiffness after sitting, lying, or resting later in the day?",
+  q17: "A1. Descending stairs",
+  q18: "A2. Ascending stairs",
+  q19: "A3. Rising from sitting",
+  q20: "A4. Standing",
+  q21: "A5. Bending to floor / picking up an object",
+  q22: "A6. Walking on flat surface",
+  q23: "A7. Getting in/out of car",
+  q24: "A8. Going shopping",
+  q25: "A9. Putting on socks/stockings",
+  q26: "A10. Rising from bed",
+  q27: "A11. Taking off socks/stockings",
+  q28: "A12. Lying in bed / turning over",
+  q29: "A13. Getting in/out of bath",
+  q30: "A14. Sitting",
+  q31: "A15. Getting on/off toilet",
+  q32: "A16. Heavy domestic duties",
+  q33: "A17. Light domestic duties",
+  q34: "SP1. Squatting",
+  q35: "SP2. Running",
+  q36: "SP3. Jumping",
+  q37: "SP4. Twisting/pivoting on your injured knee",
+  q38: "SP5. Kneeling",
+  q39: "Q1. How often are you aware of your knee problem?",
+  q40: "Q2. Have you modified your lifestyle to avoid potentially damaging activities to your knee?",
+  q41: "Q3. How much are you troubled with lack of confidence in your knee?",
+  q42: "Q4. In general, how much difficulty do you have with your knee?",
+};
+
+const KOOS_QUESTION_TEXT_I18N = {
+  en: KOOS_QUESTION_TEXT,
   ru: {
-    brand: "OrthoScan AI", brandSub: "Медицинская платформа реабилитации",
-    online: "Система онлайн",
-    modOA:  "Колено ОА",
-    modIMU: "ИМУ Реабилитация",
-
-    heroLabel: "АИ Радиология · ConvNeXt-Small · BIN_KNEE_OST_G1",
-    heroTitle: "ОА колена", heroItalic: "Диагностический интеллект",
-    heroDesc: "Загрузите рентген колена для мгновенного АИ-скрининга с тепловой картой костных регионов.",
-    testAcc: "Точность", rocAuc: "ROC-AUC", recallFloor: "Порог recall",
-    uploadTitle: "Загрузка снимка", uploadSub: "PNG · JPG · DICOM",
-    uploadCta: "Перетащите рентген", uploadSub2: "или нажмите для выбора",
-    remove: "Очистить", analyzeBtn: "Запустить диагноз",
-    pipeline: "Конвейер", modelConn: "Подключение модели",
-    checkBtn: "Проверить бэкенд", checkDesc: "Тестирует localhost:8000",
-    localActive: "Бэкенд онлайн", demoActive: "Бэкенд офлайн",
-    checking: "Проверка…", connOk: "Сервер онлайн ✓", connFail: "Используется демо",
-    noReport: "Ожидание снимка", noReportSub: "Загрузите изображение для начала",
-    analyzing: "Анализ…", failed: "Ошибка анализа",
-    diagnosis: "Диагноз", findings: "Находки", recs: "Рекомендации",
-    classProb: "Вероятность", modelOut: "Результат", meta: "Параметры",
-    normalL: "Норма", oaL: "ОА", confL: "Увер",
-    sev: "Тяжесть", temp: "Температура", thr: "Порог", tta: "TTA",
-    followup: "Наблюдение",
-    heatmapTitle: "Анализ костных регионов",
-    heatmapSub: "Тепловая карта активации — синий=низкий, красный=высокий",
-    disclaimer: "⚠ Только для поддержки клинических решений. Подтвердите с радиологом.",
-    steps: ["Предобработка…", "CLAHE…", "ConvNeXt-Small…", "TTA × 3…", "Калибровка T…", "Формирование отчёта…"],
-    pipeSteps: [
-      ["CLAHE",        "clipLimit=2.0"],
-      ["Нормализация", "μ=0.6074 σ=0.1944"],
-      ["ConvNeXt-S",   "22k pretrained"],
-      ["TTA×3",        "hflip+bright"],
-      ["T-Scale",      "val-calibrated"],
-      ["Порог=0.56",   "Youden's J"],
-    ],
-    normalG: "Норма (Grade 0)", oaG: "ОА (Grade 2–4)",
-    urgLabels: { Routine: "Плановое", Soon: "Скорое", Urgent: "Срочное" },
-
-    imuHeroLabel: "LSTM Классификация · 94.6% Точность · 8 Активностей",
-    imuHeroTitle: "ИМУ Реабилитация", imuHeroItalic: "Интеллект движения",
-    imuHeroDesc: "Загрузите CSV одного датчика для классификации активности и оценки реабилитации колена.",
-    imuLstmAcc: "Точность LSTM", imuLstmF1: "F1 LSTM", imuActivities: "Активности",
-    imuSensorLocLabel: "Расположение датчика",
-    imuLocations: {
-      right_thigh: "Правое бедро  (рекомендуется)",
-      right_shin:  "Правая голень",
-      right_foot:  "Правая стопа",
-      left_thigh:  "Левое бедро",
-      left_shin:   "Левая голень",
-      left_foot:   "Левая стопа",
-    },
-    imuUploadTitle: "CSV датчика ИМУ",
-    imuUploadSub: "Только CSV файлы",
-    imuUploadCta: "Перетащите CSV",
-    imuUploadSub2: "или нажмите для выбора",
-    imuRemove: "Очистить",
-    imuAnalyzeBtn: "Анализировать движение",
-    imuPipeline: "Конвейер",
-    imuPipeSteps: [
-      ["CSV Парсинг",   "расширение до 38ch"],
-      ["÷ 32768",       "нормализация"],
-      ["Вейвлет",       "db4, уровень=4"],
-      ["Масштаб",       "StandardScaler"],
-      ["LSTM",          "окно=50, шаг=25"],
-      ["ДАД",           "дополн. фильтр"],
-    ],
-    imuNoReport: "Ожидание CSV",
-    imuNoReportSub: "Загрузите CSV датчика для начала",
-    imuAnalyzing: "Анализ…",
-    imuFailed: "Ошибка анализа",
-    imuOverallScore: "Общий балл",
-    imuDominant: "Основная активность",
-    imuSummary: "Сводка сессии",
-    imuSamples: "Образцы",
-    imuRealCh: "Реальные каналы",
-    imuSimCh: "Симулированных",
-    imuBreakdown: "Разбивка активности",
-    imuROMScores: "Оценки ДАД по активностям",
-    imuFeedbackTitle: "Реабилитационная обратная связь",
-    imuHealthy: "Здоровый",
-    imuScore: "Балл",
-    imuROM: "ДАД",
-    imuDisclaimer: "⚠ Только для поддержки клинических решений. Подтвердите с физиотерапевтом.",
-    imuSteps: ["Парсинг CSV…", "Расширение каналов…", "Нормализация…", "Вейвлет…", "Инференс LSTM…", "Вычисление ДАД…"],
-    imuModelUnavail: "Модель ИМУ не загружена на бэкенде.",
+    q1: "P1. Как часто вы испытываете боль в колене?",
+    q2: "P2. Поворот или разворот на колене",
+    q3: "P3. Полное выпрямление колена",
+    q4: "P4. Полное сгибание колена",
+    q5: "P5. Ходьба по ровной поверхности",
+    q6: "P6. Подъем или спуск по лестнице",
+    q7: "P7. Ночью в постели",
+    q8: "P8. Сидя или лежа",
+    q9: "P9. Стоя прямо",
+    q10: "S1. Бывает ли отек колена?",
+    q11: "S2. Чувствуете ли вы скрежет, щелчки или другой шум при движении колена?",
+    q12: "S3. Заедает ли колено при движении?",
+    q13: "S4. Можете ли вы полностью выпрямить колено?",
+    q14: "S5. Можете ли вы полностью согнуть колено?",
+    q15: "S6. Насколько сильна скованность колена утром после пробуждения?",
+    q16: "S7. Насколько сильна скованность колена после сидения, лежания или отдыха днем?",
+    q17: "A1. Спуск по лестнице",
+    q18: "A2. Подъем по лестнице",
+    q19: "A3. Вставание со стула",
+    q20: "A4. Стояние",
+    q21: "A5. Наклон к полу / поднятие предмета",
+    q22: "A6. Ходьба по ровной поверхности",
+    q23: "A7. Посадка в автомобиль / выход из автомобиля",
+    q24: "A8. Поход за покупками",
+    q25: "A9. Надевание носков или чулок",
+    q26: "A10. Подъем с кровати",
+    q27: "A11. Снятие носков или чулок",
+    q28: "A12. Лежание в постели / переворачивание",
+    q29: "A13. Вход в ванну / выход из ванны",
+    q30: "A14. Сидение",
+    q31: "A15. Посадка на туалет / вставание",
+    q32: "A16. Тяжелая домашняя работа",
+    q33: "A17. Легкая домашняя работа",
+    q34: "SP1. Приседание",
+    q35: "SP2. Бег",
+    q36: "SP3. Прыжки",
+    q37: "SP4. Поворот или разворот на травмированном колене",
+    q38: "SP5. Стояние на коленях",
+    q39: "Q1. Как часто вы ощущаете проблему с коленом?",
+    q40: "Q2. Изменили ли вы образ жизни, чтобы избегать потенциально вредных нагрузок на колено?",
+    q41: "Q3. Насколько вас беспокоит недостаток уверенности в колене?",
+    q42: "Q4. В целом, насколько большие трудности вызывает ваше колено?",
   },
-
   kz: {
-    brand: "OrthoScan AI", brandSub: "Медициналық оңалту платформасы",
-    online: "Жүйе онлайн",
-    modOA:  "Тізе ОА",
-    modIMU: "ИМУ Оңалту",
-
-    heroLabel: "АИ Радиология · ConvNeXt-Small · BIN_KNEE_OST_G1",
-    heroTitle: "Тізе ОА", heroItalic: "Диагностикалық интеллект",
-    heroDesc: "Сүйек аймақтарының жылу картасымен жедел АИ скринингі үшін тізе рентгенін жүктеңіз.",
-    testAcc: "Дәлдік", rocAuc: "ROC-AUC", recallFloor: "Recall шегі",
-    uploadTitle: "Сурет жүктеу", uploadSub: "PNG · JPG · DICOM",
-    uploadCta: "Рентгенді түйсеңіз", uploadSub2: "немесе таңдау үшін басыңыз",
-    remove: "Тазалау", analyzeBtn: "Диагноз жүргізу",
-    pipeline: "Конвейер", modelConn: "Модель қосылымы",
-    checkBtn: "Бэкендті тексеру", checkDesc: "localhost:8000 тексереді",
-    localActive: "Бэкенд онлайн", demoActive: "Бэкенд офлайн",
-    checking: "Тексеру…", connOk: "Сервер онлайн ✓", connFail: "Демо режимі",
-    noReport: "Сурет күту", noReportSub: "Бастау үшін сурет жүктеңіз",
-    analyzing: "Талдау…", failed: "Талдау қатесі",
-    diagnosis: "Диагноз", findings: "Табыстар", recs: "Ұсыныстар",
-    classProb: "Ықтималдық", modelOut: "Нәтиже", meta: "Параметрлер",
-    normalL: "Норма", oaL: "ОА", confL: "Сенім",
-    sev: "Ауырлық", temp: "Температура", thr: "Шек", tta: "TTA",
-    followup: "Бақылау",
-    heatmapTitle: "Сүйек аймағын талдау",
-    heatmapSub: "Жылу белсенділік картасы — көк=төмен, қызыл=жоғары",
-    disclaimer: "⚠ Тек клиникалық шешімді қолдауға арналған. Радиологпен растаңыз.",
-    steps: ["Өңдеу…", "CLAHE…", "ConvNeXt-Small…", "TTA × 3…", "T-Калибрлеу…", "Есеп жасау…"],
-    pipeSteps: [
-      ["CLAHE",        "clipLimit=2.0"],
-      ["Нормализация", "μ=0.6074 σ=0.1944"],
-      ["ConvNeXt-S",   "22k pretrained"],
-      ["TTA×3",        "hflip+bright"],
-      ["T-Scale",      "val-calibrated"],
-      ["Шек=0.56",     "Youden's J"],
-    ],
-    normalG: "Норма (Grade 0)", oaG: "ОА (Grade 2–4)",
-    urgLabels: { Routine: "Жоспарлы", Soon: "Жақын", Urgent: "Шұғыл" },
-
-    imuHeroLabel: "LSTM Жіктеу · 94.6% Дәлдік · 8 Белсенділік",
-    imuHeroTitle: "ИМУ Оңалту", imuHeroItalic: "Қозғалыс интеллекті",
-    imuHeroDesc: "Белсенділікті жіктеу және тізе оңалту ROM бағалауы үшін бір сенсор CSV жүктеңіз.",
-    imuLstmAcc: "LSTM Дәлдігі", imuLstmF1: "LSTM F1", imuActivities: "Белсенділіктер",
-    imuSensorLocLabel: "Сенсор орны",
-    imuLocations: {
-      right_thigh: "Оң жамбас  (ұсынылады)",
-      right_shin:  "Оң балтыр",
-      right_foot:  "Оң аяқ",
-      left_thigh:  "Сол жамбас",
-      left_shin:   "Сол балтыр",
-      left_foot:   "Сол аяқ",
-    },
-    imuUploadTitle: "ИМУ Сенсор CSV",
-    imuUploadSub: "Тек CSV файлдар",
-    imuUploadCta: "CSV түйсеңіз",
-    imuUploadSub2: "немесе таңдау үшін басыңыз",
-    imuRemove: "Тазалау",
-    imuAnalyzeBtn: "Қозғалысты талдау",
-    imuPipeline: "Конвейер",
-    imuPipeSteps: [
-      ["CSV Парсинг",  "38ch дейін кеңейту"],
-      ["÷ 32768",      "нормализация"],
-      ["Толқын",       "db4, деңгей=4"],
-      ["Масштаб",      "StandardScaler"],
-      ["LSTM",         "терезе=50, қадам=25"],
-      ["ROM",          "комплементарлы сүзгі"],
-    ],
-    imuNoReport: "CSV күту",
-    imuNoReportSub: "Бастау үшін сенсор CSV жүктеңіз",
-    imuAnalyzing: "Талдау…",
-    imuFailed: "Талдау қатесі",
-    imuOverallScore: "Жалпы балл",
-    imuDominant: "Басым белсенділік",
-    imuSummary: "Сессия қорытындысы",
-    imuSamples: "Үлгілер",
-    imuRealCh: "Нақты арналар",
-    imuSimCh: "Симуляция",
-    imuBreakdown: "Белсенділік бөлінісі",
-    imuROMScores: "Белсенділік бойынша ROM",
-    imuFeedbackTitle: "Оңалту кері байланысы",
-    imuHealthy: "Сау",
-    imuScore: "Балл",
-    imuROM: "ROM",
-    imuDisclaimer: "⚠ Тек клиникалық шешімді қолдауға арналған. Физиотерапевтпен растаңыз.",
-    imuSteps: ["CSV парсинг…", "Арналарды кеңейту…", "Нормализация…", "Толқын…", "LSTM инференс…", "ROM есептеу…"],
-    imuModelUnavail: "ИМУ моделі бэкендте жүктелмеген.",
+    q1: "P1. Тізеңіз қаншалықты жиі ауырады?",
+    q2: "P2. Тізеде бұрылу немесе айналу",
+    q3: "P3. Тізені толық жазу",
+    q4: "P4. Тізені толық бүгу",
+    q5: "P5. Тегіс жерде жүру",
+    q6: "P6. Баспалдақпен көтерілу немесе түсу",
+    q7: "P7. Түнде төсекте",
+    q8: "P8. Отырғанда немесе жатқанда",
+    q9: "P9. Тік тұрған кезде",
+    q10: "S1. Тізеңіз ісіне ме?",
+    q11: "S2. Тізе қозғалғанда сықыр, шерту немесе басқа дыбыс сезіле ме?",
+    q12: "S3. Қозғалғанда тізеңіз тұрып қала ма?",
+    q13: "S4. Тізеңізді толық жаза аласыз ба?",
+    q14: "S5. Тізеңізді толық бүге аласыз ба?",
+    q15: "S6. Таңертең оянғаннан кейін тізе сіресуі қаншалықты қатты?",
+    q16: "S7. Күн ішінде отырғаннан, жатқаннан немесе демалғаннан кейін сіресу қаншалықты қатты?",
+    q17: "A1. Баспалдақпен түсу",
+    q18: "A2. Баспалдақпен көтерілу",
+    q19: "A3. Отырған жерден тұру",
+    q20: "A4. Тұру",
+    q21: "A5. Еденге еңкею / зат көтеру",
+    q22: "A6. Тегіс жерде жүру",
+    q23: "A7. Көлікке кіру / көліктен шығу",
+    q24: "A8. Дүкенге бару",
+    q25: "A9. Шұлық немесе чулки кию",
+    q26: "A10. Төсектен тұру",
+    q27: "A11. Шұлық немесе чулки шешу",
+    q28: "A12. Төсекте жату / аударылу",
+    q29: "A13. Ваннаға кіру / ваннадан шығу",
+    q30: "A14. Отыру",
+    q31: "A15. Дәретханаға отыру / тұру",
+    q32: "A16. Ауыр үй жұмыстары",
+    q33: "A17. Жеңіл үй жұмыстары",
+    q34: "SP1. Отыру-тұру",
+    q35: "SP2. Жүгіру",
+    q36: "SP3. Секіру",
+    q37: "SP4. Зақымдалған тізеде бұрылу немесе айналу",
+    q38: "SP5. Тізерлеу",
+    q39: "Q1. Тізе мәселесін қаншалықты жиі сезесіз?",
+    q40: "Q2. Тізеге зиян келтіруі мүмкін әрекеттерден қашу үшін өмір салтыңызды өзгерттіңіз бе?",
+    q41: "Q3. Тізеңізге сенімсіздік сізді қаншалықты мазалайды?",
+    q42: "Q4. Жалпы, тізеңіз сізге қаншалықты қиындық тудырады?",
   },
 };
 
-// ─────────────────────────────────────────────────────────────
-// JET COLORMAP  (blue → cyan → green → yellow → red)
-// ─────────────────────────────────────────────────────────────
-function jetColor(t) {
-  t = Math.max(0, Math.min(1, t));
-  let r, g, b;
-  if      (t < 0.125) { r = 0;              g = 0;               b = 0.5 + t * 4; }
-  else if (t < 0.375) { r = 0;              g = (t - 0.125) * 4; b = 1; }
-  else if (t < 0.625) { r = (t - 0.375) * 4; g = 1;             b = 1 - (t - 0.375) * 4; }
-  else if (t < 0.875) { r = 1;              g = 1 - (t - 0.625) * 4; b = 0; }
-  else                { r = 1 - (t - 0.875) * 4; g = 0;         b = 0; }
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
+const KOOS_SEVERITY_OPTIONS = [
+  { value: 0, label: "None / no problem" },
+  { value: 1, label: "Mild" },
+  { value: 2, label: "Moderate" },
+  { value: 3, label: "Severe" },
+  { value: 4, label: "Extreme" },
+];
 
-// ─────────────────────────────────────────────────────────────
-// GRAD-CAM HEATMAP
-// ─────────────────────────────────────────────────────────────
-function GradCAMHeatmap({ imageData, hotspots = [], visible }) {
-  const canvasRef = useRef();
-  useEffect(() => {
-    if (!imageData || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx    = canvas.getContext("2d");
-    const img    = new Image();
-    img.onload = () => {
-      const W = img.width, H = img.height;
-      canvas.width = W; canvas.height = H;
-      ctx.drawImage(img, 0, 0);
-      if (!visible || hotspots.length === 0) return;
-      const SCALE = 0.25;
-      const GW = Math.max(1, Math.round(W * SCALE));
-      const GH = Math.max(1, Math.round(H * SCALE));
-      const grid = new Float32Array(GW * GH).fill(0.08);
-      hotspots.forEach(({ x, y, r, intensity }) => {
-        const cx = x * GW, cy = y * GH;
-        const sigma = r * Math.min(GW, GH) * 2.2;
-        const s2 = sigma * sigma, pad = sigma * 3;
-        const x0 = Math.max(0, Math.floor(cx - pad)), x1 = Math.min(GW - 1, Math.ceil(cx + pad));
-        const y0 = Math.max(0, Math.floor(cy - pad)), y1 = Math.min(GH - 1, Math.ceil(cy + pad));
-        for (let gy = y0; gy <= y1; gy++)
-          for (let gx = x0; gx <= x1; gx++) {
-            const dx = gx - cx, dy = gy - cy;
-            grid[gy * GW + gx] = Math.min(1.0, grid[gy * GW + gx] + intensity * Math.exp(-(dx*dx + dy*dy) / (2*s2)));
-          }
-      });
-      let mn = Infinity, mx = -Infinity;
-      for (const v of grid) { if (v < mn) mn = v; if (v > mx) mx = v; }
-      const range = mx - mn || 1;
-      for (let i = 0; i < grid.length; i++) grid[i] = (grid[i] - mn) / range;
-      const off = document.createElement("canvas");
-      off.width = GW; off.height = GH;
-      const octx = off.getContext("2d");
-      const idata = octx.createImageData(GW, GH);
-      for (let i = 0; i < grid.length; i++) {
-        const [r, g, b] = jetColor(grid[i]);
-        idata.data[i*4]=r; idata.data[i*4+1]=g; idata.data[i*4+2]=b; idata.data[i*4+3]=255;
-      }
-      octx.putImageData(idata, 0, 0);
-      ctx.save();
-      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-      ctx.globalAlpha = 0.62; ctx.globalCompositeOperation = "multiply";
-      ctx.drawImage(off, 0, 0, GW, GH, 0, 0, W, H);
-      ctx.restore();
-      const top = [...hotspots].sort((a, b) => b.intensity - a.intensity)[0];
-      const tx = top.x * W, ty = top.y * H, tr = top.r * Math.min(W, H) * 0.5;
-      ctx.save();
-      ctx.beginPath(); ctx.arc(tx, ty, tr, 0, Math.PI*2);
-      ctx.strokeStyle = "rgba(255,50,50,1)"; ctx.lineWidth = 2; ctx.setLineDash([5,3]); ctx.stroke(); ctx.setLineDash([]);
-      const ch = tr * 0.45; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(tx-ch,ty); ctx.lineTo(tx+ch,ty); ctx.moveTo(tx,ty-ch); ctx.lineTo(tx,ty+ch); ctx.stroke();
-      ctx.restore();
-      const LH = Math.min(Math.round(H*.55),160), LW = 12, lx = W-LW-8, ly = Math.round((H-LH)/2);
-      for (let i = 0; i < LH; i++) { const [r,g,b] = jetColor(1-i/(LH-1)); ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(lx,ly+i,LW,1); }
-      ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=.5; ctx.strokeRect(lx,ly,LW,LH);
-      ctx.fillStyle="rgba(255,255,255,.8)"; ctx.font="bold 8px monospace"; ctx.textAlign="right";
-      ctx.fillText("HIGH",lx-3,ly+7); ctx.fillText("LOW",lx-3,ly+LH+1);
-    };
-    img.src = imageData;
-  }, [imageData, hotspots, visible]);
-  return (
-    <canvas ref={canvasRef}
-      style={{ width:"100%",height:"100%",objectFit:"contain",display:"block",borderRadius:12 }} />
-  );
-}
+const KOOS_FREQUENCY_OPTIONS = [
+  { value: 0, label: "Never" },
+  { value: 1, label: "Rarely/Monthly" },
+  { value: 2, label: "Sometimes/Weekly" },
+  { value: 3, label: "Often/Daily" },
+  { value: 4, label: "Always/Constantly" },
+];
 
-// ─────────────────────────────────────────────────────────────
-// ARC GAUGE
-// ─────────────────────────────────────────────────────────────
-function ArcGauge({ value = 0, size = 90, color = "#4f8ef7", label }) {
-  const r    = size / 2 - 8;
-  const circ = 2 * Math.PI * r;
-  const dash = circ - (Math.min(value, 100) / 100) * circ;
-  return (
-    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4 }}>
-      <div style={{ position:"relative",width:size,height:size }}>
-        <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth={6} />
-          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
-            strokeDasharray={circ} strokeDashoffset={dash} strokeLinecap="round"
-            style={{ transition:"stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)",filter:`drop-shadow(0 0 8px ${color}88)` }} />
-        </svg>
-        <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
-          <span style={{ fontSize:17,fontWeight:800,color:"#fff",fontVariantNumeric:"tabular-nums" }}>{Math.round(value)}</span>
-        </div>
-      </div>
-      {label && <div style={{ fontSize:10,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:"0.1em" }}>{label}</div>}
-    </div>
-  );
-}
+const KOOS_FREQUENCY_KEYS = new Set(["q1", "q39", "q40"]);
 
-// ─────────────────────────────────────────────────────────────
-// SHARED STYLES & ANIMATIONS (injected once)
-// ─────────────────────────────────────────────────────────────
+const EXERCISES = [
+  { value: "knee_extension", label: "Knee extension" },
+  { value: "walking", label: "Walking" },
+  { value: "going_up", label: "Going up stairs" },
+  { value: "going_down", label: "Going down stairs" },
+];
+
+const SENSOR_LOCATIONS = [
+  { value: "right_thigh", label: "Right thigh" },
+  { value: "right_shin", label: "Right shin" },
+  { value: "right_foot", label: "Right foot" },
+  { value: "left_thigh", label: "Left thigh" },
+  { value: "left_shin", label: "Left shin" },
+  { value: "left_foot", label: "Left foot" },
+];
+
+const STRINGS = {
+  en: {
+    app: "OrthoScan AI",
+    clinicalLine: "Clinical rehabilitation workflow",
+    sidebarSubtitle: "Clinical rehabilitation wizard",
+    steps: {
+      patient: "Patient context",
+      koos: "KOOS questionnaire",
+      kl: "KL image grading",
+      imu: "IMU rehab analysis",
+      report: "Final rehab report",
+    },
+    descriptions: {
+      patient: "Set patient and session context before clinical inputs.",
+      koos: "Complete the KOOS survey in short pages. Answers are saved as q1 through q42.",
+      kl: "Upload a knee image and run KL grading.",
+      imu: "Upload IMU CSV data for movement analysis.",
+      report: "Generate a final rehab report from patient, KOOS, KL, and IMU data.",
+    },
+    buttons: {
+      back: "Back",
+      continue: "Continue",
+      refresh: "Refresh",
+      refreshing: "Refreshing",
+      calculateKoos: "Calculate KOOS",
+      calculating: "Calculating...",
+      generateReport: "Generate report",
+      generating: "Generating...",
+      analyzeKl: "Analyze KL grade",
+      analyzing: "Analyzing...",
+      analyzeImu: "Analyze IMU",
+      nextQuestions: "Next questions",
+      previousQuestions: "Previous questions",
+      removeFile: "Remove file",
+      chooseDifferentImage: "Choose different image",
+      remove: "Remove",
+    },
+    status: { pending: "Pending", ready: "Ready", complete: "Complete", demo: "Demo", real: "Real", unknown: "Unknown" },
+    labels: {
+      patientId: "Patient ID",
+      patientName: "Patient name (optional)",
+      exercise: "Exercise",
+      sensorPlacement: "Sensor placement",
+      patientHistory: "Patient history",
+      noSessions: "No sessions yet for this patient.",
+      loading: "Loading...",
+      savedSessions: "Saved sessions",
+      latestRom: "Latest ROM",
+      latestDate: "Latest date",
+      onThisStep: "On this step",
+      pageOf: "Page",
+      of: "of",
+      answered: "answered",
+      scoreRange: "0..4 numeric scoring",
+      currentRom: "Current ROM",
+      previousRom: "Previous ROM",
+      rehabScore: "Rehab score",
+      klGrade: "KL grade",
+      displayGrade: "Display grade",
+      confidence: "Confidence",
+      koosTotal: "KOOS total",
+      deltaRom: "Delta ROM",
+      sessionId: "Session ID",
+      created: "Created",
+    },
+    exercises: {
+      knee_extension: "Knee extension",
+      walking: "Walking",
+      going_up: "Going up stairs",
+      going_down: "Going down stairs",
+    },
+    sensorLocations: {
+      right_thigh: "Right thigh",
+      right_shin: "Right shin",
+      right_foot: "Right foot",
+      left_thigh: "Left thigh",
+      left_shin: "Left shin",
+      left_foot: "Left foot",
+    },
+    koosSections: {
+      pain: "Pain",
+      symptoms: "Symptoms",
+      adl: "Daily Living",
+      sport_rec: "Sport/Recreation",
+      qol: "Quality of Life",
+    },
+    koosPages: {
+      pain1: "Pain: questions P1-P5",
+      pain2: "Pain: questions P6-P9",
+      symptoms1: "Symptoms: questions S1-S5",
+      symptoms2: "Symptoms: questions S6-S7",
+      adl1: "Daily Living: questions A1-A6",
+      adl2: "Daily Living: questions A7-A12",
+      adl3: "Daily Living: questions A13-A17",
+      sport1: "Sport/Recreation: questions SP1-SP5",
+      qol1: "Quality of Life: questions Q1-Q4",
+    },
+    koosOptions: {
+      severity: ["None / no problem", "Mild", "Moderate", "Severe", "Extreme"],
+      frequency: ["Never", "Rarely/Monthly", "Sometimes/Weekly", "Often/Daily", "Always/Constantly"],
+    },
+    upload: {
+      selectedImage: "Selected knee image",
+      dragImage: "Drag or select knee image",
+      imageTypes: "X-ray / radiograph / CT image",
+      formats: "PNG, JPG, JPEG, BMP, TIFF",
+      uploadImu: "Upload IMU CSV",
+      imuTypes: "Single-sensor CSV",
+      selectedImu: "Selected IMU CSV",
+    },
+    report: {
+      summary: "Summary",
+      interpretation: "Interpretation",
+      recommendations: "Recommendations",
+      sessionDetails: "Session details",
+      noInterpretation: "No interpretation returned.",
+      noRecommendations: "No recommendations returned.",
+    },
+    messages: {
+      calculateToReady: "Calculate KOOS on the final page to mark this step ready.",
+      completeCurrentPage: "Answer all questions on this page to continue.",
+      completeAllKoos: "Answer all 42 KOOS questions before calculating.",
+      noKlResult: "No KL result yet.",
+      noImuResult: "No IMU result yet.",
+      generateAfterReady: "Generate report after all previous steps are ready.",
+    },
+    toc: {
+      overview: "Overview",
+      patientDetails: "Patient details",
+      sessionHistory: "Session history",
+      progress: "Progress",
+      currentQuestions: "Current questions",
+      calculateKoos: "Calculate KOOS",
+      imageUpload: "Image upload",
+      klResult: "KL result",
+      csvUpload: "CSV upload",
+      analysisResult: "Analysis result",
+      summary: "Summary",
+      interpretation: "Interpretation",
+      recommendations: "Recommendations",
+      sessionDetails: "Session details",
+    },
+  },
+  ru: {
+    app: "OrthoScan AI",
+    clinicalLine: "Клинический реабилитационный процесс",
+    sidebarSubtitle: "Клинический мастер реабилитации",
+    steps: {
+      patient: "Контекст пациента",
+      koos: "Опросник KOOS",
+      kl: "KL-оценка снимка",
+      imu: "Анализ ИМУ-реабилитации",
+      report: "Итоговый отчет",
+    },
+    descriptions: {
+      patient: "Укажите пациента и параметры сессии перед клиническими данными.",
+      koos: "Заполните KOOS короткими страницами. Ответы сохраняются как q1-q42.",
+      kl: "Загрузите снимок колена и выполните KL-оценку.",
+      imu: "Загрузите CSV ИМУ для анализа движения.",
+      report: "Сформируйте итоговый отчет из данных пациента, KOOS, KL и ИМУ.",
+    },
+    buttons: {
+      back: "Назад",
+      continue: "Продолжить",
+      refresh: "Обновить",
+      refreshing: "Обновление",
+      calculateKoos: "Рассчитать KOOS",
+      calculating: "Расчет...",
+      generateReport: "Сформировать отчет",
+      generating: "Формирование...",
+      analyzeKl: "Анализ KL",
+      analyzing: "Анализ...",
+      analyzeImu: "Анализ ИМУ",
+      nextQuestions: "Следующие вопросы",
+      previousQuestions: "Предыдущие вопросы",
+      removeFile: "Удалить файл",
+      chooseDifferentImage: "Выбрать другой снимок",
+      remove: "Удалить",
+    },
+    status: { pending: "Ожидает", ready: "Готово", complete: "Завершено", demo: "Демо", real: "Реальная", unknown: "Неизвестно" },
+    labels: {
+      patientId: "ID пациента",
+      patientName: "Имя пациента (необязательно)",
+      exercise: "Упражнение",
+      sensorPlacement: "Расположение датчика",
+      patientHistory: "История пациента",
+      noSessions: "Сессий для пациента пока нет.",
+      loading: "Загрузка...",
+      savedSessions: "Сохраненные сессии",
+      latestRom: "Последний ROM",
+      latestDate: "Последняя дата",
+      onThisStep: "В этом шаге",
+      pageOf: "Страница",
+      of: "из",
+      answered: "отвечено",
+      scoreRange: "оценка 0..4",
+      currentRom: "Текущий ROM",
+      previousRom: "Предыдущий ROM",
+      rehabScore: "Балл реабилитации",
+      klGrade: "Степень KL",
+      displayGrade: "Отображаемая степень",
+      confidence: "Уверенность",
+      koosTotal: "Итог KOOS",
+      deltaRom: "Изменение ROM",
+      sessionId: "ID сессии",
+      created: "Создано",
+    },
+    exercises: {
+      knee_extension: "Разгибание колена",
+      walking: "Ходьба",
+      going_up: "Подъем по лестнице",
+      going_down: "Спуск по лестнице",
+    },
+    sensorLocations: {
+      right_thigh: "Правое бедро",
+      right_shin: "Правая голень",
+      right_foot: "Правая стопа",
+      left_thigh: "Левое бедро",
+      left_shin: "Левая голень",
+      left_foot: "Левая стопа",
+    },
+    koosSections: {
+      pain: "Боль",
+      symptoms: "Симптомы",
+      adl: "Повседневная активность",
+      sport_rec: "Спорт/активность",
+      qol: "Качество жизни",
+    },
+    koosPages: {
+      pain1: "Боль: вопросы P1-P5",
+      pain2: "Боль: вопросы P6-P9",
+      symptoms1: "Симптомы: вопросы S1-S5",
+      symptoms2: "Симптомы: вопросы S6-S7",
+      adl1: "Повседневная активность: A1-A6",
+      adl2: "Повседневная активность: A7-A12",
+      adl3: "Повседневная активность: A13-A17",
+      sport1: "Спорт/активность: SP1-SP5",
+      qol1: "Качество жизни: Q1-Q4",
+    },
+    koosOptions: {
+      severity: ["Нет / нет проблемы", "Легкая", "Умеренная", "Сильная", "Крайняя"],
+      frequency: ["Никогда", "Редко/ежемесячно", "Иногда/еженедельно", "Часто/ежедневно", "Всегда/постоянно"],
+    },
+    upload: {
+      selectedImage: "Выбран снимок колена",
+      dragImage: "Перетащите или выберите снимок",
+      imageTypes: "Рентген / радиография / КТ",
+      formats: "PNG, JPG, JPEG, BMP, TIFF",
+      uploadImu: "Загрузить CSV ИМУ",
+      imuTypes: "CSV одного датчика",
+      selectedImu: "Выбран CSV ИМУ",
+    },
+    report: {
+      summary: "Сводка",
+      interpretation: "Интерпретация",
+      recommendations: "Рекомендации",
+      sessionDetails: "Детали сессии",
+      noInterpretation: "Интерпретация не получена.",
+      noRecommendations: "Рекомендации не получены.",
+    },
+    messages: {
+      calculateToReady: "Рассчитайте KOOS на последней странице, чтобы отметить шаг готовым.",
+      completeCurrentPage: "Ответьте на все вопросы страницы, чтобы продолжить.",
+      completeAllKoos: "Ответьте на все 42 вопроса KOOS перед расчетом.",
+      noKlResult: "Результата KL пока нет.",
+      noImuResult: "Результата ИМУ пока нет.",
+      generateAfterReady: "Сформируйте отчет после готовности предыдущих шагов.",
+    },
+    toc: {
+      overview: "Обзор",
+      patientDetails: "Данные пациента",
+      sessionHistory: "История сессий",
+      progress: "Прогресс",
+      currentQuestions: "Текущие вопросы",
+      calculateKoos: "Расчет KOOS",
+      imageUpload: "Загрузка снимка",
+      klResult: "Результат KL",
+      csvUpload: "Загрузка CSV",
+      analysisResult: "Результат анализа",
+      summary: "Сводка",
+      interpretation: "Интерпретация",
+      recommendations: "Рекомендации",
+      sessionDetails: "Детали сессии",
+    },
+  },
+  kz: {
+    app: "OrthoScan AI",
+    clinicalLine: "Клиникалық оңалту процесі",
+    sidebarSubtitle: "Клиникалық оңалту шебері",
+    steps: {
+      patient: "Пациент контексті",
+      koos: "KOOS сауалнамасы",
+      kl: "KL сурет бағасы",
+      imu: "ИМУ оңалту талдауы",
+      report: "Қорытынды есеп",
+    },
+    descriptions: {
+      patient: "Клиникалық деректер алдында пациент пен сессия параметрлерін көрсетіңіз.",
+      koos: "KOOS сауалнамасын қысқа беттермен толтырыңыз. Жауаптар q1-q42 ретінде сақталады.",
+      kl: "Тізе суретін жүктеп, KL бағасын орындаңыз.",
+      imu: "Қозғалысты талдау үшін ИМУ CSV дерегін жүктеңіз.",
+      report: "Пациент, KOOS, KL және ИМУ деректерінен қорытынды есеп жасаңыз.",
+    },
+    buttons: {
+      back: "Артқа",
+      continue: "Жалғастыру",
+      refresh: "Жаңарту",
+      refreshing: "Жаңартылуда",
+      calculateKoos: "KOOS есептеу",
+      calculating: "Есептелуде...",
+      generateReport: "Есеп жасау",
+      generating: "Жасалуда...",
+      analyzeKl: "KL талдау",
+      analyzing: "Талдануда...",
+      analyzeImu: "ИМУ талдау",
+      nextQuestions: "Келесі сұрақтар",
+      previousQuestions: "Алдыңғы сұрақтар",
+      removeFile: "Файлды өшіру",
+      chooseDifferentImage: "Басқа сурет таңдау",
+      remove: "Өшіру",
+    },
+    status: { pending: "Күтуде", ready: "Дайын", complete: "Аяқталды", demo: "Демо", real: "Нақты", unknown: "Белгісіз" },
+    labels: {
+      patientId: "Пациент ID",
+      patientName: "Пациент аты (міндетті емес)",
+      exercise: "Жаттығу",
+      sensorPlacement: "Датчик орны",
+      patientHistory: "Пациент тарихы",
+      noSessions: "Бұл пациент үшін сессия жоқ.",
+      loading: "Жүктелуде...",
+      savedSessions: "Сақталған сессиялар",
+      latestRom: "Соңғы ROM",
+      latestDate: "Соңғы күн",
+      onThisStep: "Осы қадамда",
+      pageOf: "Бет",
+      of: "ішінен",
+      answered: "жауап берілді",
+      scoreRange: "0..4 сандық баға",
+      currentRom: "Ағымдағы ROM",
+      previousRom: "Алдыңғы ROM",
+      rehabScore: "Оңалту балы",
+      klGrade: "KL дәрежесі",
+      displayGrade: "Көрсетілетін дәреже",
+      confidence: "Сенімділік",
+      koosTotal: "KOOS жалпы",
+      deltaRom: "ROM өзгерісі",
+      sessionId: "Сессия ID",
+      created: "Жасалды",
+    },
+    exercises: {
+      knee_extension: "Тізені жазу",
+      walking: "Жүру",
+      going_up: "Баспалдақпен көтерілу",
+      going_down: "Баспалдақпен түсу",
+    },
+    sensorLocations: {
+      right_thigh: "Оң сан",
+      right_shin: "Оң сирақ",
+      right_foot: "Оң аяқ",
+      left_thigh: "Сол сан",
+      left_shin: "Сол сирақ",
+      left_foot: "Сол аяқ",
+    },
+    koosSections: {
+      pain: "Ауырсыну",
+      symptoms: "Симптомдар",
+      adl: "Күнделікті өмір",
+      sport_rec: "Спорт/белсенділік",
+      qol: "Өмір сапасы",
+    },
+    koosPages: {
+      pain1: "Ауырсыну: P1-P5",
+      pain2: "Ауырсыну: P6-P9",
+      symptoms1: "Симптомдар: S1-S5",
+      symptoms2: "Симптомдар: S6-S7",
+      adl1: "Күнделікті өмір: A1-A6",
+      adl2: "Күнделікті өмір: A7-A12",
+      adl3: "Күнделікті өмір: A13-A17",
+      sport1: "Спорт/белсенділік: SP1-SP5",
+      qol1: "Өмір сапасы: Q1-Q4",
+    },
+    koosOptions: {
+      severity: ["Жоқ / мәселе жоқ", "Жеңіл", "Орташа", "Қатты", "Өте қатты"],
+      frequency: ["Ешқашан", "Сирек/ай сайын", "Кейде/апта сайын", "Жиі/күн сайын", "Әрдайым/тұрақты"],
+    },
+    upload: {
+      selectedImage: "Тізе суреті таңдалды",
+      dragImage: "Суретті сүйреңіз немесе таңдаңыз",
+      imageTypes: "Рентген / радиография / КТ",
+      formats: "PNG, JPG, JPEG, BMP, TIFF",
+      uploadImu: "ИМУ CSV жүктеу",
+      imuTypes: "Бір датчик CSV",
+      selectedImu: "ИМУ CSV таңдалды",
+    },
+    report: {
+      summary: "Қысқаша",
+      interpretation: "Түсіндіру",
+      recommendations: "Ұсынымдар",
+      sessionDetails: "Сессия деректері",
+      noInterpretation: "Түсіндіру қайтарылмады.",
+      noRecommendations: "Ұсынымдар қайтарылмады.",
+    },
+    messages: {
+      calculateToReady: "Қадамды дайын ету үшін соңғы бетте KOOS есептеңіз.",
+      completeCurrentPage: "Жалғастыру үшін беттегі барлық сұрақтарға жауап беріңіз.",
+      completeAllKoos: "Есептеу алдында KOOS-тың барлық 42 сұрағына жауап беріңіз.",
+      noKlResult: "KL нәтижесі әлі жоқ.",
+      noImuResult: "ИМУ нәтижесі әлі жоқ.",
+      generateAfterReady: "Алдыңғы қадамдар дайын болғаннан кейін есеп жасаңыз.",
+    },
+    toc: {
+      overview: "Шолу",
+      patientDetails: "Пациент деректері",
+      sessionHistory: "Сессия тарихы",
+      progress: "Прогресс",
+      currentQuestions: "Ағымдағы сұрақтар",
+      calculateKoos: "KOOS есептеу",
+      imageUpload: "Сурет жүктеу",
+      klResult: "KL нәтижесі",
+      csvUpload: "CSV жүктеу",
+      analysisResult: "Талдау нәтижесі",
+      summary: "Қысқаша",
+      interpretation: "Түсіндіру",
+      recommendations: "Ұсынымдар",
+      sessionDetails: "Сессия деректері",
+    },
+  },
+};
+
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-  @keyframes spin    { to { transform: rotate(360deg) } }
-  @keyframes fadeUp  { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:none } }
-  @keyframes pulse   { 0%,100% { opacity:1 } 50% { opacity:.3 } }
-  @keyframes scan    { from { top:0 } to { top:100% } }
-  @keyframes shimmer { from { transform:translateX(-100%) } to { transform:translateX(200%) } }
-  @keyframes glow    { 0%,100% { box-shadow:0 0 20px rgba(79,142,247,.3) } 50% { box-shadow:0 0 40px rgba(79,142,247,.6) } }
-  @keyframes float   { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
-  * { box-sizing:border-box; margin:0; padding:0 }
-  ::-webkit-scrollbar { width:4px }
-  ::-webkit-scrollbar-track { background:#0a1020 }
-  ::-webkit-scrollbar-thumb { background:#1e3a5f; border-radius:2px }
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#E5DCC7;
+  --paper:#F7F2E7;
+  --card:#EEE7D7;
+  --border:#D9D1BD;
+  --text:#111827;
+  --muted:#6B6256;
+  --teal:#18B7A6;
+  --coral:#FF6B57;
+  --teal-soft:rgba(24,183,166,.1);
+  --coral-soft:rgba(255,107,87,.11);
+}
+*{box-sizing:border-box}
+html,body,#root{width:100%;min-height:100%;margin:0}
+html{scroll-behavior:smooth}
+body{font-family:"Manrope",sans-serif;background:var(--bg);color:var(--text);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit}
+.app{width:100%;max-width:none;min-height:100dvh;margin:0;background:var(--bg);overflow:hidden}
+.shell{width:100%;max-width:none;margin:0;display:grid;grid-template-columns:280px minmax(0,1fr) 170px;align-items:start;min-height:100dvh}
+.sidebar{background:var(--paper);border-right:1px solid var(--border);padding:24px 12px;display:grid;gap:16px;height:100dvh;position:sticky;top:0;overflow-y:auto}
+.brand{padding:0 6px 8px}
+.brand h1{font-family:"Instrument Serif",serif;font-size:42px;line-height:.95;font-weight:400;letter-spacing:-.03em;margin:0 0 10px}
+.brand p{margin:0;color:var(--muted);font-size:14px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
+.topbarMeta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.topToolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.topStatus{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:#f8f3e8;color:var(--muted);padding:6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.statusDot{width:7px;height:7px;background:var(--teal);display:inline-block}
+.topStatus.demo .statusDot{background:var(--coral)}
+.lang{display:flex;gap:6px;flex-wrap:wrap}
+.lang button{border:1px solid var(--border);background:transparent;color:var(--muted);padding:7px 9px;font-size:12px;font-weight:800;cursor:pointer}
+.lang button:hover{border-color:var(--teal);color:var(--text)}
+.lang button.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.stepList{display:grid;gap:2px}
+.stepItem{width:100%;text-align:left;border:0;background:transparent;padding:10px 8px;cursor:pointer;display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;position:relative;color:var(--text)}
+.stepItem::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;background:transparent}
+.stepItem.active::before{background:var(--teal)}
+.stepItem.active{background:var(--teal-soft)}
+.stepItem:hover{background:#eee6d5}
+.stepNum{width:28px;height:28px;border:1px solid var(--border);display:grid;place-items:center;font-weight:800;background:var(--paper);font-size:12px}
+.stepItem.active .stepNum{border-color:var(--teal);color:var(--teal);background:#fff}
+.stepTitle{font-size:13px;font-weight:800;line-height:1.3}
+.badge{font-size:10px;font-weight:800;padding:3px 6px;border:1px solid var(--border);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.badge.ready{color:#0c746b;border-color:rgba(24,183,166,.45);background:var(--teal-soft)}
+.badge.complete{color:#fff;border-color:var(--teal);background:var(--teal)}
+.history{border-top:1px solid var(--border);padding:14px 6px 0;display:grid;gap:8px}
+.history h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.historyCard{border-top:1px solid var(--border);padding:10px 0}
+.historyTop{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.historyMeta{font-size:11px;color:var(--muted);margin-top:6px}
+.historyEmpty{color:#928878;font-size:11px;line-height:1.35;padding:2px 0 0}
+
+.main{background:var(--paper);border-right:1px solid var(--border);height:100dvh;overflow-y:auto;padding:24px 54px 88px;width:100%;min-width:0}
+.breadcrumbs{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.clinicalLine{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.hero{padding:0 0 24px;border-bottom:1px solid var(--border)}
+.hero h2{margin:0;font-family:"Instrument Serif",serif;font-size:52px;line-height:.98;font-weight:400;letter-spacing:-.04em}
+.hero p{margin:12px 0 0;color:var(--muted);font-size:17px;max-width:860px}
+.panel{padding:24px 0;border-bottom:1px solid var(--border)}
+.panel h3{margin:0 0 8px;font-size:20px;letter-spacing:-.025em;line-height:1.2}
+.panel p{margin:0;color:var(--muted);max-width:82ch}
+.sectionBody{margin-top:0}
+.sectionBody + .sectionBody{margin-top:16px}
+.subsectionTitle{margin:0 0 10px;font-size:15px;font-weight:800;color:var(--text)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.klLayout{display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(300px,.85fr);gap:24px;align-items:start}
+.uploadStack{display:grid;gap:12px}
+.field{display:grid;gap:8px}
+.field label{font-size:13px;color:var(--text);font-weight:800}
+.field input,.field select{height:46px;border:1px solid var(--border);padding:0 12px;background:#fff;color:var(--text);outline:none}
+.field input:focus,.field select:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(24,183,166,.16)}
+.fileDrop{min-height:220px;border:1px dashed #bfb5a1;background:#f2ead9;display:grid;place-items:center;text-align:center;padding:20px;cursor:pointer;color:var(--text);width:100%}
+.fileDrop.large{min-height:260px}
+.fileDrop:hover{border-color:var(--teal);background:#edf3e8}
+.fileDrop strong{font-size:18px}
+.fileDrop span{font-size:13px;color:var(--muted)}
+.fileHint{margin-top:8px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+.selectedFile{display:grid;gap:4px}
+.selectedFile strong{font-size:18px}
+.selectedFile span{font-size:13px;color:var(--muted);word-break:break-word}
+.preview{width:100%;max-height:340px;object-fit:contain;border:1px solid var(--border);background:#fff}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:5px 8px;border:1px solid var(--border);font-size:11px;font-weight:800;background:#f8f3e8;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.chip.coral{border-color:rgba(255,107,87,.45);color:#9b3a2c;background:var(--coral-soft)}
+.chip.teal{border-color:rgba(24,183,166,.45);color:#0c746b;background:var(--teal-soft)}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.metric{background:#f8f3e8;border:1px solid var(--border);padding:11px}
+.metric small{color:var(--muted);font-size:12px;font-weight:700}
+.metric strong{display:block;margin-top:6px;font-size:26px;line-height:1.1;letter-spacing:-.035em}
+
+.koosWrap{display:grid;gap:10px;padding-bottom:18px}
+.koosHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.koosHead strong{font-size:14px;color:var(--text)}
+.koosPageTitle{display:grid;gap:4px}
+.koosPageTitle h3{margin:0;font-size:20px;line-height:1.2;letter-spacing:-.025em}
+.koosPageMeta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.progressBar{height:6px;background:#eadfcb;border:1px solid var(--border)}
+.progressFill{height:100%;background:var(--teal)}
+.koosTabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:6px}
+.koosTab{border:0;background:transparent;padding:6px 8px 9px;color:var(--muted);font-weight:800;cursor:pointer;position:relative;font-size:13px}
+.koosTab.active{color:#0f6e66}
+.koosTab.active::after{content:"";position:absolute;left:8px;right:8px;bottom:-7px;height:2px;background:var(--teal)}
+.koosPage{display:grid;gap:12px}
+.koosQuestion{border:1px solid var(--border);padding:14px;background:#fff}
+.koosQuestion + .koosQuestion{margin-top:0}
+.koosQuestion h4{margin:0 0 12px;font-size:15px;line-height:1.4}
+.koosOpts{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:8px}
+.opt{border:1px solid var(--border);min-height:48px;padding:7px 8px;background:#f7f3e8;text-align:left;display:grid;grid-template-columns:auto 1fr;gap:7px;align-items:center;cursor:pointer}
+.opt input{accent-color:var(--teal)}
+.opt span{font-size:11px;color:#3b4e53;line-height:1.25;font-weight:800}
+.opt.selected{border-color:var(--teal);background:#eaf8f5}
+
+.error{margin-top:12px;padding:10px;border:1px solid rgba(255,107,87,.45);background:var(--coral-soft);color:#7a2f24;font-size:13px}
+.empty{margin-top:12px;padding:12px;border:1px solid var(--border);background:#f8f3e8;color:var(--muted);font-size:13px}
+
+.wizardNav{display:flex;justify-content:space-between;gap:10px;margin-top:18px;flex-wrap:wrap}
+.koosAction{position:sticky;bottom:0;z-index:2;background:var(--paper);border-top:1px solid var(--border);padding:12px 0 6px;align-items:center}
+.koosActionNote{color:var(--muted);font-size:12px}
+.btn{height:42px;padding:0 14px;border:1px solid var(--border);font-weight:800;cursor:pointer;background:#f8f3e8;color:var(--text);transition:background .15s ease,transform .15s ease,border-color .15s ease}
+.btn:hover{border-color:#bfb5a1;background:#fff}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn:disabled{opacity:.42;cursor:not-allowed;background:#eee6d5;color:#8a8070;border-color:var(--border);transform:none}
+.reportBlock{border-top:1px solid var(--border);padding:16px 0}
+.reportBlock:first-child{border-top:0}
+.reportBlock h4{margin:0 0 8px;font-size:16px}
+.reportBlock p{margin:0;color:var(--text)}
+.reportList{margin:0;padding-left:18px;color:var(--text)}
+.reportList li{margin:6px 0}
+.toc{background:var(--paper);height:100dvh;position:sticky;top:0;padding:34px 12px;border-right:1px solid var(--border);overflow-y:auto}
+.tocTitle{font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted);margin-bottom:14px}
+.tocNav{display:grid;gap:2px}
+.tocLink{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--muted);font-size:13px;line-height:1.35;padding:7px 0 7px 12px;border-left:2px solid transparent;text-decoration:none;cursor:pointer}
+.tocLink:hover,.tocLink.active{color:var(--text);border-left-color:var(--teal)}
+
+@media (max-width:1100px){
+  .shell{grid-template-columns:260px minmax(0,1fr)}
+  .toc{display:none}
+  .main{padding:28px 34px 52px}
+  .klLayout{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .shell{grid-template-columns:1fr}
+  .app{overflow-x:hidden;overflow-y:auto}
+  .sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--border)}
+  .main{height:auto;overflow:visible;border-right:0;padding:20px 18px 44px}
+  .topbar{align-items:flex-start;flex-direction:column;margin-bottom:22px}
+  .topToolbar{justify-content:flex-start}
+  .hero h2{font-size:42px}
+  .hero p{font-size:16px}
+  .grid2,.metrics,.klLayout{grid-template-columns:1fr}
+  .koosOpts{grid-template-columns:1fr}
+  .fileDrop,.fileDrop.large{min-height:220px}
+}
 `;
 
-// ─────────────────────────────────────────────────────────────
-// MAIN APP
-// ─────────────────────────────────────────────────────────────
+function formatDate(value) {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function f(value, unit = "") {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return `${Number(value).toFixed(1)}${unit}`;
+}
+
+function statusLabel(active, ready, complete, t) {
+  if (complete) return t.status.complete;
+  if (ready) return t.status.ready;
+  if (active) return t.status.pending;
+  return t.status.pending;
+}
+
 export default function App() {
-  const [lang, setLang]             = useState("en");
-  const [module, setModule]         = useState("oa");   // "oa" | "imu"
+  const [lang, setLang] = useState("en");
+  const [activeStep, setActiveStep] = useState("patient");
+  const [completedSteps, setCompletedSteps] = useState({});
+  const [health, setHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState("");
 
-  // ── OA module state ─────────────────────────────────────────────────────
-  const [image, setImage]           = useState(null);
-  const [b64, setB64]               = useState(null);
-  const [mime, setMime]             = useState("image/png");
-  const [drag, setDrag]             = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [stepIdx, setStepIdx]       = useState(0);
-  const [result, setResult]         = useState(null);
-  const [err, setErr]               = useState(null);
-  const [heatVisible, setHeatVisible] = useState(true);
+  const [patientId, setPatientId] = useState("");
+  const [patientName, setPatientName] = useState("");
+  const [exercise, setExercise] = useState("knee_extension");
+  const [sensorLocation, setSensorLocation] = useState("right_thigh");
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
-  // ── IMU module state ─────────────────────────────────────────────────────
-  const [imuFile, setImuFile]         = useState(null);
-  const [imuDrag, setImuDrag]         = useState(false);
-  const [imuLocation, setImuLocation] = useState("right_thigh");
-  const [imuLoading, setImuLoading]   = useState(false);
-  const [imuStepIdx, setImuStepIdx]   = useState(0);
-  const [imuResult, setImuResult]     = useState(null);
-  const [imuErr, setImuErr]           = useState(null);
+  const [koosAnswers, setKoosAnswers] = useState({});
+  const [koosPageIndex, setKoosPageIndex] = useState(0);
+  const [koosResult, setKoosResult] = useState(null);
+  const [koosLoading, setKoosLoading] = useState(false);
+  const [koosError, setKoosError] = useState("");
 
-  // ── Shared connection state ──────────────────────────────────────────────
-  const [modelMode, setModelMode]     = useState("demo");
-  const [connStatus, setConnStatus]   = useState(null);
-  const [imuAvail, setImuAvail]       = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [klResult, setKlResult] = useState(null);
+  const [klLoading, setKlLoading] = useState(false);
+  const [klError, setKlError] = useState("");
 
-  const fileRef    = useRef();
-  const imuFileRef = useRef();
-  const t = T[lang];
+  const [imuFile, setImuFile] = useState(null);
+  const [imuResult, setImuResult] = useState(null);
+  const [imuLoading, setImuLoading] = useState(false);
+  const [imuError, setImuError] = useState("");
 
-  // ── Backend health check ─────────────────────────────────────────────────
-  const checkConn = async () => {
-    setConnStatus("checking");
-    try {
-      const r = await fetch("/api/health", { signal: AbortSignal.timeout(3000) });
-      if (r.ok) {
-        const data = await r.json();
-        setConnStatus("ok");
-        setModelMode("local");
-        setImuAvail(data.imu === "real");
-        return true;
-      }
-    } catch (_) {}
-    setConnStatus("fail"); setModelMode("demo"); setImuAvail(false); return false;
-  };
-  useEffect(() => { checkConn(); }, []);
+  const [reportResult, setReportResult] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
 
-  // ── OA handlers ──────────────────────────────────────────────────────────
-  const handleFile = useCallback((file) => {
-    if (!file?.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImage(e.target.result);
-      setB64(e.target.result.split(",")[1]);
-      setMime(file.type || "image/png");
-      setResult(null); setErr(null);
+  const imageInputRef = useRef(null);
+  const csvInputRef = useRef(null);
+  const t = STRINGS[lang];
+
+  const latestSession = sessions[0] || null;
+  const previousRom = latestSession?.current_rom ?? null;
+  const currentRom = imuResult?.session_summary?.rom_deg ?? null;
+  const totalAnswered = Object.keys(koosAnswers).length;
+  const activeStepMeta = STEPS.find((step) => step.id === activeStep) || STEPS[0];
+  const stepHeadings = STEP_HEADINGS[activeStep] || [];
+  const koosQuestionText = KOOS_QUESTION_TEXT_I18N[lang] || KOOS_QUESTION_TEXT_I18N.en;
+  const currentKoosPage = KOOS_PAGES[koosPageIndex] || KOOS_PAGES[0];
+  const isFinalKoosPage = koosPageIndex === KOOS_PAGES.length - 1;
+  const currentKoosAnswered = currentKoosPage.questions.filter((num) => koosAnswers[`q${num}`] !== undefined).length;
+  const currentKoosComplete = currentKoosAnswered === currentKoosPage.questions.length;
+  const canCalculateKoos = isFinalKoosPage && currentKoosComplete && totalAnswered === 42;
+  const koosProgressPct = Math.round((totalAnswered / 42) * 100);
+
+  const readyState = useMemo(
+    () => ({
+      patient: patientId.trim().length > 0,
+      koos: Boolean(koosResult?.koos_total !== undefined),
+      kl: Boolean(klResult?.kl_grade !== undefined),
+      imu: Boolean(imuResult?.overall_score !== undefined),
+      report: Boolean(reportResult?.session_id),
+    }),
+    [patientId, koosResult, klResult, imuResult, reportResult]
+  );
+
+  useEffect(() => {
+    fetchHealth();
+  }, []);
+
+  useEffect(() => {
+    fetchSessions(patientId.trim(), exercise);
+  }, [patientId, exercise]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
-    reader.readAsDataURL(file);
-  }, []);
+  }, [imagePreview]);
 
-  const analyze = async () => {
-    if (!b64) return;
-    setLoading(true); setResult(null); setErr(null); setStepIdx(0);
-    const iv = setInterval(() => setStepIdx((s) => (s + 1) % t.steps.length), 900);
+  async function fetchHealth() {
+    setHealthLoading(true);
+    setHealthError("");
     try {
-      const bs  = atob(b64);
-      const arr = new Uint8Array(bs.length);
-      for (let i = 0; i < bs.length; i++) arr[i] = bs.charCodeAt(i);
-      const fd = new FormData();
-      fd.append("file", new Blob([arr], { type: mime }), "xray.jpg");
-      const res = await fetch(`/api/predict?lang=${lang}`, { method:"POST", body:fd, signal:AbortSignal.timeout(20000) });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const d = await res.json();
-      setResult({
-        pred:            d.grade,
-        diagnosis:       d.diagnosis,
-        prob_oa:         d.prob_oa,
-        confidence:      d.confidence,
-        normal_pct:      d.grade_probs?.["0"] ?? (100 - d.confidence),
-        oa_pct:          d.grade_probs?.["1"] ?? d.confidence,
-        threshold:       d.threshold ?? 0.56,
-        T_optimal:       d.T_optimal ?? 1.0,
-        severity:        d.severity ?? "—",
-        findings:        d.findings ?? [],
-        recommendations: d.recommendations ?? [],
-        kl_note:         d.scale ?? "",
-        urgency:         d.urgency ?? "Routine",
-        hotspots:        d.hotspots ?? null,
-        source:          d.source ?? "local",
+      const res = await fetch(`${API}/health`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setHealth(await res.json());
+    } catch (error) {
+      setHealthError(error.message);
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
+  async function fetchSessions(pid, ex) {
+    if (!pid) {
+      setSessions([]);
+      return;
+    }
+    setSessionsLoading(true);
+    try {
+      const q = new URLSearchParams();
+      if (ex) q.set("exercise", ex);
+      const res = await fetch(`${API}/sessions/${encodeURIComponent(pid)}?${q.toString()}`);
+      if (!res.ok) throw new Error("sessions error");
+      const data = await res.json();
+      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+    } catch {
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
+
+  async function calculateKoos() {
+    setKoosLoading(true);
+    setKoosError("");
+    try {
+      const res = await fetch(`${API}/koos/calculate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: koosAnswers }),
       });
-    } catch (e) { setErr(e.message); }
-    finally { clearInterval(iv); setLoading(false); }
-  };
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      setKoosResult(data);
+      setCompletedSteps((prev) => ({ ...prev, koos: true }));
+    } catch (error) {
+      setKoosError(error.message);
+    } finally {
+      setKoosLoading(false);
+    }
+  }
 
-  // ── IMU handlers ──────────────────────────────────────────────────────────
-  const handleImuFile = useCallback((file) => {
-    if (!file) return;
-    setImuFile(file);
-    setImuResult(null); setImuErr(null);
-  }, []);
-
-  const analyzeImu = async () => {
-    if (!imuFile) return;
-    setImuLoading(true); setImuResult(null); setImuErr(null); setImuStepIdx(0);
-    const iv = setInterval(() => setImuStepIdx((s) => (s + 1) % t.imuSteps.length), 1200);
+  async function analyzeKl() {
+    if (!imageFile) return;
+    setKlLoading(true);
+    setKlError("");
     try {
-      const fd = new FormData();
-      fd.append("file", imuFile);
-      const res = await fetch(
-        `/api/imu/analyze?lang=${lang}&sensor_location=${imuLocation}`,
-        { method:"POST", body:fd, signal:AbortSignal.timeout(120000) }
-      );
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || `Server error ${res.status}`);
-      setImuResult(d);
-    } catch (e) { setImuErr(e.message); }
-    finally { clearInterval(iv); setImuLoading(false); }
-  };
+      const form = new FormData();
+      form.append("file", imageFile);
+      const res = await fetch(`${API}/predict-kl?lang=${lang}&kl_scale_max=4`, { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      setKlResult(data);
+    } catch (error) {
+      setKlError(error.message);
+    } finally {
+      setKlLoading(false);
+    }
+  }
 
-  const isOA     = result?.pred === 1;
-  const urgColor = { Routine:"#10b981", Soon:"#f59e0b", Urgent:"#ef4444" };
+  async function analyzeImu() {
+    if (!imuFile) return;
+    setImuLoading(true);
+    setImuError("");
+    try {
+      const form = new FormData();
+      form.append("file", imuFile);
+      const res = await fetch(`${API}/imu/analyze?lang=${lang}&sensor_location=${sensorLocation}`, { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      setImuResult(data);
+    } catch (error) {
+      setImuError(error.message);
+    } finally {
+      setImuLoading(false);
+    }
+  }
 
-  // Score color for IMU
-  const scoreColor = (s) => s >= 85 ? "#10b981" : s >= 65 ? "#4f8ef7" : s >= 45 ? "#f59e0b" : "#ef4444";
+  async function generateReport() {
+    if (!readyState.patient || !readyState.koos || !readyState.kl || !readyState.imu) return;
+    setReportLoading(true);
+    setReportError("");
+    try {
+      const payload = {
+        patient_id: patientId.trim(),
+        patient_name: patientName.trim() || null,
+        exercise,
+        koos_pre: koosResult.koos_total,
+        kl_grade: klResult.kl_grade,
+        imu_result: imuResult,
+        image_result: klResult,
+      };
+      const res = await fetch(`${API}/rehab/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      setReportResult(data);
+      setCompletedSteps((prev) => ({ ...prev, report: true }));
+      fetchSessions(patientId.trim(), exercise);
+    } catch (error) {
+      setReportError(error.message);
+    } finally {
+      setReportLoading(false);
+    }
+  }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  function markComplete(id) {
+    setCompletedSteps((prev) => ({ ...prev, [id]: true }));
+  }
+
+  function nextStep() {
+    const idx = STEPS.findIndex((s) => s.id === activeStep);
+    if (idx < 0 || idx === STEPS.length - 1) return;
+    markComplete(activeStep);
+    setActiveStep(STEPS[idx + 1].id);
+  }
+
+  function prevStep() {
+    const idx = STEPS.findIndex((s) => s.id === activeStep);
+    if (idx <= 0) return;
+    setActiveStep(STEPS[idx - 1].id);
+  }
+
+  function canContinue(stepId) {
+    if (stepId === "patient") return readyState.patient;
+    if (stepId === "koos") return readyState.koos;
+    if (stepId === "kl") return readyState.kl;
+    if (stepId === "imu") return readyState.imu;
+    return false;
+  }
+
+  function getKoosOptions(qKey) {
+    return KOOS_FREQUENCY_KEYS.has(qKey) ? KOOS_FREQUENCY_OPTIONS : KOOS_SEVERITY_OPTIONS;
+  }
+
+  function getKoosOptionLabel(qKey, value) {
+    const group = KOOS_FREQUENCY_KEYS.has(qKey) ? "frequency" : "severity";
+    return t.koosOptions[group][value] || String(value);
+  }
+
+  function goToKoosSection(sectionKey) {
+    const idx = KOOS_PAGES.findIndex((page) => page.section === sectionKey);
+    if (idx >= 0) setKoosPageIndex(idx);
+  }
+
+  function selectImageFile(file) {
+    if (!file) return;
+    setImageFile(file);
+    setKlResult(null);
+    setReportResult(null);
+    setImagePreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return URL.createObjectURL(file);
+    });
+  }
+
+  function clearImageFile() {
+    setImageFile(null);
+    setKlResult(null);
+    setImagePreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return "";
+    });
+  }
+
   return (
-    <div style={{ minHeight:"100vh",background:"#050a14",color:"#e2e8f0",fontFamily:"'Inter','Segoe UI',sans-serif",overflowX:"hidden" }}>
+    <div className="app">
       <style>{GLOBAL_CSS}</style>
-
-      {/* Animated background */}
-      <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",
-        background:"radial-gradient(ellipse 80% 60% at 20% 0%,rgba(79,142,247,.07),transparent 60%),radial-gradient(ellipse 60% 50% at 80% 100%,rgba(16,185,129,.05),transparent 60%)" }} />
-      <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",
-        backgroundImage:"linear-gradient(rgba(79,142,247,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(79,142,247,.03) 1px,transparent 1px)",
-        backgroundSize:"60px 60px" }} />
-
-      {/* ── NAV ── */}
-      <nav style={{ position:"sticky",top:0,zIndex:100,
-        background:"rgba(5,10,20,.85)",backdropFilter:"blur(24px) saturate(180%)",
-        borderBottom:"1px solid rgba(79,142,247,.12)",boxShadow:"0 4px 30px rgba(0,0,0,.3)" }}>
-        <div style={{ maxWidth:1280,margin:"0 auto",padding:"0 28px",height:62,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-
-          {/* Logo */}
-          <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-            <div style={{ width:36,height:36,borderRadius:10,
-              background:"linear-gradient(135deg,#1d4ed8,#4f8ef7)",
-              display:"flex",alignItems:"center",justifyContent:"center",
-              boxShadow:"0 0 20px rgba(79,142,247,.4)",animation:"glow 3s ease-in-out infinite" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/>
-                <line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize:15,fontWeight:800,letterSpacing:"-0.03em",background:"linear-gradient(135deg,#fff,#93c5fd)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>{t.brand}</div>
-              <div style={{ fontSize:10,color:"rgba(255,255,255,.35)",letterSpacing:"0.1em",textTransform:"uppercase" }}>{t.brandSub}</div>
-            </div>
+      <div className="shell">
+        <aside className="sidebar">
+          <div className="brand">
+            <h1>{t.app}</h1>
+            <p>{t.sidebarSubtitle}</p>
           </div>
 
-          <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-            {/* Module tabs */}
-            <div style={{ display:"flex",gap:2,background:"rgba(255,255,255,.05)",borderRadius:10,padding:3 }}>
-              {[["oa",t.modOA,"#4f8ef7"],["imu",t.modIMU,"#10b981"]].map(([m,label,ac]) => (
-                <button key={m} onClick={() => setModule(m)} style={{
-                  padding:"5px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
-                  background: module===m ? `${ac}22` : "transparent",
-                  border: module===m ? `1px solid ${ac}44` : "1px solid transparent",
-                  color: module===m ? ac : "rgba(255,255,255,.4)",
-                  transition:"all .15s",
-                }}>{label}</button>
-              ))}
-            </div>
-
-            <div style={{ height:18,width:1,background:"rgba(255,255,255,.1)" }}/>
-            <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-              <span style={{ width:7,height:7,borderRadius:"50%",background:"#10b981",display:"inline-block",boxShadow:"0 0 8px #10b981",animation:"pulse 2s infinite" }}/>
-              <span style={{ fontSize:11,color:"rgba(255,255,255,.45)",fontWeight:500 }}>{t.online}</span>
-            </div>
-            <div style={{ height:18,width:1,background:"rgba(255,255,255,.1)" }}/>
-            <div style={{ padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:600,
-              background: modelMode==="local"?"rgba(16,185,129,.15)":"rgba(79,142,247,.15)",
-              border:`1px solid ${modelMode==="local"?"rgba(16,185,129,.3)":"rgba(79,142,247,.3)"}`,
-              color: modelMode==="local"?"#10b981":"#4f8ef7" }}>
-              {modelMode==="local" ? "🟢 "+t.localActive : "🔵 "+t.demoActive}
-            </div>
-            <div style={{ height:18,width:1,background:"rgba(255,255,255,.1)" }}/>
-            {/* Lang switcher */}
-            <div style={{ display:"flex",gap:3,background:"rgba(255,255,255,.05)",borderRadius:9,padding:3 }}>
-              {["en","ru","kz"].map((l) => (
-                <button key={l} onClick={() => setLang(l)} style={{
-                  padding:"4px 12px",borderRadius:7,fontSize:11,fontWeight:700,cursor:"pointer",
-                  background: lang===l?"rgba(79,142,247,.9)":"transparent",
-                  color: lang===l?"#fff":"rgba(255,255,255,.4)",
-                  border:"none",transition:"all .15s",letterSpacing:"0.06em",
-                }}>{l.toUpperCase()}</button>
-              ))}
-            </div>
+          <div className="stepList">
+            {STEPS.map((step, i) => {
+              const complete = Boolean(completedSteps[step.id] || readyState.report && step.id === "report");
+              const ready = Boolean(readyState[step.id]);
+              const active = activeStep === step.id;
+              return (
+                <button key={step.id} className={`stepItem ${active ? "active" : ""}`} onClick={() => setActiveStep(step.id)}>
+                  <div className="stepNum">{i + 1}</div>
+                  <div className="stepTitle">{t.steps[step.id]}</div>
+                  <div className={`badge ${complete ? "complete" : ready ? "ready" : ""}`}>{statusLabel(active, ready, complete, t)}</div>
+                </button>
+              );
+            })}
           </div>
-        </div>
-      </nav>
 
-      {/* ════════════════════════════════════════════════════════
-          MODULE 1 — KNEE OA DIAGNOSTICS
-      ════════════════════════════════════════════════════════ */}
-      {module === "oa" && (
-        <>
-          {/* Hero */}
-          <div style={{ position:"relative",overflow:"hidden",padding:"48px 28px 40px",
-            background:"linear-gradient(160deg,rgba(13,24,50,1) 0%,rgba(5,10,20,1) 100%)",
-            borderBottom:"1px solid rgba(79,142,247,.1)" }}>
-            <div style={{ maxWidth:1280,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:24 }}>
-              <div style={{ maxWidth:540 }}>
-                <div style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"5px 14px",borderRadius:999,
-                  background:"rgba(79,142,247,.1)",border:"1px solid rgba(79,142,247,.2)",marginBottom:18 }}>
-                  <span style={{ width:6,height:6,borderRadius:"50%",background:"#4f8ef7",display:"inline-block",animation:"pulse 2s infinite" }}/>
-                  <span style={{ fontSize:11,color:"#93c5fd",fontWeight:600,letterSpacing:"0.08em" }}>{t.heroLabel}</span>
+          <div className="history">
+            <h3>{t.labels.patientHistory}</h3>
+            {sessionsLoading ? <div className="empty">{t.labels.loading}</div> : null}
+            {!sessionsLoading && sessions.length === 0 ? <div className="historyEmpty">{t.labels.noSessions}</div> : null}
+            {sessions.slice(0, 4).map((session) => (
+              <div className="historyCard" key={session.session_id}>
+                <div className="historyTop">
+                  <strong>{session.patient_name || session.patient_id}</strong>
+                  <span>{formatDate(session.created_at)}</span>
                 </div>
-                <h1 style={{ fontSize:"clamp(30px,4vw,52px)",fontWeight:900,lineHeight:1.05,letterSpacing:"-0.04em",marginBottom:14 }}>
-                  <span style={{ background:"linear-gradient(135deg,#fff 30%,#93c5fd)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>{t.heroTitle}</span><br/>
-                  <span style={{ fontSize:"0.7em",fontWeight:300,fontStyle:"italic",color:"rgba(255,255,255,.5)" }}>{t.heroItalic}</span>
-                </h1>
-                <p style={{ color:"rgba(255,255,255,.45)",fontSize:14,lineHeight:1.7,maxWidth:420 }}>{t.heroDesc}</p>
+                <div className="historyMeta">ROM {f(session.current_rom, "°")} | KOOS {f(session.koos_pre)} | KL {session.kl_grade ?? "-"}</div>
               </div>
-              <div style={{ display:"flex",gap:14 }}>
-                {[{ v:"89.7%",l:t.testAcc,c:"#4f8ef7" },{ v:"0.953",l:t.rocAuc,c:"#10b981" },{ v:"≥0.80",l:t.recallFloor,c:"#f59e0b" }].map(({ v,l,c }) => (
-                  <div key={l} style={{ textAlign:"center",padding:"18px 22px",borderRadius:16,
-                    background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",
-                    backdropFilter:"blur(12px)",animation:"float 4s ease-in-out infinite",
-                    boxShadow:"0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.08)" }}>
-                    <div style={{ fontSize:26,fontWeight:900,color:c,letterSpacing:"-0.04em",textShadow:`0 0 20px ${c}66` }}>{v}</div>
-                    <div style={{ fontSize:10,color:"rgba(255,255,255,.4)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase" }}>{l}</div>
-                  </div>
+            ))}
+          </div>
+        </aside>
+
+        <main className="main">
+          <div className="topbar">
+            <div className="clinicalLine">{t.clinicalLine}</div>
+            <div className="topToolbar">
+              <span className={`topStatus ${health?.model === "demo" ? "demo" : ""}`}>
+                <span className="statusDot" />
+                {health?.model === "demo" ? t.status.demo : health?.model || t.status.unknown}
+              </span>
+              <div className="lang" aria-label="Language and backend controls">
+                {["en", "ru", "kz"].map((code) => (
+                  <button key={code} className={lang === code ? "active" : ""} onClick={() => setLang(code)}>
+                    {code.toUpperCase()}
+                  </button>
                 ))}
+                <button onClick={fetchHealth} disabled={healthLoading}>{healthLoading ? t.buttons.refreshing : t.buttons.refresh}</button>
               </div>
             </div>
           </div>
 
-          {/* OA Content */}
-          <div style={{ maxWidth:1280,margin:"0 auto",padding:"28px 28px 80px",position:"relative",zIndex:1 }}>
-            <div style={{ display:"grid",gridTemplateColumns:"380px 1fr",gap:20,alignItems:"start" }}>
+          <section className="hero" id={`${activeStep}-overview`}>
+            <h2>{t.steps[activeStepMeta.id]}</h2>
+            <p>{t.descriptions[activeStepMeta.id]}</p>
+            {healthError ? <div className="error">{healthError}</div> : null}
+          </section>
 
-              {/* Left panel */}
-              <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+          {activeStep === "patient" ? (
+            <section className="panel" id="patient-context">
+              <div className="grid2 sectionBody">
+                <div className="field">
+                  <label>{t.labels.patientId}</label>
+                  <input value={patientId} onChange={(e) => setPatientId(e.target.value)} placeholder="P001" />
+                </div>
+                <div className="field">
+                  <label>{t.labels.patientName}</label>
+                  <input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>{t.labels.exercise}</label>
+                  <select value={exercise} onChange={(e) => setExercise(e.target.value)}>
+                    {EXERCISES.map((x) => <option key={x.value} value={x.value}>{t.exercises[x.value]}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>{t.labels.sensorPlacement}</label>
+                  <select value={sensorLocation} onChange={(e) => setSensorLocation(e.target.value)}>
+                    {SENSOR_LOCATIONS.map((x) => <option key={x.value} value={x.value}>{t.sensorLocations[x.value]}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="metrics sectionBody" id="patient-history">
+                <div className="metric"><small>{t.labels.savedSessions}</small><strong>{sessions.length}</strong></div>
+                <div className="metric"><small>{t.labels.latestRom}</small><strong>{latestSession ? f(latestSession.current_rom, "°") : "-"}</strong></div>
+                <div className="metric"><small>{t.labels.latestDate}</small><strong style={{ fontSize: 16 }}>{latestSession ? formatDate(latestSession.created_at) : "-"}</strong></div>
+              </div>
+            </section>
+          ) : null}
 
-                {/* Backend connection */}
-                <div style={{ borderRadius:18,overflow:"hidden",background:"rgba(255,255,255,.03)",border:"1px solid rgba(79,142,247,.15)",backdropFilter:"blur(12px)",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                  <div style={{ padding:"14px 18px 11px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:10 }}>
-                    <div style={{ width:30,height:30,borderRadius:8,background:"rgba(79,142,247,.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" strokeWidth="2.2" strokeLinecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          {activeStep === "koos" ? (
+            <section className="panel" id="koos-calculate">
+              <div className="koosWrap sectionBody">
+                <div className="koosHead" id="koos-progress">
+                  <div className="koosPageTitle">
+                    <div className="koosPageMeta">
+                      {t.labels.pageOf} {koosPageIndex + 1} {t.labels.of} {KOOS_PAGES.length} · {totalAnswered}/42 {t.labels.answered}
                     </div>
-                    <div>
-                      <div style={{ fontSize:13,fontWeight:700 }}>{t.modelConn}</div>
-                      <div style={{ fontSize:10,color:"rgba(255,255,255,.35)" }}>{t.checkDesc}</div>
-                    </div>
+                    <h3>{t.koosPages[currentKoosPage.titleKey]}</h3>
                   </div>
-                  <div style={{ padding:"12px 16px" }}>
-                    <button onClick={checkConn} disabled={connStatus==="checking"} style={{
-                      width:"100%",padding:"9px",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",
-                      background: connStatus==="checking"?"rgba(255,255,255,.05)":"linear-gradient(135deg,rgba(79,142,247,.8),rgba(29,78,216,.8))",
-                      color: connStatus==="checking"?"rgba(255,255,255,.3)":"#fff",
-                      border:"1px solid rgba(79,142,247,.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-                      boxShadow: connStatus!=="checking"?"0 4px 14px rgba(79,142,247,.2)":"none",transition:"all .2s",
-                    }}>
-                      {connStatus==="checking"
-                        ? <><div style={{ width:12,height:12,border:"2px solid rgba(79,142,247,.3)",borderTop:"2px solid #4f8ef7",borderRadius:"50%",animation:"spin .7s linear infinite" }}/>{t.checking}</>
-                        : t.checkBtn}
+                  <div className="chips"><span className="chip">{t.labels.scoreRange}</span></div>
+                </div>
+                <div className="progressBar" aria-label={`${koosProgressPct}%`}>
+                  <div className="progressFill" style={{ width: `${koosProgressPct}%` }} />
+                </div>
+                <div className="koosTabs">
+                  {KOOS_SECTIONS.map((sec) => (
+                    <button key={sec.key} className={`koosTab ${currentKoosPage.section === sec.key ? "active" : ""}`} onClick={() => goToKoosSection(sec.key)}>
+                      {t.koosSections[sec.key]}
                     </button>
-                    {connStatus && (
-                      <div style={{ marginTop:10,padding:"8px 12px",borderRadius:9,fontSize:11,fontWeight:600,
-                        background: connStatus==="ok"?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)",
-                        border:`1px solid ${connStatus==="ok"?"rgba(16,185,129,.25)":"rgba(239,68,68,.25)"}`,
-                        color: connStatus==="ok"?"#10b981":"#ef4444" }}>
-                        {connStatus==="ok" ? "✓ "+t.connOk : "⚡ "+t.connFail}
-                      </div>
-                    )}
-                  </div>
+                  ))}
                 </div>
-
-                {/* Upload */}
-                <div style={{ borderRadius:18,overflow:"hidden",background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                  <div style={{ padding:"14px 18px 11px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                      <div style={{ width:30,height:30,borderRadius:8,background:"rgba(79,142,247,.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:13,fontWeight:700 }}>{t.uploadTitle}</div>
-                        <div style={{ fontSize:10,color:"rgba(255,255,255,.35)" }}>{t.uploadSub}</div>
-                      </div>
-                    </div>
-                    {image && (
-                      <button onClick={() => { setImage(null); setB64(null); setResult(null); setErr(null); }}
-                        style={{ padding:"4px 12px",borderRadius:7,fontSize:11,fontWeight:600,cursor:"pointer",background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444" }}>
-                        {t.remove}
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ padding:14 }}>
-                    {!image ? (
-                      <div onClick={() => fileRef.current.click()}
-                        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-                        onDragLeave={() => setDrag(false)}
-                        onDrop={(e) => { e.preventDefault(); setDrag(false); handleFile(e.dataTransfer.files[0]); }}
-                        style={{ border:`2px dashed ${drag?"#4f8ef7":"rgba(79,142,247,.2)"}`,borderRadius:14,
-                          padding:"40px 20px",textAlign:"center",cursor:"pointer",
-                          background: drag?"rgba(79,142,247,.08)":"rgba(79,142,247,.02)",transition:"all .2s" }}>
-                        <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={(e) => handleFile(e.target.files[0])} />
-                        <div style={{ width:52,height:52,borderRadius:14,background:"rgba(79,142,247,.15)",border:"1px solid rgba(79,142,247,.25)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",animation:"float 3s ease-in-out infinite" }}>
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" strokeWidth="2" strokeLinecap="round"><polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-                        </div>
-                        <div style={{ fontSize:14,fontWeight:700,color:"#4f8ef7",marginBottom:4 }}>{t.uploadCta}</div>
-                        <div style={{ fontSize:11,color:"rgba(255,255,255,.3)" }}>{t.uploadSub2}</div>
-                      </div>
-                    ) : (
-                      <div style={{ position:"relative",borderRadius:12,overflow:"hidden",background:"#000",border:"1px solid rgba(255,255,255,.08)" }}>
-                        <img src={image} alt="xray" style={{ width:"100%",maxHeight:230,objectFit:"contain",display:"block" }} />
-                        {loading && (
-                          <div style={{ position:"absolute",inset:0,overflow:"hidden",pointerEvents:"none" }}>
-                            <div style={{ position:"absolute",left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#4f8ef7,transparent)",animation:"scan 2s linear infinite",boxShadow:"0 0 12px #4f8ef7" }}/>
-                            <div style={{ position:"absolute",inset:0,background:"rgba(79,142,247,.05)" }}/>
-                          </div>
-                        )}
-                        <div style={{ position:"absolute",top:8,left:8 }}>
-                          <span style={{ fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:999,background:"rgba(0,0,0,.7)",border:"1px solid rgba(255,255,255,.15)",color:"#93c5fd" }}>
-                            {mime.split("/")[1].toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Pipeline */}
-                <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",backdropFilter:"blur(12px)",padding:"14px 18px",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                  <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:13 }}>{t.pipeline}</div>
-                  {t.pipeSteps.map(([name, desc], i) => {
-                    const done = (i < 2 && !!image) || (i >= 2 && !!result);
+                <div className="koosPage" id="koos-current">
+                  {currentKoosPage.questions.map((num) => {
+                    const key = `q${num}`;
+                    const options = getKoosOptions(key);
                     return (
-                      <div key={i} style={{ display:"flex",gap:11,marginBottom:9,alignItems:"center" }}>
-                        <div style={{ width:26,height:26,borderRadius:7,flexShrink:0,
-                          background: done?"rgba(79,142,247,.2)":"rgba(255,255,255,.04)",
-                          border:`1px solid ${done?"rgba(79,142,247,.4)":"rgba(255,255,255,.1)"}`,
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:10,fontWeight:800,color:done?"#4f8ef7":"rgba(255,255,255,.2)",fontFamily:"monospace",
-                          transition:"all .4s",boxShadow:done?"0 0 10px rgba(79,142,247,.2)":"none" }}>
-                          {done ? "✓" : `0${i+1}`}
-                        </div>
-                        <div>
-                          <div style={{ fontSize:12,fontWeight:600,color:done?"#e2e8f0":"rgba(255,255,255,.35)",transition:"color .4s" }}>{name}</div>
-                          <div style={{ fontSize:10,color:"rgba(255,255,255,.2)",fontFamily:"monospace",marginTop:1 }}>{desc}</div>
+                      <div className="koosQuestion" key={key}>
+                        <h4>{koosQuestionText[key]}</h4>
+                        <div className="koosOpts">
+                          {options.map((opt) => {
+                            const selected = koosAnswers[key] === opt.value;
+                            return (
+                              <label className={`opt ${selected ? "selected" : ""}`} key={`${key}_${opt.value}`}>
+                                <input
+                                  type="radio"
+                                  name={key}
+                                  checked={selected}
+                                  onChange={() => {
+                                    setKoosAnswers((prev) => ({ ...prev, [key]: opt.value }));
+                                    setKoosResult(null);
+                                    setReportResult(null);
+                                  }}
+                                />
+                                <span>{opt.value} = {getKoosOptionLabel(key, opt.value)}</span>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+              </div>
+              <div className="wizardNav koosAction">
+                <button className="btn" onClick={() => setKoosPageIndex((prev) => Math.max(0, prev - 1))} disabled={koosPageIndex === 0}>
+                  {t.buttons.previousQuestions}
+                </button>
+                {!currentKoosComplete ? <span className="koosActionNote">{t.messages.completeCurrentPage}</span> : null}
+                {isFinalKoosPage && currentKoosComplete && totalAnswered < 42 ? <span className="koosActionNote">{t.messages.completeAllKoos}</span> : null}
+                {isFinalKoosPage ? (
+                  <button className="btn primary" onClick={calculateKoos} disabled={!canCalculateKoos || koosLoading}>
+                    {koosLoading ? t.buttons.calculating : t.buttons.calculateKoos}
+                  </button>
+                ) : (
+                  <button className="btn primary" onClick={() => setKoosPageIndex((prev) => Math.min(KOOS_PAGES.length - 1, prev + 1))} disabled={!currentKoosComplete}>
+                    {t.buttons.nextQuestions}
+                  </button>
+                )}
+              </div>
+              {koosError ? <div className="error">{koosError}</div> : null}
+              {!koosResult && !koosError ? <div className="empty">{t.messages.calculateToReady}</div> : null}
+              {koosResult ? (
+                <div className="metrics sectionBody">
+                  <div className="metric"><small>{t.labels.koosTotal}</small><strong>{f(koosResult.koos_total)}</strong></div>
+                  {Object.entries(koosResult.subscales || {}).map(([k, v]) => (
+                    <div className="metric" key={k}><small>{t.koosSections[k] || k}</small><strong>{f(v)}</strong></div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
-                {/* Analyze button */}
-                <button onClick={analyze} disabled={!image || loading} style={{
-                  width:"100%",padding:"15px",borderRadius:14,
-                  background: image&&!loading?"linear-gradient(135deg,#1d4ed8,#4f8ef7)":"rgba(255,255,255,.04)",
-                  border:`1px solid ${image&&!loading?"rgba(79,142,247,.5)":"rgba(255,255,255,.08)"}`,
-                  color: image&&!loading?"#fff":"rgba(255,255,255,.2)",
-                  fontWeight:800,fontSize:15,cursor:image&&!loading?"pointer":"not-allowed",
-                  fontFamily:"'Inter',sans-serif",letterSpacing:"-0.01em",
-                  boxShadow: image&&!loading?"0 8px 30px rgba(79,142,247,.35),inset 0 1px 0 rgba(255,255,255,.15)":"none",
-                  transition:"all .25s",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-                }}>
-                  {loading ? (
-                    <><div style={{ width:16,height:16,border:"2px solid rgba(255,255,255,.2)",borderTop:"2px solid #fff",borderRadius:"50%",animation:"spin .7s linear infinite" }}/><span style={{ color:"#4f8ef7" }}>{t.steps[stepIdx]}</span></>
+          {activeStep === "kl" ? (
+            <section className="panel" id="kl-upload">
+              <div className="klLayout sectionBody">
+                <div className="uploadStack">
+                  <button
+                    className="fileDrop large"
+                    onClick={() => imageInputRef.current?.click()}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      selectImageFile(event.dataTransfer.files?.[0]);
+                    }}
+                  >
+                    <div className={imageFile ? "selectedFile" : ""}>
+                      <strong>{imageFile ? t.upload.selectedImage : t.upload.dragImage}</strong>
+                      <span>{imageFile ? imageFile.name : t.upload.imageTypes}</span>
+                      <div className="fileHint">{t.upload.formats}</div>
+                    </div>
+                  </button>
+                  {imageFile ? (
+                    <div className="chips">
+                      <button className="btn" onClick={clearImageFile}>{t.buttons.removeFile}</button>
+                      <button className="btn" onClick={() => imageInputRef.current?.click()}>{t.buttons.chooseDifferentImage}</button>
+                    </div>
+                  ) : null}
+                  <input ref={imageInputRef} type="file" hidden accept="image/*" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    selectImageFile(file);
+                    e.target.value = "";
+                  }} />
+                  {imagePreview ? <img src={imagePreview} className="preview" alt="Knee preview" /> : null}
+                </div>
+                <div id="kl-result">
+                  <button className="btn primary" onClick={analyzeKl} disabled={!imageFile || klLoading}>{klLoading ? t.buttons.analyzing : t.buttons.analyzeKl}</button>
+                  {klError ? <div className="error">{klError}</div> : null}
+                  {!klResult && !klError ? <div className="empty">{t.messages.noKlResult}</div> : null}
+                  {klResult ? (
+                    <>
+                      <div className="metrics" style={{ marginTop: 10 }}>
+                        <div className="metric"><small>{t.labels.klGrade}</small><strong>{klResult.kl_grade}</strong></div>
+                        <div className="metric"><small>{t.labels.displayGrade}</small><strong>{klResult.display_grade ?? "-"}</strong></div>
+                        <div className="metric"><small>{t.labels.confidence}</small><strong>{klResult.confidence ?? "-"}</strong></div>
+                      </div>
+                      <div className="chips" style={{ marginTop: 10 }}>
+                        <span className={`chip ${klResult.source === "demo_kl" ? "coral" : "teal"}`}>{klResult.source === "demo_kl" ? `${t.status.demo} KL` : `${t.status.real} KL`}</span>
+                        <span className="chip">{klResult.grade_scale || klResult.scale}</span>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {activeStep === "imu" ? (
+            <section className="panel" id="imu-upload">
+              <div className="grid2 sectionBody">
+                <div>
+                  {!imuFile ? (
+                    <button className="fileDrop" onClick={() => csvInputRef.current?.click()}>
+                      <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span></div>
+                    </button>
                   ) : (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="5,3 19,12 5,21 5,3"/></svg>{t.analyzeBtn}</>
+                    <div className="chips">
+                      <span className="chip">{imuFile.name}</span>
+                      <button className="btn" onClick={() => { setImuFile(null); setImuResult(null); }}>{t.buttons.remove}</button>
+                    </div>
                   )}
+                  <input ref={csvInputRef} type="file" hidden accept=".csv,text/csv" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setImuFile(file);
+                    setImuResult(null);
+                    setReportResult(null);
+                  }} />
+                </div>
+                <div id="imu-result">
+                  <button className="btn primary" onClick={analyzeImu} disabled={!imuFile || imuLoading}>{imuLoading ? t.buttons.analyzing : t.buttons.analyzeImu}</button>
+                  {imuError ? <div className="error">{imuError}</div> : null}
+                  {!imuResult && !imuError ? <div className="empty">{t.messages.noImuResult}</div> : null}
+                  {imuResult ? (
+                    <div className="metrics" style={{ marginTop: 10 }}>
+                      <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(currentRom, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousRom, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.rehabScore}</small><strong>{f(imuResult.overall_score)}</strong></div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {activeStep === "report" ? (
+            <section className="panel" id="report-summary">
+              <div className="chips">
+                <span className={`chip ${readyState.patient ? "teal" : ""}`}>{t.steps.patient} {readyState.patient ? t.status.ready : t.status.pending}</span>
+                <span className={`chip ${readyState.koos ? "teal" : ""}`}>KOOS {readyState.koos ? t.status.ready : t.status.pending}</span>
+                <span className={`chip ${readyState.kl ? "teal" : ""}`}>KL {readyState.kl ? t.status.ready : t.status.pending}</span>
+                <span className={`chip ${readyState.imu ? "teal" : ""}`}>IMU {readyState.imu ? t.status.ready : t.status.pending}</span>
+              </div>
+              <div className="wizardNav">
+                <button className="btn primary" onClick={generateReport} disabled={!readyState.patient || !readyState.koos || !readyState.kl || !readyState.imu || reportLoading}>
+                  {reportLoading ? t.buttons.generating : t.buttons.generateReport}
                 </button>
               </div>
-
-              {/* Right panel */}
-              <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
-                {!result && !loading && !err && (
-                  <div style={{ borderRadius:20,background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",backdropFilter:"blur(12px)",padding:"80px 32px",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                    <div style={{ width:64,height:64,borderRadius:18,background:"rgba(79,142,247,.1)",border:"1px solid rgba(79,142,247,.2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",animation:"float 3s ease-in-out infinite" }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(79,142,247,.6)" strokeWidth="1.5" strokeLinecap="round"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    </div>
-                    <div style={{ fontSize:18,fontWeight:700,color:"rgba(255,255,255,.25)",marginBottom:8 }}>{t.noReport}</div>
-                    <div style={{ fontSize:13,color:"rgba(255,255,255,.18)",maxWidth:220,margin:"0 auto",lineHeight:1.6 }}>{t.noReportSub}</div>
+              {reportError ? <div className="error">{reportError}</div> : null}
+              {!reportResult && !reportError ? <div className="empty">{t.messages.generateAfterReady}</div> : null}
+              {reportResult ? (
+                <div className="sectionBody">
+                  <div className="metrics">
+                    <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.current_ROM, "°")}</strong></div>
+                    <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(reportResult.delta_ROM, "°")}</strong></div>
+                    <div className="metric"><small>{t.labels.sessionId}</small><strong style={{ fontSize: 16 }}>{reportResult.session_id || "-"}</strong></div>
                   </div>
-                )}
-                {loading && (
-                  <div style={{ borderRadius:20,background:"rgba(255,255,255,.02)",border:"1px solid rgba(79,142,247,.15)",padding:"80px 32px",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                    <div style={{ position:"relative",width:68,height:68,margin:"0 auto 20px" }}>
-                      <div style={{ position:"absolute",inset:0,border:"2px solid rgba(79,142,247,.15)",borderRadius:"50%" }}/>
-                      <div style={{ position:"absolute",inset:0,border:"3px solid transparent",borderTop:"3px solid #4f8ef7",borderRadius:"50%",animation:"spin 1s linear infinite",boxShadow:"0 0 16px rgba(79,142,247,.4)" }}/>
-                      <div style={{ position:"absolute",inset:10,border:"2px solid transparent",borderTop:"2px solid rgba(79,142,247,.5)",borderRadius:"50%",animation:"spin .65s linear infinite reverse" }}/>
-                      <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20 }}>🦴</div>
-                    </div>
-                    <div style={{ fontSize:14,fontWeight:700,color:"#4f8ef7",marginBottom:6,animation:"pulse 1.5s infinite" }}>{t.steps[stepIdx]}</div>
-                    <div style={{ fontSize:12,color:"rgba(255,255,255,.3)" }}>{t.analyzing}</div>
-                    <div style={{ height:3,background:"rgba(255,255,255,.05)",borderRadius:999,marginTop:20,overflow:"hidden",position:"relative" }}>
-                      <div style={{ position:"absolute",inset:0,background:"linear-gradient(90deg,transparent,#4f8ef7,transparent)",animation:"shimmer 1.6s linear infinite" }}/>
-                    </div>
+                  <div className="reportBlock" id="report-interpretation">
+                    <h4>{t.report.interpretation}</h4>
+                    <p>{reportResult.interpretation || t.report.noInterpretation}</p>
+                    {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
                   </div>
-                )}
-                {err && !loading && (
-                  <div style={{ borderRadius:16,background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",padding:20 }}>
-                    <div style={{ fontSize:13,fontWeight:700,color:"#ef4444",marginBottom:6 }}>{t.failed}</div>
-                    <div style={{ fontSize:12,color:"rgba(239,68,68,.7)",lineHeight:1.5,wordBreak:"break-word" }}>{err}</div>
-                  </div>
-                )}
-                {result && !loading && (
-                  <div style={{ animation:"fadeUp .5s ease",display:"flex",flexDirection:"column",gap:14 }}>
-                    {/* Diagnosis banner */}
-                    <div style={{ borderRadius:20,padding:"22px 26px",
-                      background: isOA?"linear-gradient(135deg,rgba(239,68,68,.12),rgba(220,38,38,.06))":"linear-gradient(135deg,rgba(16,185,129,.12),rgba(5,150,105,.06))",
-                      border:`1px solid ${isOA?"rgba(239,68,68,.25)":"rgba(16,185,129,.25)"}`,
-                      backdropFilter:"blur(12px)",
-                      display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:14 }}>
-                      <div style={{ display:"flex",alignItems:"center",gap:16 }}>
-                        <div style={{ width:54,height:54,borderRadius:16,
-                          background: isOA?"rgba(239,68,68,.2)":"rgba(16,185,129,.2)",
-                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0 }}>
-                          {isOA ? "⚠️" : "✅"}
-                        </div>
-                        <div>
-                          <div style={{ fontSize:22,fontWeight:900,letterSpacing:"-0.03em",color: isOA?"#fca5a5":"#6ee7b7" }}>{result.diagnosis}</div>
-                          <div style={{ fontSize:11,color:"rgba(255,255,255,.4)",marginTop:3,fontFamily:"monospace" }}>
-                            P(OA)={result.prob_oa?.toFixed(4)} · thr={result.threshold} · 🔧 Backend
-                          </div>
-                        </div>
-                      </div>
-                      {result.urgency && (
-                        <div style={{ padding:"8px 18px",borderRadius:999,fontSize:13,fontWeight:800,
-                          background:`${urgColor[result.urgency]}22`,border:`1px solid ${urgColor[result.urgency]}55`,
-                          color: urgColor[result.urgency] }}>
-                          {result.urgency==="Urgent"?"🔴":result.urgency==="Soon"?"🟡":"🟢"} {t.urgLabels[result.urgency]} {t.followup}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Heatmap + Gauges */}
-                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-                      <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",overflow:"hidden",backdropFilter:"blur(12px)" }}>
-                        <div style={{ padding:"12px 14px 10px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                            <div style={{ width:28,height:28,borderRadius:7,background:"linear-gradient(135deg,rgba(255,60,0,.3),rgba(255,200,0,.2))",border:"1px solid rgba(255,120,0,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>🌡️</div>
-                            <div>
-                              <div style={{ fontSize:12,fontWeight:700 }}>{t.heatmapTitle}</div>
-                              <div style={{ fontSize:9,color:"rgba(255,255,255,.3)",fontFamily:"monospace" }}>Grad-CAM · Jet colormap</div>
-                            </div>
-                          </div>
-                          <button onClick={() => setHeatVisible(v => !v)} style={{ padding:"4px 12px",borderRadius:8,fontSize:10,fontWeight:700,cursor:"pointer",
-                            background: heatVisible?"linear-gradient(135deg,rgba(239,68,68,.3),rgba(255,120,0,.2))":"rgba(255,255,255,.06)",
-                            border:`1px solid ${heatVisible?"rgba(239,68,68,.4)":"rgba(255,255,255,.1)"}`,
-                            color: heatVisible?"#fca5a5":"rgba(255,255,255,.35)" }}>
-                            {heatVisible ? "🔴 ON" : "OFF"}
-                          </button>
-                        </div>
-                        <div style={{ background:"#000",position:"relative" }}>
-                          <GradCAMHeatmap imageData={image} hotspots={result.hotspots||[]} visible={heatVisible} />
-                        </div>
-                        {heatVisible && result.hotspots?.length > 0 && (
-                          <div style={{ padding:"10px 14px",borderTop:"1px solid rgba(255,255,255,.05)" }}>
-                            <div style={{ fontSize:9,fontWeight:800,color:"rgba(255,255,255,.25)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:8 }}>Detected Regions</div>
-                            {result.hotspots.slice(0,4).map((h,i) => (
-                              <div key={i} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}>
-                                <div style={{ width:28,height:6,borderRadius:3,flexShrink:0,
-                                  background:`linear-gradient(90deg,#0000aa,#00aaff ${Math.round(h.intensity*30)}%,#00ff88 ${Math.round(h.intensity*55)}%,#ffee00 ${Math.round(h.intensity*80)}%,#ff4400 ${Math.round(h.intensity*100)}%)`,
-                                  opacity:0.8+h.intensity*0.2 }}/>
-                                <span style={{ fontSize:11,color:"rgba(255,255,255,.55)",flex:1 }}>{h.label||`Region ${i+1}`}</span>
-                                <span style={{ fontSize:10,color:"#ff3300",fontFamily:"monospace",fontWeight:700 }}>{Math.round(h.intensity*100)}%</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"16px 12px" }}>
-                        <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.3)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:16 }}>{t.modelOut}</div>
-                        <div style={{ display:"flex",justifyContent:"space-around",marginBottom:18 }}>
-                          <ArcGauge value={result.normal_pct||0} color="#10b981" label={t.normalL} />
-                          <ArcGauge value={result.oa_pct||0}     color="#ef4444" label={t.oaL} />
-                          <ArcGauge value={result.confidence||0} color="#4f8ef7" label={t.confL} />
-                        </div>
-                        <div style={{ borderTop:"1px solid rgba(255,255,255,.06)",paddingTop:14 }}>
-                          {[[t.normalG,result.normal_pct||0,"#10b981"],[t.oaG,result.oa_pct||0,"#ef4444"]].map(([label,val,c]) => (
-                            <div key={label} style={{ marginBottom:9 }}>
-                              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
-                                <span style={{ fontSize:11,color:"rgba(255,255,255,.45)",fontWeight:500 }}>{label}</span>
-                                <span style={{ fontSize:11,fontWeight:700,color:c,fontFamily:"monospace" }}>{val.toFixed(1)}%</span>
-                              </div>
-                              <div style={{ height:5,background:"rgba(255,255,255,.06)",borderRadius:999,overflow:"hidden" }}>
-                                <div style={{ height:"100%",width:`${val}%`,background:c,borderRadius:999,transition:"width 1.3s cubic-bezier(.4,0,.2,1)" }}/>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ borderTop:"1px solid rgba(255,255,255,.06)",paddingTop:12,marginTop:4 }}>
-                          {[[t.sev,result.severity||"—"],[t.temp,`T=${result.T_optimal?.toFixed(3)}`],[t.thr,result.threshold],[t.tta,"3 passes"]].map(([k,v]) => (
-                            <div key={k} style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
-                              <span style={{ fontSize:11,color:"rgba(255,255,255,.3)" }}>{k}</span>
-                              <span style={{ fontSize:11,fontWeight:600,fontFamily:"monospace",color:"rgba(255,255,255,.65)" }}>{v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Findings + Recs */}
-                    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-                      {[
-                        { title:t.findings, icon:"📋", items:result.findings||[], c:"#4f8ef7", bg:"rgba(79,142,247,.1)", border:"rgba(79,142,247,.25)" },
-                        { title:t.recs,     icon:"📊", items:result.recommendations||[], c:isOA?"#ef4444":"#10b981", bg:isOA?"rgba(239,68,68,.1)":"rgba(16,185,129,.1)", border:isOA?"rgba(239,68,68,.25)":"rgba(16,185,129,.25)" },
-                      ].map(({ title,icon,items,c,bg,border }) => (
-                        <div key={title} style={{ borderRadius:16,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"14px 16px" }}>
-                          <div style={{ fontSize:11,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12 }}>{icon} {title}</div>
-                          {items.map((item,i) => (
-                            <div key={i} style={{ display:"flex",gap:9,marginBottom:8,alignItems:"flex-start" }}>
-                              <div style={{ width:20,height:20,borderRadius:6,background:bg,border:`1px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1 }}>
-                                <div style={{ width:6,height:6,borderRadius:"50%",background:c }}/>
-                              </div>
-                              <span style={{ fontSize:12,color:"rgba(255,255,255,.6)",lineHeight:1.55 }}>{item}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-
-                    {result.kl_note && (
-                      <div style={{ borderRadius:12,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",padding:"11px 14px",display:"flex",gap:9 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round" style={{ flexShrink:0,marginTop:1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        <span style={{ fontSize:11,color:"rgba(255,255,255,.35)",lineHeight:1.55 }}>{result.kl_note}</span>
-                      </div>
-                    )}
-                    <div style={{ borderRadius:12,background:"rgba(245,158,11,.06)",border:"1px solid rgba(245,158,11,.15)",padding:"11px 14px",display:"flex",gap:9,alignItems:"flex-start" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" style={{ flexShrink:0,marginTop:1 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                      <span style={{ fontSize:11,color:"rgba(245,158,11,.7)",lineHeight:1.55 }}>{t.disclaimer}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ════════════════════════════════════════════════════════
-          MODULE 2 — IMU REHABILITATION
-      ════════════════════════════════════════════════════════ */}
-      {module === "imu" && (
-        <>
-          {/* Hero */}
-          <div style={{ position:"relative",overflow:"hidden",padding:"48px 28px 40px",
-            background:"linear-gradient(160deg,rgba(5,20,15,1) 0%,rgba(5,10,20,1) 100%)",
-            borderBottom:"1px solid rgba(16,185,129,.1)" }}>
-            <div style={{ maxWidth:1280,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:24 }}>
-              <div style={{ maxWidth:540 }}>
-                <div style={{ display:"inline-flex",alignItems:"center",gap:8,padding:"5px 14px",borderRadius:999,
-                  background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.2)",marginBottom:18 }}>
-                  <span style={{ width:6,height:6,borderRadius:"50%",background:"#10b981",display:"inline-block",animation:"pulse 2s infinite" }}/>
-                  <span style={{ fontSize:11,color:"#6ee7b7",fontWeight:600,letterSpacing:"0.08em" }}>{t.imuHeroLabel}</span>
-                </div>
-                <h1 style={{ fontSize:"clamp(30px,4vw,52px)",fontWeight:900,lineHeight:1.05,letterSpacing:"-0.04em",marginBottom:14 }}>
-                  <span style={{ background:"linear-gradient(135deg,#fff 30%,#6ee7b7)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>{t.imuHeroTitle}</span><br/>
-                  <span style={{ fontSize:"0.7em",fontWeight:300,fontStyle:"italic",color:"rgba(255,255,255,.5)" }}>{t.imuHeroItalic}</span>
-                </h1>
-                <p style={{ color:"rgba(255,255,255,.45)",fontSize:14,lineHeight:1.7,maxWidth:440 }}>{t.imuHeroDesc}</p>
-              </div>
-              <div style={{ display:"flex",gap:14 }}>
-                {[{ v:"94.6%",l:t.imuLstmAcc,c:"#10b981" },{ v:"94.8%",l:t.imuLstmF1,c:"#4f8ef7" },{ v:"8",l:t.imuActivities,c:"#f59e0b" }].map(({ v,l,c }) => (
-                  <div key={l} style={{ textAlign:"center",padding:"18px 22px",borderRadius:16,
-                    background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",
-                    backdropFilter:"blur(12px)",animation:"float 4s ease-in-out infinite",
-                    boxShadow:"0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.08)" }}>
-                    <div style={{ fontSize:26,fontWeight:900,color:c,letterSpacing:"-0.04em",textShadow:`0 0 20px ${c}66` }}>{v}</div>
-                    <div style={{ fontSize:10,color:"rgba(255,255,255,.4)",marginTop:4,letterSpacing:"0.1em",textTransform:"uppercase" }}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* IMU Content */}
-          <div style={{ maxWidth:1280,margin:"0 auto",padding:"28px 28px 80px",position:"relative",zIndex:1 }}>
-            <div style={{ display:"grid",gridTemplateColumns:"380px 1fr",gap:20,alignItems:"start" }}>
-
-              {/* Left panel */}
-              <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
-
-                {/* IMU model status warning */}
-                {!imuAvail && connStatus === "ok" && (
-                  <div style={{ borderRadius:14,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",padding:"12px 14px",display:"flex",gap:9,alignItems:"flex-start" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" style={{ flexShrink:0,marginTop:1 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    <span style={{ fontSize:11,color:"rgba(245,158,11,.8)",lineHeight:1.55 }}>{t.imuModelUnavail}</span>
-                  </div>
-                )}
-
-                {/* Sensor placement */}
-                <div style={{ borderRadius:18,overflow:"hidden",background:"rgba(255,255,255,.03)",border:"1px solid rgba(16,185,129,.15)",backdropFilter:"blur(12px)",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                  <div style={{ padding:"14px 18px 11px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:10 }}>
-                    <div style={{ width:30,height:30,borderRadius:8,background:"rgba(16,185,129,.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-                    </div>
-                    <div>
-                      <div style={{ fontSize:13,fontWeight:700 }}>{t.imuSensorLocLabel}</div>
-                      <div style={{ fontSize:10,color:"rgba(255,255,255,.35)" }}>6 body placements</div>
-                    </div>
-                  </div>
-                  <div style={{ padding:"12px 14px",display:"flex",flexDirection:"column",gap:6 }}>
-                    {Object.entries(t.imuLocations).map(([key, label]) => (
-                      <button key={key} onClick={() => setImuLocation(key)} style={{
-                        width:"100%",padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:600,
-                        cursor:"pointer",textAlign:"left",transition:"all .15s",
-                        background: imuLocation===key?"rgba(16,185,129,.2)":"rgba(255,255,255,.03)",
-                        border:`1px solid ${imuLocation===key?"rgba(16,185,129,.4)":"rgba(255,255,255,.08)"}`,
-                        color: imuLocation===key?"#6ee7b7":"rgba(255,255,255,.5)",
-                        boxShadow: imuLocation===key?"0 0 10px rgba(16,185,129,.15)":"none",
-                      }}>
-                        {imuLocation===key ? "● " : "○ "}{label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* CSV upload */}
-                <div style={{ borderRadius:18,overflow:"hidden",background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",boxShadow:"0 8px 32px rgba(0,0,0,.3)" }}>
-                  <div style={{ padding:"14px 18px 11px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                      <div style={{ width:30,height:30,borderRadius:8,background:"rgba(16,185,129,.15)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:13,fontWeight:700 }}>{t.imuUploadTitle}</div>
-                        <div style={{ fontSize:10,color:"rgba(255,255,255,.35)" }}>{t.imuUploadSub}</div>
-                      </div>
-                    </div>
-                    {imuFile && (
-                      <button onClick={() => { setImuFile(null); setImuResult(null); setImuErr(null); }}
-                        style={{ padding:"4px 12px",borderRadius:7,fontSize:11,fontWeight:600,cursor:"pointer",background:"rgba(239,68,68,.15)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444" }}>
-                        {t.imuRemove}
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ padding:14 }}>
-                    {!imuFile ? (
-                      <div onClick={() => imuFileRef.current.click()}
-                        onDragOver={(e) => { e.preventDefault(); setImuDrag(true); }}
-                        onDragLeave={() => setImuDrag(false)}
-                        onDrop={(e) => { e.preventDefault(); setImuDrag(false); handleImuFile(e.dataTransfer.files[0]); }}
-                        style={{ border:`2px dashed ${imuDrag?"#10b981":"rgba(16,185,129,.2)"}`,borderRadius:14,
-                          padding:"40px 20px",textAlign:"center",cursor:"pointer",
-                          background: imuDrag?"rgba(16,185,129,.08)":"rgba(16,185,129,.02)",transition:"all .2s" }}>
-                        <input ref={imuFileRef} type="file" accept=".csv" style={{ display:"none" }} onChange={(e) => handleImuFile(e.target.files[0])} />
-                        <div style={{ width:52,height:52,borderRadius:14,background:"rgba(16,185,129,.15)",border:"1px solid rgba(16,185,129,.25)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",animation:"float 3s ease-in-out infinite" }}>
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round"><polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-                        </div>
-                        <div style={{ fontSize:14,fontWeight:700,color:"#10b981",marginBottom:4 }}>{t.imuUploadCta}</div>
-                        <div style={{ fontSize:11,color:"rgba(255,255,255,.3)" }}>{t.imuUploadSub2}</div>
-                      </div>
+                  <div className="reportBlock" id="report-recommendations">
+                    <h4>{t.report.recommendations}</h4>
+                    {Array.isArray(reportResult.recommendations) && reportResult.recommendations.length > 0 ? (
+                      <ul className="reportList">
+                        {reportResult.recommendations.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
                     ) : (
-                      <div style={{ borderRadius:12,padding:"14px 16px",background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.2)" }}>
-                        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                          <div style={{ width:36,height:36,borderRadius:10,background:"rgba(16,185,129,.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:12,fontWeight:700,color:"#6ee7b7" }}>{imuFile.name}</div>
-                            <div style={{ fontSize:10,color:"rgba(255,255,255,.35)",marginTop:2 }}>{(imuFile.size/1024).toFixed(1)} KB · CSV</div>
-                          </div>
-                        </div>
-                      </div>
+                      <p>{t.report.noRecommendations}</p>
                     )}
                   </div>
+                  <div className="reportBlock" id="report-session">
+                    <h4>{t.report.sessionDetails}</h4>
+                    <div className="chips">
+                      <span className="chip">{t.steps.patient} {patientId || "-"}</span>
+                      <span className="chip">{t.labels.exercise} {t.exercises[exercise] || exercise}</span>
+                      <span className="chip">{t.labels.created} {formatDate(reportResult.created_at)}</span>
+                    </div>
+                  </div>
                 </div>
+              ) : null}
+            </section>
+          ) : null}
 
-                {/* Pipeline */}
-                <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",backdropFilter:"blur(12px)",padding:"14px 18px" }}>
-                  <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:13 }}>{t.imuPipeline}</div>
-                  {t.imuPipeSteps.map(([name, desc], i) => {
-                    const done = (i < 1 && !!imuFile) || (i >= 1 && !!imuResult);
-                    return (
-                      <div key={i} style={{ display:"flex",gap:11,marginBottom:9,alignItems:"center" }}>
-                        <div style={{ width:26,height:26,borderRadius:7,flexShrink:0,
-                          background: done?"rgba(16,185,129,.2)":"rgba(255,255,255,.04)",
-                          border:`1px solid ${done?"rgba(16,185,129,.4)":"rgba(255,255,255,.1)"}`,
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:10,fontWeight:800,color:done?"#10b981":"rgba(255,255,255,.2)",fontFamily:"monospace",
-                          transition:"all .4s" }}>
-                          {done ? "✓" : `0${i+1}`}
-                        </div>
-                        <div>
-                          <div style={{ fontSize:12,fontWeight:600,color:done?"#e2e8f0":"rgba(255,255,255,.35)",transition:"color .4s" }}>{name}</div>
-                          <div style={{ fontSize:10,color:"rgba(255,255,255,.2)",fontFamily:"monospace",marginTop:1 }}>{desc}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Analyze button */}
-                <button onClick={analyzeImu} disabled={!imuFile || imuLoading} style={{
-                  width:"100%",padding:"15px",borderRadius:14,
-                  background: imuFile&&!imuLoading?"linear-gradient(135deg,#065f46,#10b981)":"rgba(255,255,255,.04)",
-                  border:`1px solid ${imuFile&&!imuLoading?"rgba(16,185,129,.5)":"rgba(255,255,255,.08)"}`,
-                  color: imuFile&&!imuLoading?"#fff":"rgba(255,255,255,.2)",
-                  fontWeight:800,fontSize:15,cursor:imuFile&&!imuLoading?"pointer":"not-allowed",
-                  fontFamily:"'Inter',sans-serif",letterSpacing:"-0.01em",
-                  boxShadow: imuFile&&!imuLoading?"0 8px 30px rgba(16,185,129,.3),inset 0 1px 0 rgba(255,255,255,.15)":"none",
-                  transition:"all .25s",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-                }}>
-                  {imuLoading ? (
-                    <><div style={{ width:16,height:16,border:"2px solid rgba(255,255,255,.2)",borderTop:"2px solid #fff",borderRadius:"50%",animation:"spin .7s linear infinite" }}/><span style={{ color:"#6ee7b7" }}>{t.imuSteps[imuStepIdx]}</span></>
-                  ) : (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="5,3 19,12 5,21 5,3"/></svg>{t.imuAnalyzeBtn}</>
-                  )}
-                </button>
-              </div>
-
-              {/* Right panel */}
-              <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
-                {!imuResult && !imuLoading && !imuErr && (
-                  <div style={{ borderRadius:20,background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.07)",backdropFilter:"blur(12px)",padding:"80px 32px",textAlign:"center" }}>
-                    <div style={{ width:64,height:64,borderRadius:18,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",animation:"float 3s ease-in-out infinite" }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(16,185,129,.6)" strokeWidth="1.5" strokeLinecap="round"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                    </div>
-                    <div style={{ fontSize:18,fontWeight:700,color:"rgba(255,255,255,.25)",marginBottom:8 }}>{t.imuNoReport}</div>
-                    <div style={{ fontSize:13,color:"rgba(255,255,255,.18)",maxWidth:260,margin:"0 auto",lineHeight:1.6 }}>{t.imuNoReportSub}</div>
-                  </div>
-                )}
-
-                {imuLoading && (
-                  <div style={{ borderRadius:20,background:"rgba(255,255,255,.02)",border:"1px solid rgba(16,185,129,.15)",padding:"80px 32px",textAlign:"center" }}>
-                    <div style={{ position:"relative",width:68,height:68,margin:"0 auto 20px" }}>
-                      <div style={{ position:"absolute",inset:0,border:"2px solid rgba(16,185,129,.15)",borderRadius:"50%" }}/>
-                      <div style={{ position:"absolute",inset:0,border:"3px solid transparent",borderTop:"3px solid #10b981",borderRadius:"50%",animation:"spin 1s linear infinite",boxShadow:"0 0 16px rgba(16,185,129,.4)" }}/>
-                      <div style={{ position:"absolute",inset:10,border:"2px solid transparent",borderTop:"2px solid rgba(16,185,129,.5)",borderRadius:"50%",animation:"spin .65s linear infinite reverse" }}/>
-                      <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20 }}>🦵</div>
-                    </div>
-                    <div style={{ fontSize:14,fontWeight:700,color:"#10b981",marginBottom:6,animation:"pulse 1.5s infinite" }}>{t.imuSteps[imuStepIdx]}</div>
-                    <div style={{ fontSize:12,color:"rgba(255,255,255,.3)" }}>{t.imuAnalyzing}</div>
-                    <div style={{ height:3,background:"rgba(255,255,255,.05)",borderRadius:999,marginTop:20,overflow:"hidden",position:"relative" }}>
-                      <div style={{ position:"absolute",inset:0,background:"linear-gradient(90deg,transparent,#10b981,transparent)",animation:"shimmer 1.6s linear infinite" }}/>
-                    </div>
-                  </div>
-                )}
-
-                {imuErr && !imuLoading && (
-                  <div style={{ borderRadius:16,background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",padding:20 }}>
-                    <div style={{ fontSize:13,fontWeight:700,color:"#ef4444",marginBottom:6 }}>{t.imuFailed}</div>
-                    <div style={{ fontSize:12,color:"rgba(239,68,68,.7)",lineHeight:1.5,wordBreak:"break-word" }}>{imuErr}</div>
-                  </div>
-                )}
-
-                {imuResult && !imuLoading && (() => {
-                  const ss   = imuResult.session_summary;
-                  const sc   = imuResult.overall_score;
-                  const sCol = scoreColor(sc);
-                  const breakdown = Object.entries(imuResult.activity_breakdown || {});
-                  return (
-                    <div style={{ animation:"fadeUp .5s ease",display:"flex",flexDirection:"column",gap:14 }}>
-
-                      {/* Overall score + dominant activity */}
-                      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-                        <div style={{ borderRadius:20,padding:"24px",
-                          background:`linear-gradient(135deg,${sCol}18,${sCol}08)`,
-                          border:`1px solid ${sCol}30`,backdropFilter:"blur(12px)",textAlign:"center" }}>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:16 }}>{t.imuOverallScore}</div>
-                          <ArcGauge value={sc} size={110} color={sCol} />
-                          <div style={{ marginTop:12,fontSize:12,color:"rgba(255,255,255,.5)",lineHeight:1.5 }}>
-                            {imuResult.feedback?.[0]?.text || (sc >= 85 ? "Excellent movement quality." : sc >= 65 ? "Good progress." : sc >= 45 ? "Keep working on your range." : "Consult your physiotherapist.")}
-                          </div>
-                        </div>
-
-                        <div style={{ borderRadius:20,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"22px 20px" }}>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:14 }}>{t.imuDominant}</div>
-                          <div style={{ fontSize:22,fontWeight:900,color:"#6ee7b7",letterSpacing:"-0.02em",marginBottom:8 }}>
-                            {imuResult.dominant_activity_label}
-                          </div>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:10,marginTop:16 }}>{t.imuSummary}</div>
-                          {[
-                            [t.imuSamples,    ss.total_samples?.toLocaleString()],
-                            [t.imuRealCh,     `${ss.n_real_channels} / 38`],
-                            [t.imuSimCh,      ss.n_simulated_channels],
-                          ].map(([k,v]) => (
-                            <div key={k} style={{ display:"flex",justifyContent:"space-between",marginBottom:7 }}>
-                              <span style={{ fontSize:11,color:"rgba(255,255,255,.35)" }}>{k}</span>
-                              <span style={{ fontSize:11,fontWeight:700,fontFamily:"monospace",color:"rgba(255,255,255,.7)" }}>{v}</span>
-                            </div>
-                          ))}
-                          <div style={{ marginTop:10,padding:"8px 10px",borderRadius:9,background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.15)",fontSize:10,color:"rgba(16,185,129,.7)",lineHeight:1.4 }}>
-                            📡 {ss.n_real_channels} real · {ss.n_simulated_channels} simulated · {ss.sensor_location?.replace(/_/g," ")}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Activity breakdown */}
-                      {breakdown.length > 0 && (
-                        <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"16px 18px" }}>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:14 }}>{t.imuBreakdown}</div>
-                          <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
-                            {breakdown.map(([act, info]) => (
-                              <div key={act}>
-                                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                                  <span style={{ fontSize:12,color:"rgba(255,255,255,.6)",fontWeight:500 }}>{info.label}</span>
-                                  <span style={{ fontSize:11,fontFamily:"monospace",color:"#6ee7b7",fontWeight:700 }}>{info.pct}%</span>
-                                </div>
-                                <div style={{ height:5,background:"rgba(255,255,255,.06)",borderRadius:999,overflow:"hidden" }}>
-                                  <div style={{ height:"100%",width:`${info.pct}%`,background:"#10b981",borderRadius:999,
-                                    transition:"width 1.3s cubic-bezier(.4,0,.2,1)",opacity:0.7+info.pct/333 }}/>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ROM scores per activity */}
-                      {imuResult.rom_scores?.length > 0 && (
-                        <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"16px 18px" }}>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:14 }}>{t.imuROMScores}</div>
-                          <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
-                            {imuResult.rom_scores.map((row) => {
-                              const c = scoreColor(row.score_pct);
-                              return (
-                                <div key={row.activity} style={{ borderRadius:14,background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.06)",padding:"14px 16px" }}>
-                                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
-                                    <div style={{ fontSize:14,fontWeight:700,color:"#e2e8f0" }}>{row.activity_label}</div>
-                                    <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-                                      <span style={{ fontSize:11,fontFamily:"monospace",color:"rgba(255,255,255,.4)" }}>{t.imuROM}: {row.rom_deg}° / {row.healthy_baseline}°</span>
-                                      <div style={{ padding:"3px 10px",borderRadius:999,fontSize:12,fontWeight:800,
-                                        background:`${c}22`,border:`1px solid ${c}44`,color:c }}>
-                                        {row.score_pct}%
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div style={{ height:5,background:"rgba(255,255,255,.06)",borderRadius:999,overflow:"hidden",marginBottom:8 }}>
-                                    <div style={{ height:"100%",width:`${row.score_pct}%`,background:c,borderRadius:999,transition:"width 1.3s cubic-bezier(.4,0,.2,1)" }}/>
-                                  </div>
-                                  <div style={{ display:"flex",gap:8 }}>
-                                    <div style={{ width:8,height:8,borderRadius:"50%",background:c,flexShrink:0,marginTop:5 }}/>
-                                    <span style={{ fontSize:11,color:"rgba(255,255,255,.5)",lineHeight:1.6 }}>
-                                      {`ROM: ${row.rom_deg}° patient vs ${row.healthy_baseline}° healthy baseline`}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Clinical Feedback Cards */}
-                      {imuResult.feedback?.length > 0 && (
-                        <div style={{ borderRadius:18,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",backdropFilter:"blur(12px)",padding:"16px 18px" }}>
-                          <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:14 }}>{t.imuFeedbackTitle}</div>
-                          <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-                            {imuResult.feedback.map((fb, i) => {
-                              const cfg = {
-                                ok:    { border:"rgba(16,185,129,.3)",  bg:"rgba(16,185,129,.07)",  dot:"#10b981", icon:"✓", iconBg:"rgba(16,185,129,.2)",  iconC:"#10b981" },
-                                warn:  { border:"rgba(245,158,11,.3)",  bg:"rgba(245,158,11,.07)",  dot:"#f59e0b", icon:"!", iconBg:"rgba(245,158,11,.2)",  iconC:"#f59e0b" },
-                                alert: { border:"rgba(239,68,68,.3)",   bg:"rgba(239,68,68,.07)",   dot:"#ef4444", icon:"⚠", iconBg:"rgba(239,68,68,.2)",   iconC:"#ef4444" },
-                              }[fb.level] || { border:"rgba(255,255,255,.1)", bg:"rgba(255,255,255,.03)", dot:"#fff", icon:"·", iconBg:"rgba(255,255,255,.1)", iconC:"#fff" };
-                              return (
-                                <div key={i} style={{ borderRadius:13,padding:"12px 14px",
-                                  background:cfg.bg, border:`1px solid ${cfg.border}`,
-                                  display:"flex",gap:12,alignItems:"flex-start" }}>
-                                  <div style={{ width:28,height:28,borderRadius:8,background:cfg.iconBg,
-                                    display:"flex",alignItems:"center",justifyContent:"center",
-                                    fontSize:13,fontWeight:900,color:cfg.iconC,flexShrink:0 }}>
-                                    {cfg.icon}
-                                  </div>
-                                  <div style={{ flex:1 }}>
-                                    <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:6 }}>
-                                      <span style={{ fontSize:12,fontWeight:700,color:"rgba(255,255,255,.85)" }}>{fb.title}</span>
-                                      {fb.score !== undefined && (
-                                        <span style={{ fontSize:11,fontFamily:"monospace",fontWeight:700,color:cfg.iconC }}>
-                                          {fb.score}%
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize:12,color:"rgba(255,255,255,.55)",lineHeight:1.6 }}>{fb.text}</div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Disclaimer */}
-                      <div style={{ borderRadius:12,background:"rgba(245,158,11,.06)",border:"1px solid rgba(245,158,11,.15)",padding:"11px 14px",display:"flex",gap:9,alignItems:"flex-start" }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" style={{ flexShrink:0,marginTop:1 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        <span style={{ fontSize:11,color:"rgba(245,158,11,.7)",lineHeight:1.55 }}>{t.imuDisclaimer}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
+          <div className="wizardNav">
+            <button className="btn" onClick={prevStep} disabled={activeStep === "patient"}>{t.buttons.back}</button>
+            {activeStep !== "report" ? (
+              <button className="btn primary" onClick={nextStep} disabled={!canContinue(activeStep)}>{t.buttons.continue}</button>
+            ) : null}
           </div>
-        </>
-      )}
+        </main>
+
+        <aside className="toc" aria-label={t.labels.onThisStep}>
+          <div className="tocTitle">{t.labels.onThisStep}</div>
+          <nav className="tocNav">
+            {stepHeadings.map((item) => (
+              <a className="tocLink" href={`#${item.id}`} key={item.id}>{t.toc[item.key]}</a>
+            ))}
+          </nav>
+        </aside>
+      </div>
     </div>
   );
 }

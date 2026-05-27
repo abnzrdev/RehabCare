@@ -29,3 +29,9 @@ rehab_platform/models/imu/classifier_ready.csv
 .DS_Store
 *.log
 .codegraph/
+models/knee_xray/
+rehab_platform/models/knee_oa/*.pt
+rehab_platform/models/knee_oa/*.pth
+backups/
+*.backup.*
+rehab_platform/data/

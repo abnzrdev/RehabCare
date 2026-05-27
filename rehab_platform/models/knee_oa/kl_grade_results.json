@@ -1,0 +1,49 @@
+{
+  "classes": [
+    "0Normal",
+    "1Doubtful",
+    "2Mild",
+    "3Moderate",
+    "4Severe"
+  ],
+  "best_val_acc": 0.8299595141700404,
+  "test_acc": 0.7983870967741935,
+  "classification_report": "              precision    recall  f1-score   support\n\n     0Normal     0.8286    0.7632    0.7945        76\n   1Doubtful     0.6977    0.8219    0.7547        73\n       2Mild     0.8333    0.5714    0.6780        35\n   3Moderate     0.8333    0.9091    0.8696        33\n     4Severe     0.9375    0.9677    0.9524        31\n\n    accuracy                         0.7984       248\n   macro avg     0.8261    0.8067    0.8098       248\nweighted avg     0.8050    0.7984    0.7961       248\n",
+  "confusion_matrix": [
+    [
+      58,
+      18,
+      0,
+      0,
+      0
+    ],
+    [
+      10,
+      60,
+      2,
+      0,
+      1
+    ],
+    [
+      2,
+      7,
+      20,
+      5,
+      1
+    ],
+    [
+      0,
+      1,
+      2,
+      30,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      30
+    ]
+  ]
+}
