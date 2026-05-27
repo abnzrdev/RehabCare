@@ -35,3 +35,5 @@ rehab_platform/models/knee_oa/*.pth
 backups/
 *.backup.*
 rehab_platform/data/
+AGENTS.md
+.git.backup.*/
