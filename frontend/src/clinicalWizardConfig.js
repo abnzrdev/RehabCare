@@ -1,15 +1,15 @@
 export const KOOS_CATEGORY_RANGES = [
   { key: "pain", tag: "Pain", start: 1, end: 9 },
   { key: "symptoms", tag: "Symptoms", start: 10, end: 16 },
-  { key: "adl", tag: "ADL", start: 17, end: 33 },
-  { key: "sportRec", tag: "Sport/Rec", start: 34, end: 38 },
-  { key: "qol", tag: "QOL", start: 39, end: 42 },
+  { key: "adl", tag: "Daily living", start: 17, end: 33 },
+  { key: "sportRec", tag: "Sport / recreation", start: 34, end: 38 },
+  { key: "qol", tag: "Quality of life", start: 39, end: 42 },
 ];
 
 export const EXERCISE_VIDEO_ORDER = [
-  { id: "heel-slide", title: "Heel Slide" },
-  { id: "quad-set", title: "Quad Set" },
-  { id: "straight-leg-raise", title: "Straight Leg Raise" },
+  { id: "advanced-squats", title: "Advanced Squats" },
+  { id: "lateral-step-downs", title: "Lateral Step-Downs" },
+  { id: "return-to-running-drills", title: "Return-to-Running Drills" },
 ];
 
 function getKoosCategoryForQuestion(questionNumber) {

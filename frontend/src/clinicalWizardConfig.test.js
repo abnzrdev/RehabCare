@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildKoosPanels,
   EXERCISE_VIDEO_ORDER,
+  KOOS_CATEGORY_RANGES,
   getPanelCategoryMeta,
   getSelectedVideo,
 } from "./clinicalWizardConfig";
@@ -26,6 +27,16 @@ describe("getPanelCategoryMeta", () => {
     expect(meta.tag).toBe("Pain");
     expect(meta.note).toBe("Includes next section");
   });
+
+  it("uses the approved category labels for later UI reuse", () => {
+    expect(KOOS_CATEGORY_RANGES.map((category) => category.tag)).toEqual([
+      "Pain",
+      "Symptoms",
+      "Daily living",
+      "Sport / recreation",
+      "Quality of life",
+    ]);
+  });
 });
 
 describe("getSelectedVideo", () => {
@@ -45,8 +56,19 @@ describe("getSelectedVideo", () => {
     );
   });
 
-  it("returns null when videos is empty or absent", () => {
+  it("returns null when videos is empty", () => {
     expect(getSelectedVideo([], EXERCISE_VIDEO_ORDER[0].id)).toBeNull();
+  });
+
+  it("returns null when videos is absent", () => {
     expect(getSelectedVideo(undefined, EXERCISE_VIDEO_ORDER[0].id)).toBeNull();
+  });
+
+  it("uses the approved redesign sample video data", () => {
+    expect(EXERCISE_VIDEO_ORDER).toEqual([
+      { id: "advanced-squats", title: "Advanced Squats" },
+      { id: "lateral-step-downs", title: "Lateral Step-Downs" },
+      { id: "return-to-running-drills", title: "Return-to-Running Drills" },
+    ]);
   });
 });
