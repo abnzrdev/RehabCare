@@ -1,6 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { buildKoosPanels } from "./clinicalWizardConfig";
 
 const API = "/api";
+const KL_ACCEPT = "image/png,image/jpeg,image/jpg,image/bmp,image/tiff";
+const IMU_ACCEPT = ".csv,text/csv";
+const KL_FILE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "bmp", "tiff"]);
+const IMU_FILE_EXTENSIONS = new Set(["csv"]);
+const APP_STORAGE_KEY = "orthoscan-ai.ui-state";
+const DEFAULT_STEP = "patient";
+
+function canUseStorage() {
+  try {
+    return typeof window !== "undefined" && Boolean(window.localStorage);
+  } catch {
+    return false;
+  }
+}
+
+function readStoredAppState() {
+  if (!canUseStorage()) return {};
+  try {
+    const raw = window.localStorage.getItem(APP_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function safeStep(step) {
+  return STEPS.some((item) => item.id === step) ? step : DEFAULT_STEP;
+}
+
+function writeStoredAppState(state) {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage failures in private mode / quota errors.
+  }
+}
 
 const STEPS = [
   { id: "patient" },
@@ -40,25 +78,7 @@ const STEP_HEADINGS = {
   ],
 };
 
-const KOOS_SECTIONS = [
-  { key: "pain" },
-  { key: "symptoms" },
-  { key: "adl" },
-  { key: "sport_rec" },
-  { key: "qol" },
-];
-
-const KOOS_PAGES = [
-  { section: "pain", titleKey: "pain1", questions: [1, 2, 3, 4, 5] },
-  { section: "pain", titleKey: "pain2", questions: [6, 7, 8, 9] },
-  { section: "symptoms", titleKey: "symptoms1", questions: [10, 11, 12, 13, 14] },
-  { section: "symptoms", titleKey: "symptoms2", questions: [15, 16] },
-  { section: "adl", titleKey: "adl1", questions: [17, 18, 19, 20, 21, 22] },
-  { section: "adl", titleKey: "adl2", questions: [23, 24, 25, 26, 27, 28] },
-  { section: "adl", titleKey: "adl3", questions: [29, 30, 31, 32, 33] },
-  { section: "sport_rec", titleKey: "sport1", questions: [34, 35, 36, 37, 38] },
-  { section: "qol", titleKey: "qol1", questions: [39, 40, 41, 42] },
-];
+const KOOS_PANELS = buildKoosPanels();
 
 const KOOS_QUESTION_TEXT = {
   q1: "P1. How often do you experience knee pain?",
@@ -264,11 +284,16 @@ const STRINGS = {
       analyzeImu: "Analyze IMU",
       nextQuestions: "Next questions",
       previousQuestions: "Previous questions",
+      continueToKoos: "Continue to KOOS questionnaire",
+      continueToKl: "Continue to KL image grading",
+      continueToImu: "Continue to IMU rehab analysis",
+      continueToReport: "Continue to final rehab report",
       removeFile: "Remove file",
       chooseDifferentImage: "Choose different image",
       remove: "Remove",
     },
-    status: { pending: "Pending", ready: "Ready", complete: "Complete", demo: "Demo", real: "Real", unknown: "Unknown" },
+    status: { pending: "Pending", ready: "Ready", complete: "Complete", demo: "Demo", demoMode: "Demo mode", real: "Real", unknown: "Unknown" },
+    reportStatus: { improving: "Improving", stable: "Stable", needs_attention: "Needs attention", insufficient_data: "Needs attention" },
     labels: {
       patientId: "Patient ID",
       patientName: "Patient name (optional)",
@@ -278,10 +303,13 @@ const STRINGS = {
       noSessions: "No sessions yet for this patient.",
       loading: "Loading...",
       savedSessions: "Saved sessions",
+      stepComplete: "Step {step} of 5 complete",
       latestRom: "Latest ROM",
       latestDate: "Latest date",
+      patientReady: "Patient context ready",
       onThisStep: "On this step",
       pageOf: "Page",
+      panel: "Panel",
       of: "of",
       answered: "answered",
       scoreRange: "0..4 numeric scoring",
@@ -291,8 +319,25 @@ const STRINGS = {
       klGrade: "KL grade",
       displayGrade: "Display grade",
       confidence: "Confidence",
+      koosPre: "KOOS_pre",
       koosTotal: "KOOS total",
+      predictedKoosDelta: "Predicted KOOS change",
       deltaRom: "Delta ROM",
+      movementResult: "Movement result",
+      imuRehabScore: "IMU rehab score",
+      modelSource: "Model source",
+      formulaResult: "Formula result",
+      finalRehabilitationScore: "Final rehabilitation score",
+      rehabLevel: "Rehab level",
+      answeredQuestions: "Answered questions",
+      scorePerQuestion: "Score per question",
+      klScale: "KL scale",
+      aiAssisted: "AI-assisted",
+      smoothness: "Smoothness",
+      inputSummary: "Input summary",
+      createdAt: "Created at",
+      clinicalInputs: "Clinical inputs used",
+      betaValues: "Beta values",
       sessionId: "Session ID",
       created: "Created",
     },
@@ -343,11 +388,18 @@ const STRINGS = {
     },
     report: {
       summary: "Summary",
+      prediction: "Rehabilitation prediction",
       interpretation: "Interpretation",
       recommendations: "Recommendations",
       sessionDetails: "Session details",
       noInterpretation: "No interpretation returned.",
       noRecommendations: "No recommendations returned.",
+      noExercises: "No exercise recommendations returned.",
+      calculationDetails: "Calculation details",
+      recommendationTitle: "Recommendation {number}",
+      exercisePlan: "Exercise plan",
+      watchVideo: "Open video",
+      exerciseSafetyNote: "These exercises are educational suggestions only. Stop if pain increases and consult a physiotherapist.",
     },
     messages: {
       calculateToReady: "Calculate KOOS on the final page to mark this step ready.",
@@ -356,6 +408,69 @@ const STRINGS = {
       noKlResult: "No KL result yet.",
       noImuResult: "No IMU result yet.",
       generateAfterReady: "Generate report after all previous steps are ready.",
+    },
+    errors: {
+      backendOffline: "Backend is not reachable. Please start the backend and try again.",
+      klInvalid: "Please upload a valid knee image.",
+      imuInvalid: "Please upload a valid IMU CSV sensor recording.",
+      wrongKlFile: "Wrong file type. Please choose a valid knee image.",
+      wrongImuFile: "Wrong file type. Please choose a CSV file for IMU analysis.",
+    },
+    completion: {
+      patientTitle: "Patient context completed",
+      patientText: "Session details are ready for clinical scoring.",
+      koosTitle: "KOOS completed",
+      koosText: "Questionnaire scoring is ready for image grading.",
+      klTitle: "KL grading completed",
+      klText: "Image grading is ready for movement analysis.",
+      imuTitle: "IMU analysis completed",
+      imuText: "Movement metrics are ready for the final report.",
+      reportTitle: "Final report completed",
+      reportText: "Session saved with rehabilitation prediction and recommendations.",
+      sessionSaved: "Session saved",
+    },
+    klLabels: { 0: "Normal", 1: "Doubtful", 2: "Mild", 3: "Moderate", 4: "Severe" },
+    movementStatus: {
+      improving: "Improving",
+      stable: "Stable / no change yet",
+      reduced: "Reduced movement",
+      unknown: "Awaiting previous ROM",
+    },
+    explanations: {
+      klExplanation: "KL grade estimates osteoarthritis severity from the knee image.",
+      romExplanation: "ROM = knee movement range in degrees.",
+      deltaRomExplanation: "Delta ROM = current ROM minus previous ROM.",
+      rehabScoreExplanation: "Rehab score = current movement compared with healthy baseline.",
+      koosFormula: "KOOS subscale = 100 - (mean answer / 4) × 100. Total KOOS = average of available subscales.",
+      koosScoring: "Each KOOS question is scored from 0 to 4, where higher symptom burden lowers the KOOS score.",
+      klHow: "KL grading is produced from the uploaded knee image by an AI classifier that estimates the most likely Kellgren-Lawrence grade.",
+      klSafety: "This is an AI-assisted estimate and should always be reviewed with clinical judgement.",
+      imuRomFormula: "ROM = max angle - min angle from the analyzed IMU session.",
+      imuSmoothness: "Smoothness reflects gyroscope stability: steadier motion suggests better movement control and less shakiness.",
+      imuScoreFormula: "IMU rehab score combines movement range and control, then maps that score into a rehab level for exercise progression.",
+      finalPredictionExplanation: "This score combines KOOS_pre, ROM change, and KL grade to estimate rehabilitation progress.",
+      higherScoreMeaning: "Higher score means better expected rehabilitation progress.",
+      lowerScoreMeaning: "Lower score means closer monitoring may be needed.",
+      reportCombination: "KOOS_pre and KL grade affect the report formula, while IMU ROM and rehab score drive change tracking, rehab level, and exercise suggestions.",
+      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+    },
+    reportSections: {
+      overallPrediction: "Overall rehabilitation prediction",
+      finalRehabilitationScore: "Final rehabilitation score",
+      inputSummary: "Input summary",
+      scoreExplanation: "Score explanation",
+      clinicalInputs: "Clinical inputs used",
+      formulaResult: "Calculation details",
+      interpretation: "Interpretation",
+      recommendations: "Recommendations",
+      sessionDetails: "Session details",
+    },
+    recommendationText: {
+      continueProtocol: "Continue current rehab protocol.",
+      reevaluateNextSession: "Re-evaluate KOOS and ROM in next session.",
+      reviewTechnique: "Review exercise technique and intensity.",
+      clinicianFollowUp: "Consider clinician follow-up for plan adjustment.",
+      collectMoreSessions: "Collect more sessions to establish trend.",
     },
     toc: {
       overview: "Overview",
@@ -406,11 +521,16 @@ const STRINGS = {
       analyzeImu: "Анализ ИМУ",
       nextQuestions: "Следующие вопросы",
       previousQuestions: "Предыдущие вопросы",
+      continueToKoos: "Перейти к опроснику KOOS",
+      continueToKl: "Перейти к KL-оценке снимка",
+      continueToImu: "Перейти к анализу ИМУ",
+      continueToReport: "Перейти к итоговому отчету",
       removeFile: "Удалить файл",
       chooseDifferentImage: "Выбрать другой снимок",
       remove: "Удалить",
     },
-    status: { pending: "Ожидает", ready: "Готово", complete: "Завершено", demo: "Демо", real: "Реальная", unknown: "Неизвестно" },
+    status: { pending: "Ожидает", ready: "Готово", complete: "Завершено", demo: "Демо", demoMode: "Демо-режим", real: "Реальная", unknown: "Неизвестно" },
+    reportStatus: { improving: "Улучшение", stable: "Стабильно", needs_attention: "Требует внимания", insufficient_data: "Требует внимания" },
     labels: {
       patientId: "ID пациента",
       patientName: "Имя пациента (необязательно)",
@@ -420,10 +540,13 @@ const STRINGS = {
       noSessions: "Сессий для пациента пока нет.",
       loading: "Загрузка...",
       savedSessions: "Сохраненные сессии",
+      stepComplete: "Шаг {step} из 5 завершен",
       latestRom: "Последний ROM",
       latestDate: "Последняя дата",
+      patientReady: "Контекст пациента готов",
       onThisStep: "В этом шаге",
       pageOf: "Страница",
+      panel: "Панель",
       of: "из",
       answered: "отвечено",
       scoreRange: "оценка 0..4",
@@ -433,8 +556,25 @@ const STRINGS = {
       klGrade: "Степень KL",
       displayGrade: "Отображаемая степень",
       confidence: "Уверенность",
+      koosPre: "KOOS_pre",
       koosTotal: "Итог KOOS",
+      predictedKoosDelta: "Прогноз изменения KOOS",
       deltaRom: "Изменение ROM",
+      movementResult: "Результат движения",
+      imuRehabScore: "Балл ИМУ-реабилитации",
+      modelSource: "Источник модели",
+      formulaResult: "Результат формулы",
+      finalRehabilitationScore: "Итоговый балл реабилитации",
+      rehabLevel: "Уровень реабилитации",
+      answeredQuestions: "Отвечено вопросов",
+      scorePerQuestion: "Балл за вопрос",
+      klScale: "Шкала KL",
+      aiAssisted: "AI-помощь",
+      smoothness: "Плавность",
+      inputSummary: "Сводка исходных данных",
+      createdAt: "Создано",
+      clinicalInputs: "Использованные клинические данные",
+      betaValues: "Значения beta",
       sessionId: "ID сессии",
       created: "Создано",
     },
@@ -485,11 +625,18 @@ const STRINGS = {
     },
     report: {
       summary: "Сводка",
+      prediction: "Прогноз реабилитации",
       interpretation: "Интерпретация",
       recommendations: "Рекомендации",
       sessionDetails: "Детали сессии",
       noInterpretation: "Интерпретация не получена.",
       noRecommendations: "Рекомендации не получены.",
+      noExercises: "Рекомендации по упражнениям не получены.",
+      calculationDetails: "Детали расчета",
+      recommendationTitle: "Рекомендация {number}",
+      exercisePlan: "План упражнений",
+      watchVideo: "Открыть видео",
+      exerciseSafetyNote: "Эти упражнения являются только обучающими рекомендациями. Остановитесь при усилении боли и проконсультируйтесь с физиотерапевтом.",
     },
     messages: {
       calculateToReady: "Рассчитайте KOOS на последней странице, чтобы отметить шаг готовым.",
@@ -498,6 +645,69 @@ const STRINGS = {
       noKlResult: "Результата KL пока нет.",
       noImuResult: "Результата ИМУ пока нет.",
       generateAfterReady: "Сформируйте отчет после готовности предыдущих шагов.",
+    },
+    errors: {
+      backendOffline: "Бэкенд недоступен. Запустите бэкенд и попробуйте снова.",
+      klInvalid: "Загрузите корректный снимок колена.",
+      imuInvalid: "Загрузите корректную CSV-запись ИМУ-датчика.",
+      wrongKlFile: "Неверный тип файла. Выберите корректный снимок колена.",
+      wrongImuFile: "Неверный тип файла. Выберите CSV-файл для анализа ИМУ.",
+    },
+    completion: {
+      patientTitle: "Контекст пациента завершен",
+      patientText: "Данные сессии готовы для клинической оценки.",
+      koosTitle: "KOOS завершен",
+      koosText: "Оценка опросника готова для анализа снимка.",
+      klTitle: "KL-оценка завершена",
+      klText: "Оценка снимка готова для анализа движения.",
+      imuTitle: "Анализ ИМУ завершен",
+      imuText: "Показатели движения готовы для итогового отчета.",
+      reportTitle: "Итоговый отчет завершен",
+      reportText: "Сессия сохранена с прогнозом реабилитации и рекомендациями.",
+      sessionSaved: "Сессия сохранена",
+    },
+    klLabels: { 0: "Норма", 1: "Сомнительная", 2: "Легкая", 3: "Умеренная", 4: "Тяжелая" },
+    movementStatus: {
+      improving: "Улучшение",
+      stable: "Стабильно / пока без изменений",
+      reduced: "Движение снижено",
+      unknown: "Ожидается предыдущий ROM",
+    },
+    explanations: {
+      klExplanation: "Степень KL оценивает выраженность остеоартрита по снимку колена.",
+      romExplanation: "ROM = диапазон движения колена в градусах.",
+      deltaRomExplanation: "Delta ROM = текущий ROM минус предыдущий ROM.",
+      rehabScoreExplanation: "Балл реабилитации = текущее движение в сравнении со здоровым базовым уровнем.",
+      koosFormula: "Подшкала KOOS = 100 - (средний ответ / 4) × 100. Итоговый KOOS = среднее по доступным подшкалам.",
+      koosScoring: "Каждый вопрос KOOS оценивается от 0 до 4; более выраженные симптомы снижают итоговый балл KOOS.",
+      klHow: "KL-оценка формируется по загруженному снимку колена с помощью AI-классификатора, который оценивает наиболее вероятную степень Kellgren-Lawrence.",
+      klSafety: "Это AI-оценка с поддержкой врача и она должна проверяться клиническим решением.",
+      imuRomFormula: "ROM = максимальный угол - минимальный угол в анализируемой ИМУ-сессии.",
+      imuSmoothness: "Плавность отражает стабильность гироскопа: более ровное движение обычно означает лучший контроль и меньше дрожания.",
+      imuScoreFormula: "Балл ИМУ-реабилитации объединяет диапазон движения и контроль движения, затем переводится в уровень реабилитации для подбора упражнений.",
+      finalPredictionExplanation: "Этот балл объединяет KOOS_pre, изменение ROM и степень KL для оценки прогресса реабилитации.",
+      higherScoreMeaning: "Более высокий балл означает лучший ожидаемый прогресс реабилитации.",
+      lowerScoreMeaning: "Более низкий балл означает, что может потребоваться более тщательное наблюдение.",
+      reportCombination: "KOOS_pre и степень KL влияют на формулу отчета, а ROM и балл ИМУ влияют на отслеживание изменений, уровень реабилитации и подбор упражнений.",
+      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+    },
+    reportSections: {
+      overallPrediction: "Общий прогноз реабилитации",
+      finalRehabilitationScore: "Итоговый балл реабилитации",
+      inputSummary: "Сводка исходных данных",
+      scoreExplanation: "Пояснение балла",
+      clinicalInputs: "Использованные клинические данные",
+      formulaResult: "Детали расчета",
+      interpretation: "Интерпретация",
+      recommendations: "Рекомендации",
+      sessionDetails: "Детали сессии",
+    },
+    recommendationText: {
+      continueProtocol: "Продолжайте текущий протокол реабилитации.",
+      reevaluateNextSession: "Повторно оцените KOOS и ROM на следующей сессии.",
+      reviewTechnique: "Проверьте технику и интенсивность упражнения.",
+      clinicianFollowUp: "Рассмотрите консультацию специалиста для корректировки плана.",
+      collectMoreSessions: "Соберите больше сессий, чтобы определить динамику.",
     },
     toc: {
       overview: "Обзор",
@@ -548,11 +758,16 @@ const STRINGS = {
       analyzeImu: "ИМУ талдау",
       nextQuestions: "Келесі сұрақтар",
       previousQuestions: "Алдыңғы сұрақтар",
+      continueToKoos: "KOOS сауалнамасына өту",
+      continueToKl: "KL сурет бағалауына өту",
+      continueToImu: "ИМУ оңалту талдауына өту",
+      continueToReport: "Қорытынды есепке өту",
       removeFile: "Файлды өшіру",
       chooseDifferentImage: "Басқа сурет таңдау",
       remove: "Өшіру",
     },
-    status: { pending: "Күтуде", ready: "Дайын", complete: "Аяқталды", demo: "Демо", real: "Нақты", unknown: "Белгісіз" },
+    status: { pending: "Күтуде", ready: "Дайын", complete: "Аяқталды", demo: "Демо", demoMode: "Демо режимі", real: "Нақты", unknown: "Белгісіз" },
+    reportStatus: { improving: "Жақсару", stable: "Тұрақты", needs_attention: "Назар қажет", insufficient_data: "Назар қажет" },
     labels: {
       patientId: "Пациент ID",
       patientName: "Пациент аты (міндетті емес)",
@@ -562,10 +777,13 @@ const STRINGS = {
       noSessions: "Бұл пациент үшін сессия жоқ.",
       loading: "Жүктелуде...",
       savedSessions: "Сақталған сессиялар",
+      stepComplete: "5 қадамның {step}-қадамы аяқталды",
       latestRom: "Соңғы ROM",
       latestDate: "Соңғы күн",
+      patientReady: "Пациент контексті дайын",
       onThisStep: "Осы қадамда",
       pageOf: "Бет",
+      panel: "Панель",
       of: "ішінен",
       answered: "жауап берілді",
       scoreRange: "0..4 сандық баға",
@@ -575,8 +793,25 @@ const STRINGS = {
       klGrade: "KL дәрежесі",
       displayGrade: "Көрсетілетін дәреже",
       confidence: "Сенімділік",
+      koosPre: "KOOS_pre",
       koosTotal: "KOOS жалпы",
+      predictedKoosDelta: "KOOS өзгеріс болжамы",
       deltaRom: "ROM өзгерісі",
+      movementResult: "Қозғалыс нәтижесі",
+      imuRehabScore: "ИМУ оңалту балы",
+      modelSource: "Модель көзі",
+      formulaResult: "Формула нәтижесі",
+      finalRehabilitationScore: "Қорытынды оңалту балы",
+      rehabLevel: "Оңалту деңгейі",
+      answeredQuestions: "Жауап берілген сұрақтар",
+      scorePerQuestion: "Әр сұрақ бағасы",
+      klScale: "KL шкаласы",
+      aiAssisted: "AI көмегімен",
+      smoothness: "Тегістік",
+      inputSummary: "Кіріс деректер қысқашасы",
+      createdAt: "Жасалған уақыты",
+      clinicalInputs: "Қолданылған клиникалық деректер",
+      betaValues: "Beta мәндері",
       sessionId: "Сессия ID",
       created: "Жасалды",
     },
@@ -627,11 +862,18 @@ const STRINGS = {
     },
     report: {
       summary: "Қысқаша",
+      prediction: "Оңалту болжамы",
       interpretation: "Түсіндіру",
       recommendations: "Ұсынымдар",
       sessionDetails: "Сессия деректері",
       noInterpretation: "Түсіндіру қайтарылмады.",
       noRecommendations: "Ұсынымдар қайтарылмады.",
+      noExercises: "Жаттығу ұсынымдары қайтарылмады.",
+      calculationDetails: "Есептеу деректері",
+      recommendationTitle: "{number}-ұсыным",
+      exercisePlan: "Жаттығу жоспары",
+      watchVideo: "Бейнені ашу",
+      exerciseSafetyNote: "Бұл жаттығулар тек білім беру мақсатындағы ұсынымдар. Ауырсыну күшейсе тоқтатып, физиотерапевтке жүгініңіз.",
     },
     messages: {
       calculateToReady: "Қадамды дайын ету үшін соңғы бетте KOOS есептеңіз.",
@@ -640,6 +882,69 @@ const STRINGS = {
       noKlResult: "KL нәтижесі әлі жоқ.",
       noImuResult: "ИМУ нәтижесі әлі жоқ.",
       generateAfterReady: "Алдыңғы қадамдар дайын болғаннан кейін есеп жасаңыз.",
+    },
+    errors: {
+      backendOffline: "Бэкенд қолжетімсіз. Бэкендті іске қосып, қайта көріңіз.",
+      klInvalid: "Жарамды тізе суретін жүктеңіз.",
+      imuInvalid: "Жарамды ИМУ CSV датчик жазбасын жүктеңіз.",
+      wrongKlFile: "Файл түрі қате. Жарамды тізе суретін таңдаңыз.",
+      wrongImuFile: "Файл түрі қате. ИМУ талдауы үшін CSV файлын таңдаңыз.",
+    },
+    completion: {
+      patientTitle: "Пациент контексті аяқталды",
+      patientText: "Сессия деректері клиникалық бағалауға дайын.",
+      koosTitle: "KOOS аяқталды",
+      koosText: "Сауалнама бағасы суретті талдауға дайын.",
+      klTitle: "KL бағасы аяқталды",
+      klText: "Сурет бағасы қозғалыс талдауына дайын.",
+      imuTitle: "ИМУ талдауы аяқталды",
+      imuText: "Қозғалыс көрсеткіштері қорытынды есепке дайын.",
+      reportTitle: "Қорытынды есеп аяқталды",
+      reportText: "Сессия оңалту болжамы және ұсыныстарымен сақталды.",
+      sessionSaved: "Сессия сақталды",
+    },
+    klLabels: { 0: "Қалыпты", 1: "Күмәнді", 2: "Жеңіл", 3: "Орташа", 4: "Ауыр" },
+    movementStatus: {
+      improving: "Жақсару",
+      stable: "Тұрақты / әзірге өзгеріс жоқ",
+      reduced: "Қозғалыс төмендеді",
+      unknown: "Алдыңғы ROM күтілуде",
+    },
+    explanations: {
+      klExplanation: "KL дәрежесі тізе суреті бойынша остеоартрит ауырлығын бағалайды.",
+      romExplanation: "ROM = тізе қозғалысының градуспен өлшенетін диапазоны.",
+      deltaRomExplanation: "Delta ROM = ағымдағы ROM минус алдыңғы ROM.",
+      rehabScoreExplanation: "Оңалту балы = ағымдағы қозғалысты сау базалық деңгеймен салыстыру.",
+      koosFormula: "KOOS ішкі шкаласы = 100 - (орташа жауап / 4) × 100. Жалпы KOOS = қолжетімді ішкі шкалалардың орташа мәні.",
+      koosScoring: "KOOS сұрақтарының әрқайсысы 0-ден 4-ке дейін бағаланады; симптом жоғарылаған сайын KOOS балы төмендейді.",
+      klHow: "KL бағасы жүктелген тізе суреті бойынша Kellgren-Lawrence дәрежесін болжайтын AI классификаторы арқылы алынады.",
+      klSafety: "Бұл AI көмегімен алынған баға, оны міндетті түрде клиникалық бағалаумен тексеру керек.",
+      imuRomFormula: "ROM = талданған ИМУ сессиясындағы ең үлкен бұрыш - ең кіші бұрыш.",
+      imuSmoothness: "Тегістік гироскоп тұрақтылығынан бағаланады: қозғалыс тұрақты болса, бақылау жақсырақ және діріл аздау болады.",
+      imuScoreFormula: "ИМУ оңалту балы қозғалыс ауқымы мен бақылауын біріктіреді, содан кейін жаттығу деңгейін таңдау үшін оңалту деңгейіне ауыстырылады.",
+      finalPredictionExplanation: "Бұл балл KOOS_pre, ROM өзгерісі және KL дәрежесін біріктіріп, оңалту прогресін бағалайды.",
+      higherScoreMeaning: "Жоғары балл күтілетін оңалту прогресі жақсырақ екенін білдіреді.",
+      lowerScoreMeaning: "Төмен балл мұқият бақылау қажет болуы мүмкін екенін білдіреді.",
+      reportCombination: "KOOS_pre мен KL дәрежесі есеп формуласына әсер етеді, ал ИМУ ROM және балы өзгеріс трегіне, оңалту деңгейіне және жаттығу ұсынымдарына әсер етеді.",
+      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+    },
+    reportSections: {
+      overallPrediction: "Жалпы оңалту болжамы",
+      finalRehabilitationScore: "Қорытынды оңалту балы",
+      inputSummary: "Кіріс деректер қысқашасы",
+      scoreExplanation: "Балл түсіндірмесі",
+      clinicalInputs: "Қолданылған клиникалық деректер",
+      formulaResult: "Есептеу деректері",
+      interpretation: "Түсіндіру",
+      recommendations: "Ұсынымдар",
+      sessionDetails: "Сессия деректері",
+    },
+    recommendationText: {
+      continueProtocol: "Ағымдағы оңалту протоколын жалғастырыңыз.",
+      reevaluateNextSession: "Келесі сессияда KOOS және ROM көрсеткіштерін қайта бағалаңыз.",
+      reviewTechnique: "Жаттығу техникасы мен қарқынын тексеріңіз.",
+      clinicianFollowUp: "Жоспарды түзету үшін маман кеңесін қарастырыңыз.",
+      collectMoreSessions: "Динамиканы анықтау үшін көбірек сессия жинаңыз.",
     },
     toc: {
       overview: "Шолу",
@@ -689,9 +994,6 @@ button,input,select{font:inherit}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
 .topbarMeta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
 .topToolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.topStatus{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:#f8f3e8;color:var(--muted);padding:6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
-.statusDot{width:7px;height:7px;background:var(--teal);display:inline-block}
-.topStatus.demo .statusDot{background:var(--coral)}
 .lang{display:flex;gap:6px;flex-wrap:wrap}
 .lang button{border:1px solid var(--border);background:transparent;color:var(--muted);padding:7px 9px;font-size:12px;font-weight:800;cursor:pointer}
 .lang button:hover{border-color:var(--teal);color:var(--text)}
@@ -728,14 +1030,14 @@ button,input,select{font:inherit}
 .sectionBody + .sectionBody{margin-top:16px}
 .subsectionTitle{margin:0 0 10px;font-size:15px;font-weight:800;color:var(--text)}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-.klLayout{display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(300px,.85fr);gap:24px;align-items:start}
+.klLayout{display:grid;grid-template-columns:minmax(520px,1.35fr) minmax(360px,.9fr);gap:24px;align-items:start}
 .uploadStack{display:grid;gap:12px}
 .field{display:grid;gap:8px}
 .field label{font-size:13px;color:var(--text);font-weight:800}
 .field input,.field select{height:46px;border:1px solid var(--border);padding:0 12px;background:#fff;color:var(--text);outline:none}
 .field input:focus,.field select:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(24,183,166,.16)}
 .fileDrop{min-height:220px;border:1px dashed #bfb5a1;background:#f2ead9;display:grid;place-items:center;text-align:center;padding:20px;cursor:pointer;color:var(--text);width:100%}
-.fileDrop.large{min-height:260px}
+.fileDrop.large{min-height:420px}
 .fileDrop:hover{border-color:var(--teal);background:#edf3e8}
 .fileDrop strong{font-size:18px}
 .fileDrop span{font-size:13px;color:var(--muted)}
@@ -744,21 +1046,76 @@ button,input,select{font:inherit}
 .selectedFile strong{font-size:18px}
 .selectedFile span{font-size:13px;color:var(--muted);word-break:break-word}
 .preview{width:100%;max-height:340px;object-fit:contain;border:1px solid var(--border);background:#fff}
+.klPreviewShell{border:1px solid var(--border);background:#111;min-height:460px;display:grid;overflow:hidden}
+.xrayPreview{width:100%;height:100%;min-height:460px;object-fit:contain;background:#111}
+.fileSummary{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);background:#f8f3e8;padding:10px 12px;flex-wrap:wrap}
+.fileSummary strong{font-size:13px}
+.fileSummary span{font-size:12px;color:var(--muted);word-break:break-word}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{padding:5px 8px;border:1px solid var(--border);font-size:11px;font-weight:800;background:#f8f3e8;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .chip.coral{border-color:rgba(255,107,87,.45);color:#9b3a2c;background:var(--coral-soft)}
 .chip.teal{border-color:rgba(24,183,166,.45);color:#0c746b;background:var(--teal-soft)}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.metrics.wideMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.summaryCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.summaryCard{background:#fffaf0;border:1px solid var(--border);padding:14px 16px;display:grid;gap:6px}
+.summaryCard small{color:var(--muted);font-size:12px;font-weight:700}
+.summaryCard strong{display:block;font-size:30px;line-height:1.05;letter-spacing:-.04em}
+.summaryDate{font-size:16px !important;line-height:1.35 !important;letter-spacing:0 !important}
 .metric{background:#f8f3e8;border:1px solid var(--border);padding:11px}
 .metric small{color:var(--muted);font-size:12px;font-weight:700}
 .metric strong{display:block;margin-top:6px;font-size:26px;line-height:1.1;letter-spacing:-.035em}
+.resultHero{border:1px solid var(--border);background:#fffaf0;padding:22px;display:grid;gap:16px;margin-top:16px}
+.resultHeroTop{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.resultKicker{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#0c746b;text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.resultHero h4{margin:4px 0 0;font-size:28px;line-height:1.1;letter-spacing:-.03em}
+.resultHero p{margin:5px 0 0;color:var(--muted)}
+.resultValue{font-size:64px;line-height:.9;letter-spacing:-.05em;font-weight:800;color:var(--text);text-align:right}
+.resultValue span{display:block;margin-top:6px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.resultActions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);padding-top:14px}
+.explainList{display:grid;gap:8px}
+.explainItem{border-left:3px solid var(--teal);background:#f8f3e8;padding:9px 11px;color:var(--muted);font-size:13px}
+.flowLine{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.flowItem{border:1px solid var(--border);background:#f8f3e8;padding:8px 10px;font-size:12px;font-weight:800;color:var(--text)}
+.flowArrow{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:12px}
+.formulaBox{border:1px solid var(--border);background:#f8f3e8;padding:12px;font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--text);overflow-wrap:anywhere}
+.recommendationCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+.recommendationCard{border:1px solid var(--border);background:#f8f3e8;padding:12px;color:var(--text)}
+.recommendationCard::before{content:"";display:block;width:24px;height:3px;background:var(--teal);margin-bottom:8px}
+.recommendationCard strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#0c746b;margin-bottom:6px}
+.recommendationCard p{margin:0;color:var(--text);font-size:14px}
+.detailPanel{display:grid;gap:10px;margin-top:12px}
+.detailGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.detailCard{border:1px solid var(--border);background:#f8f3e8;padding:12px}
+.detailCard strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#0c746b;margin-bottom:6px}
+.detailCard p{margin:0;color:var(--text);font-size:13px;line-height:1.45}
+.microNote{margin-top:10px;font-size:12px;line-height:1.45;color:var(--muted)}
+.exerciseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.exerciseCard{border:1px solid var(--border);background:#fffaf0;padding:12px;display:grid;gap:10px}
+.exerciseCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.exerciseCard h5{margin:0;font-size:14px;line-height:1.25}
+.exerciseCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.exerciseLevel{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#0c746b;text-transform:uppercase;letter-spacing:.08em}
+.exerciseLink{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border:1px solid var(--border);background:#f8f3e8;color:var(--text);font-weight:800;text-decoration:none}
+.exerciseLink:hover{border-color:#bfb5a1;background:#fff}
+.statusPill{display:inline-flex;align-items:center;border:1px solid rgba(24,183,166,.45);background:var(--teal-soft);color:#0c746b;padding:5px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.statusPill.coral{border-color:rgba(255,107,87,.45);background:var(--coral-soft);color:#9b3a2c}
+.resultBars{display:grid;gap:10px}
+.resultBarRow{display:grid;grid-template-columns:minmax(130px,.42fr) minmax(0,1fr) 52px;gap:10px;align-items:center}
+.resultBarLabel{font-size:12px;font-weight:800;color:var(--text)}
+.resultBarTrack{height:8px;background:#eadfcb;border:1px solid var(--border)}
+.resultBarFill{height:100%;background:var(--teal)}
+.resultBarValue{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);text-align:right}
 
 .koosWrap{display:grid;gap:10px;padding-bottom:18px}
 .koosHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.koosPanelHead{padding:16px;border:1px solid var(--border);background:#fffaf0}
 .koosHead strong{font-size:14px;color:var(--text)}
 .koosPageTitle{display:grid;gap:4px}
 .koosPageTitle h3{margin:0;font-size:20px;line-height:1.2;letter-spacing:-.025em}
 .koosPageMeta{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.koosPanelSubmeta{font-size:12px;color:var(--muted)}
+.koosPanelTags{align-items:flex-start}
 .progressBar{height:6px;background:#eadfcb;border:1px solid var(--border)}
 .progressFill{height:100%;background:var(--teal)}
 .koosTabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:6px}
@@ -779,7 +1136,7 @@ button,input,select{font:inherit}
 .empty{margin-top:12px;padding:12px;border:1px solid var(--border);background:#f8f3e8;color:var(--muted);font-size:13px}
 
 .wizardNav{display:flex;justify-content:space-between;gap:10px;margin-top:18px;flex-wrap:wrap}
-.koosAction{position:sticky;bottom:0;z-index:2;background:var(--paper);border-top:1px solid var(--border);padding:12px 0 6px;align-items:center}
+.koosAction{margin-top:24px;padding-top:16px;border-top:1px solid var(--border);align-items:center}
 .koosActionNote{color:var(--muted);font-size:12px}
 .btn{height:42px;padding:0 14px;border:1px solid var(--border);font-weight:800;cursor:pointer;background:#f8f3e8;color:var(--text);transition:background .15s ease,transform .15s ease,border-color .15s ease}
 .btn:hover{border-color:#bfb5a1;background:#fff}
@@ -792,6 +1149,10 @@ button,input,select{font:inherit}
 .reportBlock p{margin:0;color:var(--text)}
 .reportList{margin:0;padding-left:18px;color:var(--text)}
 .reportList li{margin:6px 0}
+.betaTable{width:100%;border-collapse:collapse;margin-top:10px;background:#f8f3e8;border:1px solid var(--border);font-family:"IBM Plex Mono",monospace;font-size:12px}
+.betaTable th,.betaTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left}
+.betaTable tr:last-child th,.betaTable tr:last-child td{border-bottom:0}
+.betaTable th{width:120px;color:var(--muted);font-weight:800}
 .toc{background:var(--paper);height:100dvh;position:sticky;top:0;padding:34px 12px;border-right:1px solid var(--border);overflow-y:auto}
 .tocTitle{font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted);margin-bottom:14px}
 .tocNav{display:grid;gap:2px}
@@ -813,9 +1174,12 @@ button,input,select{font:inherit}
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .grid2,.metrics,.klLayout{grid-template-columns:1fr}
+  .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid{grid-template-columns:1fr}
+  .resultValue{text-align:left;font-size:40px}
+  .resultBarRow{grid-template-columns:1fr}
+  .resultBarValue{text-align:left}
   .koosOpts{grid-template-columns:1fr}
-  .fileDrop,.fileDrop.large{min-height:220px}
+  .fileDrop,.fileDrop.large,.klPreviewShell,.xrayPreview{min-height:260px}
 }
 `;
 
@@ -833,6 +1197,74 @@ function f(value, unit = "") {
   return `${Number(value).toFixed(1)}${unit}`;
 }
 
+function pct(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  const num = Number(value);
+  return `${(num <= 1 ? num * 100 : num).toFixed(1)}%`;
+}
+
+function getFileExtension(file) {
+  return file?.name?.split(".").pop()?.toLowerCase() || "";
+}
+
+function isKlFile(file) {
+  return KL_FILE_EXTENSIONS.has(getFileExtension(file));
+}
+
+function isImuFile(file) {
+  return IMU_FILE_EXTENSIONS.has(getFileExtension(file));
+}
+
+async function readResponsePayload(res) {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+function cleanBackendMessage(value) {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cleanBackendMessage(item))
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (typeof value === "object") {
+    return cleanBackendMessage(value.message || value.msg || JSON.stringify(value));
+  }
+  return String(value)
+    .replace(/^Error:\s*/i, "")
+    .replace(/\bHTTP\s+\d{3}\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function friendlyError(error, t, fallbackKey = "backendOffline") {
+  const fallback = t.errors[fallbackKey] || t.errors.backendOffline;
+  if (Number(error?.status) >= 500) return fallback;
+  const raw = cleanBackendMessage(error?.detail || error?.message || error?.error || error);
+  if (!raw) return fallback;
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) return t.errors.backendOffline;
+  if (/internal server error|request failed|status code 500/i.test(raw)) return fallback;
+  return raw;
+}
+
+function getRehabLevelInfo(score) {
+  if (score === null || score === undefined || Number.isNaN(Number(score))) {
+    return { level: null, label: "-" };
+  }
+  const value = Math.max(0, Math.min(100, Number(score)));
+  if (value <= 20) return { level: 1, label: "Level 1" };
+  if (value <= 40) return { level: 2, label: "Level 2" };
+  if (value <= 60) return { level: 3, label: "Level 3" };
+  if (value <= 80) return { level: 4, label: "Level 4" };
+  return { level: 5, label: "Level 5" };
+}
+
 function statusLabel(active, ready, complete, t) {
   if (complete) return t.status.complete;
   if (ready) return t.status.ready;
@@ -841,17 +1273,19 @@ function statusLabel(active, ready, complete, t) {
 }
 
 export default function App() {
-  const [lang, setLang] = useState("en");
-  const [activeStep, setActiveStep] = useState("patient");
+  const storedState = readStoredAppState();
+  const storedPatientId = storedState.patient_id || "";
+  const [lang, setLang] = useState(() => storedState.lang || "en");
+  const [activeStep, setActiveStep] = useState(() => (storedPatientId ? safeStep(storedState.active_step) : DEFAULT_STEP));
   const [completedSteps, setCompletedSteps] = useState({});
   const [health, setHealth] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState("");
 
-  const [patientId, setPatientId] = useState("");
-  const [patientName, setPatientName] = useState("");
-  const [exercise, setExercise] = useState("knee_extension");
-  const [sensorLocation, setSensorLocation] = useState("right_thigh");
+  const [patientId, setPatientId] = useState(() => storedPatientId);
+  const [patientName, setPatientName] = useState(() => storedState.patient_name || "");
+  const [exercise, setExercise] = useState(() => storedState.exercise || "knee_extension");
+  const [sensorLocation, setSensorLocation] = useState(() => storedState.sensor_location || "right_thigh");
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
@@ -883,14 +1317,15 @@ export default function App() {
   const latestSession = sessions[0] || null;
   const previousRom = latestSession?.current_rom ?? null;
   const currentRom = imuResult?.session_summary?.rom_deg ?? null;
+  const imuRehabLevel = getRehabLevelInfo(imuResult?.overall_score);
   const totalAnswered = Object.keys(koosAnswers).length;
   const activeStepMeta = STEPS.find((step) => step.id === activeStep) || STEPS[0];
   const stepHeadings = STEP_HEADINGS[activeStep] || [];
   const koosQuestionText = KOOS_QUESTION_TEXT_I18N[lang] || KOOS_QUESTION_TEXT_I18N.en;
-  const currentKoosPage = KOOS_PAGES[koosPageIndex] || KOOS_PAGES[0];
-  const isFinalKoosPage = koosPageIndex === KOOS_PAGES.length - 1;
-  const currentKoosAnswered = currentKoosPage.questions.filter((num) => koosAnswers[`q${num}`] !== undefined).length;
-  const currentKoosComplete = currentKoosAnswered === currentKoosPage.questions.length;
+  const currentKoosPanel = KOOS_PANELS[koosPageIndex] || KOOS_PANELS[0];
+  const isFinalKoosPage = koosPageIndex === KOOS_PANELS.length - 1;
+  const currentKoosAnswered = currentKoosPanel.questions.filter((num) => koosAnswers[`q${num}`] !== undefined).length;
+  const currentKoosComplete = currentKoosAnswered === currentKoosPanel.questions.length;
   const canCalculateKoos = isFinalKoosPage && currentKoosComplete && totalAnswered === 42;
   const koosProgressPct = Math.round((totalAnswered / 42) * 100);
 
@@ -904,10 +1339,55 @@ export default function App() {
     }),
     [patientId, koosResult, klResult, imuResult, reportResult]
   );
+  const activeStepComplete =
+    (activeStep === "patient" && readyState.patient) ||
+    (activeStep === "koos" && readyState.koos) ||
+    (activeStep === "kl" && readyState.kl) ||
+    (activeStep === "imu" && readyState.imu) ||
+    (activeStep === "report" && readyState.report);
+  const showGlobalWizardNav = activeStep !== "koos" && !activeStepComplete;
+  const klModelStatus = klResult?.kl_model || health?.kl_model;
+  const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
+  const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
+  const imuDeltaRom = currentRom !== null && previousRom !== null ? Number((currentRom - previousRom).toFixed(1)) : null;
+  const imuDeltaStatusKey = imuDeltaRom === null ? "unknown" : imuDeltaRom > 0 ? "improving" : imuDeltaRom < 0 ? "reduced" : "stable";
+  const reportStatusKey = reportResult?.interpretation || "insufficient_data";
+  const finalRehabScore = reportResult?.predicted_delta_KOOS;
+  const reportExercises = Array.isArray(reportResult?.recommended_exercises) ? reportResult.recommended_exercises : [];
+
+  function translatedRecommendation(item) {
+    const map = {
+      "Continue current rehab protocol.": t.recommendationText.continueProtocol,
+      "Re-evaluate KOOS and ROM in next session.": t.recommendationText.reevaluateNextSession,
+      "Review exercise technique and intensity.": t.recommendationText.reviewTechnique,
+      "Consider clinician follow-up for plan adjustment.": t.recommendationText.clinicianFollowUp,
+      "Collect more sessions to establish trend.": t.recommendationText.collectMoreSessions,
+    };
+    return map[item] || item;
+  }
 
   useEffect(() => {
     fetchHealth();
   }, []);
+
+  useEffect(() => {
+    setHealthError("");
+    setKoosError("");
+    setKlError("");
+    setImuError("");
+    setReportError("");
+  }, [activeStep]);
+
+  useEffect(() => {
+    writeStoredAppState({
+      patient_id: patientId.trim(),
+      patient_name: patientName.trim(),
+      exercise,
+      sensor_location: sensorLocation,
+      active_step: safeStep(activeStep),
+      lang,
+    });
+  }, [patientId, patientName, exercise, sensorLocation, activeStep, lang]);
 
   useEffect(() => {
     fetchSessions(patientId.trim(), exercise);
@@ -924,10 +1404,12 @@ export default function App() {
     setHealthError("");
     try {
       const res = await fetch(`${API}/health`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setHealth(await res.json());
+      const data = await readResponsePayload(res);
+      if (!res.ok) throw { ...data, status: res.status };
+      setHealth(data);
+      setHealthError("");
     } catch (error) {
-      setHealthError(error.message);
+      setHealthError(friendlyError(error, t, "backendOffline"));
     } finally {
       setHealthLoading(false);
     }
@@ -939,6 +1421,7 @@ export default function App() {
       return;
     }
     setSessionsLoading(true);
+    setSessions([]);
     try {
       const q = new URLSearchParams();
       if (ex) q.set("exercise", ex);
@@ -962,12 +1445,13 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: koosAnswers }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      const data = await readResponsePayload(res);
+      if (!res.ok) throw { ...data, status: res.status };
       setKoosResult(data);
+      setKoosError("");
       setCompletedSteps((prev) => ({ ...prev, koos: true }));
     } catch (error) {
-      setKoosError(error.message);
+      setKoosError(friendlyError(error, t, "backendOffline"));
     } finally {
       setKoosLoading(false);
     }
@@ -975,17 +1459,22 @@ export default function App() {
 
   async function analyzeKl() {
     if (!imageFile) return;
+    if (!isKlFile(imageFile)) {
+      setKlError(t.errors.wrongKlFile);
+      return;
+    }
     setKlLoading(true);
     setKlError("");
     try {
       const form = new FormData();
       form.append("file", imageFile);
       const res = await fetch(`${API}/predict-kl?lang=${lang}&kl_scale_max=4`, { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      const data = await readResponsePayload(res);
+      if (!res.ok) throw { ...data, status: res.status };
       setKlResult(data);
+      setKlError("");
     } catch (error) {
-      setKlError(error.message);
+      setKlError(friendlyError(error, t, "klInvalid"));
     } finally {
       setKlLoading(false);
     }
@@ -993,17 +1482,22 @@ export default function App() {
 
   async function analyzeImu() {
     if (!imuFile) return;
+    if (!isImuFile(imuFile)) {
+      setImuError(t.errors.wrongImuFile);
+      return;
+    }
     setImuLoading(true);
     setImuError("");
     try {
       const form = new FormData();
       form.append("file", imuFile);
       const res = await fetch(`${API}/imu/analyze?lang=${lang}&sensor_location=${sensorLocation}`, { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      const data = await readResponsePayload(res);
+      if (!res.ok) throw { ...data, status: res.status };
       setImuResult(data);
+      setImuError("");
     } catch (error) {
-      setImuError(error.message);
+      setImuError(friendlyError(error, t, "imuInvalid"));
     } finally {
       setImuLoading(false);
     }
@@ -1028,13 +1522,14 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      const data = await readResponsePayload(res);
+      if (!res.ok) throw { ...data, status: res.status };
       setReportResult(data);
+      setReportError("");
       setCompletedSteps((prev) => ({ ...prev, report: true }));
       fetchSessions(patientId.trim(), exercise);
     } catch (error) {
-      setReportError(error.message);
+      setReportError(friendlyError(error, t, "backendOffline"));
     } finally {
       setReportLoading(false);
     }
@@ -1057,6 +1552,30 @@ export default function App() {
     setActiveStep(STEPS[idx - 1].id);
   }
 
+  function continueToKoos() {
+    markComplete("patient");
+    setActiveStep("koos");
+  }
+
+  function continueToKl() {
+    markComplete("koos");
+    setActiveStep("kl");
+  }
+
+  function continueToImu() {
+    markComplete("kl");
+    setActiveStep("imu");
+  }
+
+  function continueToReport() {
+    markComplete("imu");
+    setActiveStep("report");
+  }
+
+  function stepCompleteText(step) {
+    return t.labels.stepComplete.replace("{step}", step);
+  }
+
   function canContinue(stepId) {
     if (stepId === "patient") return readyState.patient;
     if (stepId === "koos") return readyState.koos;
@@ -1074,13 +1593,21 @@ export default function App() {
     return t.koosOptions[group][value] || String(value);
   }
 
-  function goToKoosSection(sectionKey) {
-    const idx = KOOS_PAGES.findIndex((page) => page.section === sectionKey);
-    if (idx >= 0) setKoosPageIndex(idx);
-  }
-
   function selectImageFile(file) {
     if (!file) return;
+    setKlError("");
+    setReportError("");
+    if (!isKlFile(file)) {
+      setImageFile(null);
+      setKlResult(null);
+      setReportResult(null);
+      setKlError(t.errors.wrongKlFile);
+      setImagePreview((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return "";
+      });
+      return;
+    }
     setImageFile(file);
     setKlResult(null);
     setReportResult(null);
@@ -1093,10 +1620,35 @@ export default function App() {
   function clearImageFile() {
     setImageFile(null);
     setKlResult(null);
+    setKlError("");
+    setReportError("");
     setImagePreview((old) => {
       if (old) URL.revokeObjectURL(old);
       return "";
     });
+  }
+
+  function selectImuFile(file) {
+    if (!file) return;
+    setImuError("");
+    setReportError("");
+    if (!isImuFile(file)) {
+      setImuFile(null);
+      setImuResult(null);
+      setReportResult(null);
+      setImuError(t.errors.wrongImuFile);
+      return;
+    }
+    setImuFile(file);
+    setImuResult(null);
+    setReportResult(null);
+  }
+
+  function clearImuFile() {
+    setImuFile(null);
+    setImuResult(null);
+    setImuError("");
+    setReportError("");
   }
 
   return (
@@ -1144,10 +1696,6 @@ export default function App() {
           <div className="topbar">
             <div className="clinicalLine">{t.clinicalLine}</div>
             <div className="topToolbar">
-              <span className={`topStatus ${health?.model === "demo" ? "demo" : ""}`}>
-                <span className="statusDot" />
-                {health?.model === "demo" ? t.status.demo : health?.model || t.status.unknown}
-              </span>
               <div className="lang" aria-label="Language and backend controls">
                 {["en", "ru", "kz"].map((code) => (
                   <button key={code} className={lang === code ? "active" : ""} onClick={() => setLang(code)}>
@@ -1189,94 +1737,154 @@ export default function App() {
                   </select>
                 </div>
               </div>
-              <div className="metrics sectionBody" id="patient-history">
-                <div className="metric"><small>{t.labels.savedSessions}</small><strong>{sessions.length}</strong></div>
-                <div className="metric"><small>{t.labels.latestRom}</small><strong>{latestSession ? f(latestSession.current_rom, "°") : "-"}</strong></div>
-                <div className="metric"><small>{t.labels.latestDate}</small><strong style={{ fontSize: 16 }}>{latestSession ? formatDate(latestSession.created_at) : "-"}</strong></div>
+              <div className="summaryCards sectionBody" id="patient-history">
+                <article className="summaryCard">
+                  <small>{t.labels.savedSessions}</small>
+                  <strong>{sessions.length}</strong>
+                </article>
+                <article className="summaryCard">
+                  <small>{t.labels.latestRom}</small>
+                  <strong>{latestSession ? f(latestSession.current_rom, "°") : "-"}</strong>
+                </article>
+                <article className="summaryCard">
+                  <small>{t.labels.latestDate}</small>
+                  <strong className="summaryDate">{latestSession ? formatDate(latestSession.created_at) : "-"}</strong>
+                </article>
               </div>
+              {readyState.patient ? (
+                <div className="resultHero">
+                  <div className="resultHeroTop">
+                    <div>
+                      <div className="resultKicker">{stepCompleteText(1)}</div>
+                      <h4>{t.completion.patientTitle}</h4>
+                      <p>{t.completion.patientText}</p>
+                    </div>
+                    <div className="resultValue">{patientId.trim()}<span>{t.labels.patientReady}</span></div>
+                  </div>
+                  <div className="metrics">
+                    <div className="metric"><small>{t.labels.patientName}</small><strong style={{ fontSize: 18 }}>{patientName.trim() || "-"}</strong></div>
+                    <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || exercise}</strong></div>
+                    <div className="metric"><small>{t.labels.sensorPlacement}</small><strong style={{ fontSize: 18 }}>{t.sensorLocations[sensorLocation] || sensorLocation}</strong></div>
+                  </div>
+                  <div className="resultActions">
+                    <button className="btn primary" onClick={continueToKoos}>{t.buttons.continueToKoos}</button>
+                  </div>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
           {activeStep === "koos" ? (
             <section className="panel" id="koos-calculate">
-              <div className="koosWrap sectionBody">
-                <div className="koosHead" id="koos-progress">
-                  <div className="koosPageTitle">
-                    <div className="koosPageMeta">
-                      {t.labels.pageOf} {koosPageIndex + 1} {t.labels.of} {KOOS_PAGES.length} · {totalAnswered}/42 {t.labels.answered}
-                    </div>
-                    <h3>{t.koosPages[currentKoosPage.titleKey]}</h3>
-                  </div>
-                  <div className="chips"><span className="chip">{t.labels.scoreRange}</span></div>
-                </div>
-                <div className="progressBar" aria-label={`${koosProgressPct}%`}>
-                  <div className="progressFill" style={{ width: `${koosProgressPct}%` }} />
-                </div>
-                <div className="koosTabs">
-                  {KOOS_SECTIONS.map((sec) => (
-                    <button key={sec.key} className={`koosTab ${currentKoosPage.section === sec.key ? "active" : ""}`} onClick={() => goToKoosSection(sec.key)}>
-                      {t.koosSections[sec.key]}
-                    </button>
-                  ))}
-                </div>
-                <div className="koosPage" id="koos-current">
-                  {currentKoosPage.questions.map((num) => {
-                    const key = `q${num}`;
-                    const options = getKoosOptions(key);
-                    return (
-                      <div className="koosQuestion" key={key}>
-                        <h4>{koosQuestionText[key]}</h4>
-                        <div className="koosOpts">
-                          {options.map((opt) => {
-                            const selected = koosAnswers[key] === opt.value;
-                            return (
-                              <label className={`opt ${selected ? "selected" : ""}`} key={`${key}_${opt.value}`}>
-                                <input
-                                  type="radio"
-                                  name={key}
-                                  checked={selected}
-                                  onChange={() => {
-                                    setKoosAnswers((prev) => ({ ...prev, [key]: opt.value }));
-                                    setKoosResult(null);
-                                    setReportResult(null);
-                                  }}
-                                />
-                                <span>{opt.value} = {getKoosOptionLabel(key, opt.value)}</span>
-                              </label>
-                            );
-                          })}
+              {!koosResult ? (
+                <>
+                  <div className="koosWrap sectionBody">
+                    <div className="koosHead koosPanelHead" id="koos-progress">
+                      <div className="koosPageTitle">
+                        <div className="koosPageMeta">
+                          {t.labels.panel} {koosPageIndex + 1} {t.labels.of} {KOOS_PANELS.length}
+                        </div>
+                        <h3>{t.steps.koos}</h3>
+                        <div className="koosPanelSubmeta">
+                          {totalAnswered}/42 {t.labels.answered}
                         </div>
                       </div>
-                    );
-                  })}
+                      <div className="chips koosPanelTags">
+                        {currentKoosPanel.tag ? <span className="chip teal">{currentKoosPanel.tag}</span> : null}
+                        {currentKoosPanel.note ? <span className="chip">{currentKoosPanel.note}</span> : null}
+                        <span className="chip">{t.labels.scoreRange}</span>
+                      </div>
+                    </div>
+                    <div className="progressBar" aria-label={`${koosProgressPct}%`}>
+                      <div className="progressFill" style={{ width: `${koosProgressPct}%` }} />
+                    </div>
+                    <div className="koosPage" id="koos-current">
+                      {currentKoosPanel.questions.map((num) => {
+                        const key = `q${num}`;
+                        const options = getKoosOptions(key);
+                        return (
+                          <div className="koosQuestion" key={key}>
+                            <h4>{koosQuestionText[key]}</h4>
+                            <div className="koosOpts">
+                              {options.map((opt) => {
+                                const selected = koosAnswers[key] === opt.value;
+                                return (
+                                  <label className={`opt ${selected ? "selected" : ""}`} key={`${key}_${opt.value}`}>
+                                    <input
+                                      type="radio"
+                                      name={key}
+                                      checked={selected}
+                                      onChange={() => {
+                                        setKoosAnswers((prev) => ({ ...prev, [key]: opt.value }));
+                                        setKoosResult(null);
+                                        setReportResult(null);
+                                      }}
+                                    />
+                                    <span>{opt.value} = {getKoosOptionLabel(key, opt.value)}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="wizardNav koosAction">
+                    <button className="btn" onClick={() => setKoosPageIndex((prev) => Math.max(0, prev - 1))} disabled={koosPageIndex === 0}>
+                      {t.buttons.previousQuestions}
+                    </button>
+                    {!currentKoosComplete ? <span className="koosActionNote">{t.messages.completeCurrentPage}</span> : null}
+                    {isFinalKoosPage && currentKoosComplete && totalAnswered < 42 ? <span className="koosActionNote">{t.messages.completeAllKoos}</span> : null}
+                    {isFinalKoosPage ? (
+                      <button className="btn primary" onClick={calculateKoos} disabled={!canCalculateKoos || koosLoading}>
+                        {koosLoading ? t.buttons.calculating : t.buttons.calculateKoos}
+                      </button>
+                    ) : (
+                      <button className="btn primary" onClick={() => setKoosPageIndex((prev) => Math.min(KOOS_PANELS.length - 1, prev + 1))} disabled={!currentKoosComplete}>
+                        {t.buttons.nextQuestions}
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="resultHero">
+                  <div className="resultHeroTop">
+                    <div>
+                      <div className="resultKicker">{stepCompleteText(2)}</div>
+                      <h4>{t.completion.koosTitle}</h4>
+                      <p>{t.completion.koosText}</p>
+                    </div>
+                    <div className="resultValue">{f(koosResult.koos_total)}<span>{t.labels.koosTotal}</span></div>
+                  </div>
+                  <div className="resultBars subscaleBars">
+                    {Object.entries(koosResult.subscales || {}).map(([k, v]) => (
+                      <div className="resultBarRow" key={k}>
+                        <div className="resultBarLabel">{t.koosSections[k] || k}</div>
+                        <div className="resultBarTrack"><div className="resultBarFill" style={{ width: `${Math.max(0, Math.min(100, Number(v) || 0))}%` }} /></div>
+                        <div className="resultBarValue">{f(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="detailPanel">
+                    <div className="formulaBox">{t.explanations.koosFormula}</div>
+                    <div className="detailGrid">
+                      <div className="detailCard">
+                        <strong>{t.labels.scorePerQuestion}</strong>
+                        <p>{t.explanations.koosScoring}</p>
+                      </div>
+                      <div className="detailCard">
+                        <strong>{t.labels.answeredQuestions}</strong>
+                        <p>{totalAnswered}/42</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="resultActions">
+                    <button className="btn primary" onClick={continueToKl}>{t.buttons.continueToKl}</button>
+                  </div>
                 </div>
-              </div>
-              <div className="wizardNav koosAction">
-                <button className="btn" onClick={() => setKoosPageIndex((prev) => Math.max(0, prev - 1))} disabled={koosPageIndex === 0}>
-                  {t.buttons.previousQuestions}
-                </button>
-                {!currentKoosComplete ? <span className="koosActionNote">{t.messages.completeCurrentPage}</span> : null}
-                {isFinalKoosPage && currentKoosComplete && totalAnswered < 42 ? <span className="koosActionNote">{t.messages.completeAllKoos}</span> : null}
-                {isFinalKoosPage ? (
-                  <button className="btn primary" onClick={calculateKoos} disabled={!canCalculateKoos || koosLoading}>
-                    {koosLoading ? t.buttons.calculating : t.buttons.calculateKoos}
-                  </button>
-                ) : (
-                  <button className="btn primary" onClick={() => setKoosPageIndex((prev) => Math.min(KOOS_PAGES.length - 1, prev + 1))} disabled={!currentKoosComplete}>
-                    {t.buttons.nextQuestions}
-                  </button>
-                )}
-              </div>
+              )}
               {koosError ? <div className="error">{koosError}</div> : null}
-              {!koosResult && !koosError ? <div className="empty">{t.messages.calculateToReady}</div> : null}
-              {koosResult ? (
-                <div className="metrics sectionBody">
-                  <div className="metric"><small>{t.labels.koosTotal}</small><strong>{f(koosResult.koos_total)}</strong></div>
-                  {Object.entries(koosResult.subscales || {}).map(([k, v]) => (
-                    <div className="metric" key={k}><small>{t.koosSections[k] || k}</small><strong>{f(v)}</strong></div>
-                  ))}
-                </div>
-              ) : null}
             </section>
           ) : null}
 
@@ -1284,50 +1892,82 @@ export default function App() {
             <section className="panel" id="kl-upload">
               <div className="klLayout sectionBody">
                 <div className="uploadStack">
-                  <button
-                    className="fileDrop large"
-                    onClick={() => imageInputRef.current?.click()}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      selectImageFile(event.dataTransfer.files?.[0]);
-                    }}
-                  >
-                    <div className={imageFile ? "selectedFile" : ""}>
-                      <strong>{imageFile ? t.upload.selectedImage : t.upload.dragImage}</strong>
-                      <span>{imageFile ? imageFile.name : t.upload.imageTypes}</span>
-                      <div className="fileHint">{t.upload.formats}</div>
+                  {imagePreview ? (
+                    <div className="klPreviewShell">
+                      <img src={imagePreview} className="xrayPreview" alt={t.upload.selectedImage} />
                     </div>
-                  </button>
+                  ) : (
+                    <button
+                      className="fileDrop large"
+                      onClick={() => imageInputRef.current?.click()}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        selectImageFile(event.dataTransfer.files?.[0]);
+                      }}
+                    >
+                      <div>
+                        <strong>{t.upload.dragImage}</strong>
+                        <span>{t.upload.imageTypes}</span>
+                        <div className="fileHint">{t.upload.formats}</div>
+                      </div>
+                    </button>
+                  )}
                   {imageFile ? (
-                    <div className="chips">
-                      <button className="btn" onClick={clearImageFile}>{t.buttons.removeFile}</button>
-                      <button className="btn" onClick={() => imageInputRef.current?.click()}>{t.buttons.chooseDifferentImage}</button>
+                    <div className="fileSummary">
+                      <div>
+                        <strong>{t.upload.selectedImage}</strong>
+                        <span>{imageFile.name}</span>
+                      </div>
+                      <div className="chips">
+                        <button className="btn" onClick={clearImageFile}>{t.buttons.removeFile}</button>
+                        <button className="btn" onClick={() => imageInputRef.current?.click()}>{t.buttons.chooseDifferentImage}</button>
+                      </div>
                     </div>
                   ) : null}
-                  <input ref={imageInputRef} type="file" hidden accept="image/*" onChange={(e) => {
+                  <input ref={imageInputRef} type="file" hidden accept={KL_ACCEPT} onChange={(e) => {
                     const file = e.target.files?.[0];
                     selectImageFile(file);
                     e.target.value = "";
                   }} />
-                  {imagePreview ? <img src={imagePreview} className="preview" alt="Knee preview" /> : null}
                 </div>
                 <div id="kl-result">
-                  <button className="btn primary" onClick={analyzeKl} disabled={!imageFile || klLoading}>{klLoading ? t.buttons.analyzing : t.buttons.analyzeKl}</button>
+                  {!klResult ? (
+                    <button className="btn primary" onClick={analyzeKl} disabled={!imageFile || klLoading}>{klLoading ? t.buttons.analyzing : t.buttons.analyzeKl}</button>
+                  ) : null}
                   {klError ? <div className="error">{klError}</div> : null}
                   {!klResult && !klError ? <div className="empty">{t.messages.noKlResult}</div> : null}
                   {klResult ? (
-                    <>
-                      <div className="metrics" style={{ marginTop: 10 }}>
+                    <div className="resultHero">
+                      <div className="resultHeroTop">
+                        <div>
+                          <div className="resultKicker">{stepCompleteText(3)}</div>
+                          <h4>{t.completion.klTitle}</h4>
+                          <p>{t.completion.klText}</p>
+                        </div>
+                        <div className="resultValue">{klGradeLabel}<span>{t.labels.klGrade} {klResult.kl_grade}</span></div>
+                      </div>
+                      <div className="explainList">
+                        <div className="explainItem">{t.explanations.klExplanation}</div>
+                        <div className="explainItem">{t.explanations.klHow}</div>
+                      </div>
+                      <div className="metrics wideMetrics">
                         <div className="metric"><small>{t.labels.klGrade}</small><strong>{klResult.kl_grade}</strong></div>
-                        <div className="metric"><small>{t.labels.displayGrade}</small><strong>{klResult.display_grade ?? "-"}</strong></div>
-                        <div className="metric"><small>{t.labels.confidence}</small><strong>{klResult.confidence ?? "-"}</strong></div>
+                        <div className="metric"><small>{t.labels.confidence}</small><strong>{pct(klResult.confidence)}</strong></div>
+                        <div className="metric"><small>{t.labels.klScale}</small><strong>{klResult.kl_scale_max ?? klResult.scale_max ?? 4}</strong></div>
+                        <div className="metric"><small>{t.labels.aiAssisted}</small><strong style={{ fontSize: 18 }}>{t.status.ready}</strong></div>
                       </div>
-                      <div className="chips" style={{ marginTop: 10 }}>
-                        <span className={`chip ${klResult.source === "demo_kl" ? "coral" : "teal"}`}>{klResult.source === "demo_kl" ? `${t.status.demo} KL` : `${t.status.real} KL`}</span>
-                        <span className="chip">{klResult.grade_scale || klResult.scale}</span>
+                      <div className="formulaBox">Image preprocessing → KL classifier → class probabilities → predicted KL grade</div>
+                      <div className="microNote">{t.explanations.klSafety}</div>
+                      {klModelStatus === "demo_kl" ? (
+                        <div className="chips">
+                          <span className="chip coral">{t.status.demoMode}</span>
+                        </div>
+                      ) : null}
+                      <div className="resultActions">
+                        <button className="btn primary" onClick={continueToImu}>{t.buttons.continueToImu}</button>
                       </div>
-                    </>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -1339,21 +1979,30 @@ export default function App() {
               <div className="grid2 sectionBody">
                 <div>
                   {!imuFile ? (
-                    <button className="fileDrop" onClick={() => csvInputRef.current?.click()}>
+                    <button
+                      className="fileDrop"
+                      onClick={() => csvInputRef.current?.click()}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        selectImuFile(event.dataTransfer.files?.[0]);
+                      }}
+                    >
                       <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span></div>
                     </button>
                   ) : (
-                    <div className="chips">
-                      <span className="chip">{imuFile.name}</span>
-                      <button className="btn" onClick={() => { setImuFile(null); setImuResult(null); }}>{t.buttons.remove}</button>
+                    <div className="fileSummary">
+                      <div>
+                        <strong>{t.upload.selectedImu}</strong>
+                        <span>{imuFile.name}</span>
+                      </div>
+                      <button className="btn" onClick={clearImuFile}>{t.buttons.remove}</button>
                     </div>
                   )}
-                  <input ref={csvInputRef} type="file" hidden accept=".csv,text/csv" onChange={(e) => {
+                  <input ref={csvInputRef} type="file" hidden accept={IMU_ACCEPT} onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (!file) return;
-                    setImuFile(file);
-                    setImuResult(null);
-                    setReportResult(null);
+                    selectImuFile(file);
+                    e.target.value = "";
                   }} />
                 </div>
                 <div id="imu-result">
@@ -1361,10 +2010,37 @@ export default function App() {
                   {imuError ? <div className="error">{imuError}</div> : null}
                   {!imuResult && !imuError ? <div className="empty">{t.messages.noImuResult}</div> : null}
                   {imuResult ? (
-                    <div className="metrics" style={{ marginTop: 10 }}>
-                      <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(currentRom, "°")}</strong></div>
-                      <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousRom, "°")}</strong></div>
-                      <div className="metric"><small>{t.labels.rehabScore}</small><strong>{f(imuResult.overall_score)}</strong></div>
+                    <div className="resultHero">
+                      <div className="resultHeroTop">
+                        <div>
+                          <div className="resultKicker">{stepCompleteText(4)}</div>
+                          <h4>{t.completion.imuTitle}</h4>
+                          <p>{t.completion.imuText}</p>
+                          <div className="chips">
+                            <div className={`statusPill ${imuDeltaStatusKey === "reduced" ? "coral" : ""}`}>{t.movementStatus[imuDeltaStatusKey]}</div>
+                            <span className="chip teal">{t.labels.rehabLevel} {imuRehabLevel.label}</span>
+                          </div>
+                        </div>
+                        <div className="resultValue">{f(imuResult.overall_score)}<span>{t.labels.rehabScore}</span></div>
+                      </div>
+                      <div className="explainList">
+                        <div className="explainItem">{t.explanations.imuRomFormula}</div>
+                        <div className="explainItem">{t.explanations.deltaRomExplanation}</div>
+                        <div className="explainItem">{t.explanations.imuSmoothness}</div>
+                        <div className="explainItem">{t.explanations.imuScoreFormula}</div>
+                      </div>
+                      <div className="formulaBox">ROM = max angle - min angle</div>
+                      <div className="metrics wideMetrics">
+                        <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(currentRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(imuDeltaRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{imuRehabLevel.label}</strong></div>
+                        <div className="metric"><small>{t.labels.movementResult}</small><strong style={{ fontSize: 18 }}>{movementResult}</strong></div>
+                        <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
+                      </div>
+                      <div className="resultActions">
+                        <button className="btn primary" onClick={continueToReport}>{t.buttons.continueToReport}</button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1380,54 +2056,147 @@ export default function App() {
                 <span className={`chip ${readyState.kl ? "teal" : ""}`}>KL {readyState.kl ? t.status.ready : t.status.pending}</span>
                 <span className={`chip ${readyState.imu ? "teal" : ""}`}>IMU {readyState.imu ? t.status.ready : t.status.pending}</span>
               </div>
-              <div className="wizardNav">
-                <button className="btn primary" onClick={generateReport} disabled={!readyState.patient || !readyState.koos || !readyState.kl || !readyState.imu || reportLoading}>
-                  {reportLoading ? t.buttons.generating : t.buttons.generateReport}
-                </button>
-              </div>
+              {!reportResult ? (
+                <div className="wizardNav">
+                  <button className="btn primary" onClick={generateReport} disabled={!readyState.patient || !readyState.koos || !readyState.kl || !readyState.imu || reportLoading}>
+                    {reportLoading ? t.buttons.generating : t.buttons.generateReport}
+                  </button>
+                </div>
+              ) : null}
               {reportError ? <div className="error">{reportError}</div> : null}
               {!reportResult && !reportError ? <div className="empty">{t.messages.generateAfterReady}</div> : null}
               {reportResult ? (
                 <div className="sectionBody">
-                  <div className="metrics">
-                    <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.current_ROM, "°")}</strong></div>
-                    <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(reportResult.delta_ROM, "°")}</strong></div>
-                    <div className="metric"><small>{t.labels.sessionId}</small><strong style={{ fontSize: 16 }}>{reportResult.session_id || "-"}</strong></div>
+                  <div className="resultHero">
+                    <div className="resultHeroTop">
+                      <div>
+                        <div className="resultKicker">{stepCompleteText(5)}</div>
+                        <h4>{t.reportSections.finalRehabilitationScore}</h4>
+                        <p>{t.explanations.finalPredictionExplanation}</p>
+                        <div className="chips">
+                          <div className={`statusPill ${reportStatusKey === "needs_attention" || reportStatusKey === "insufficient_data" ? "coral" : ""}`}>
+                            {t.reportStatus[reportStatusKey] || t.reportStatus.insufficient_data}
+                          </div>
+                          <span className="chip teal">{t.labels.rehabLevel} {reportResult.rehab_level_label || "-"}</span>
+                        </div>
+                      </div>
+                      <div className="resultValue">{f(finalRehabScore)}<span>{t.labels.finalRehabilitationScore}</span></div>
+                    </div>
+                    <div className="resultActions">
+                      <span className="chip teal">{t.completion.sessionSaved}</span>
+                    </div>
                   </div>
+
+                  <div className="flowLine" aria-label={t.labels.inputSummary}>
+                    <span className="flowItem">{t.labels.koosPre}</span>
+                    <span className="flowArrow">+</span>
+                    <span className="flowItem">{t.labels.deltaRom}</span>
+                    <span className="flowArrow">+</span>
+                    <span className="flowItem">{t.labels.klGrade}</span>
+                    <span className="flowArrow">→</span>
+                    <span className="flowItem">{t.labels.finalRehabilitationScore}</span>
+                  </div>
+                  <div className="flowLine" aria-label={t.labels.rehabLevel}>
+                    <span className="flowItem">{t.labels.imuRehabScore}</span>
+                    <span className="flowArrow">→</span>
+                    <span className="flowItem">{t.labels.rehabLevel}</span>
+                    <span className="flowArrow">→</span>
+                    <span className="flowItem">{t.report.exercisePlan}</span>
+                  </div>
+
+                  <div className="reportBlock">
+                    <h4>{t.reportSections.inputSummary}</h4>
+                    <div className="metrics wideMetrics">
+                      <div className="metric"><small>{t.labels.koosPre}</small><strong>{f(reportResult.KOOS_pre)}</strong></div>
+                      <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(reportResult.delta_ROM, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.klGrade}</small><strong>{reportResult.KL_grade ?? "-"}</strong></div>
+                      <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.current_ROM, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.imuRehabScore}</small><strong>{f(reportResult.rehab_score)}</strong></div>
+                      <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{reportResult.rehab_level_label || "-"}</strong></div>
+                    </div>
+                  </div>
+
                   <div className="reportBlock" id="report-interpretation">
-                    <h4>{t.report.interpretation}</h4>
-                    <p>{reportResult.interpretation || t.report.noInterpretation}</p>
-                    {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
+                    <h4>{t.reportSections.scoreExplanation}</h4>
+                    <div className="explainList">
+                      <div className="explainItem">{t.explanations.higherScoreMeaning}</div>
+                      <div className="explainItem">{t.explanations.lowerScoreMeaning}</div>
+                      <div className="explainItem">{t.explanations.reportCombination}</div>
+                    </div>
                   </div>
+
                   <div className="reportBlock" id="report-recommendations">
-                    <h4>{t.report.recommendations}</h4>
+                    <h4>{t.reportSections.recommendations}</h4>
                     {Array.isArray(reportResult.recommendations) && reportResult.recommendations.length > 0 ? (
-                      <ul className="reportList">
-                        {reportResult.recommendations.map((item) => <li key={item}>{item}</li>)}
-                      </ul>
+                      <div className="recommendationCards">
+                        {reportResult.recommendations.map((item, index) => (
+                          <div className="recommendationCard" key={item}>
+                            <strong>{t.report.recommendationTitle.replace("{number}", index + 1)}</strong>
+                            <p>{translatedRecommendation(item)}</p>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <p>{t.report.noRecommendations}</p>
                     )}
+                    <div className="detailPanel">
+                      <div className="detailCard">
+                        <strong>{t.report.exercisePlan}</strong>
+                        <p>{t.explanations.imuScoreFormula}</p>
+                      </div>
+                    </div>
+                    {reportExercises.length > 0 ? (
+                      <div className="exerciseGrid">
+                        {reportExercises.map((item) => (
+                          <div className="exerciseCard" key={`${item.level}-${item.name}`}>
+                            <div className="exerciseCardTop">
+                              <h5>{item.name}</h5>
+                              <span className="exerciseLevel">{item.level}</span>
+                            </div>
+                            <p>{item.description}</p>
+                            <a className="exerciseLink" href={item.youtube_url} target="_blank" rel="noreferrer">{t.report.watchVideo}</a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="microNote">{t.report.noExercises}</p>
+                    )}
+                    <div className="microNote">{t.report.exerciseSafetyNote}</div>
                   </div>
                   <div className="reportBlock" id="report-session">
-                    <h4>{t.report.sessionDetails}</h4>
-                    <div className="chips">
-                      <span className="chip">{t.steps.patient} {patientId || "-"}</span>
-                      <span className="chip">{t.labels.exercise} {t.exercises[exercise] || exercise}</span>
-                      <span className="chip">{t.labels.created} {formatDate(reportResult.created_at)}</span>
+                    <h4>{t.reportSections.sessionDetails}</h4>
+                    <div className="metrics">
+                      <div className="metric"><small>{t.labels.patientId}</small><strong style={{ fontSize: 18 }}>{patientId || "-"}</strong></div>
+                      <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || exercise}</strong></div>
+                      <div className="metric"><small>{t.labels.sessionId}</small><strong style={{ fontSize: 16 }}>{reportResult.session_id || "-"}</strong></div>
+                      <div className="metric"><small>{t.labels.createdAt}</small><strong style={{ fontSize: 16 }}>{formatDate(reportResult.created_at)}</strong></div>
                     </div>
+                  </div>
+                  <div className="reportBlock">
+                    <h4>{t.report.calculationDetails}</h4>
+                    <div className="formulaBox">{t.explanations.formulaReadable}</div>
+                    <table className="betaTable">
+                      <tbody>
+                        <tr><th>β0</th><td>{f(reportResult.beta0)}</td></tr>
+                        <tr><th>β1</th><td>{f(reportResult.beta1)}</td></tr>
+                        <tr><th>β2</th><td>{f(reportResult.beta2)}</td></tr>
+                        <tr><th>β3_KL</th><td>{f(reportResult.beta3_KL)}</td></tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               ) : null}
             </section>
           ) : null}
 
-          <div className="wizardNav">
-            <button className="btn" onClick={prevStep} disabled={activeStep === "patient"}>{t.buttons.back}</button>
-            {activeStep !== "report" ? (
-              <button className="btn primary" onClick={nextStep} disabled={!canContinue(activeStep)}>{t.buttons.continue}</button>
-            ) : null}
-          </div>
+          {showGlobalWizardNav ? (
+            <div className="wizardNav">
+              <button className="btn" onClick={prevStep} disabled={activeStep === "patient"}>{t.buttons.back}</button>
+              {activeStep !== "report" ? (
+                <button className="btn primary" onClick={nextStep} disabled={!canContinue(activeStep)}>{t.buttons.continue}</button>
+              ) : null}
+            </div>
+          ) : null}
         </main>
 
         <aside className="toc" aria-label={t.labels.onThisStep}>
