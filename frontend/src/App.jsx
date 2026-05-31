@@ -79,6 +79,13 @@ const STEP_HEADINGS = {
 };
 
 const KOOS_PANELS = buildKoosPanels();
+const KOOS_PANEL_TAG_KEYS = {
+  Pain: "pain",
+  Symptoms: "symptoms",
+  "Daily living": "adl",
+  "Sport / recreation": "sport_rec",
+  "Quality of life": "qol",
+};
 
 const KOOS_QUESTION_TEXT = {
   q1: "P1. How often do you experience knee pain?",
@@ -405,6 +412,7 @@ const STRINGS = {
       calculateToReady: "Calculate KOOS on the final page to mark this step ready.",
       completeCurrentPage: "Answer all questions on this page to continue.",
       completeAllKoos: "Answer all 42 KOOS questions before calculating.",
+      includesNextSection: "Includes next section",
       noKlResult: "No KL result yet.",
       noImuResult: "No IMU result yet.",
       generateAfterReady: "Generate report after all previous steps are ready.",
@@ -642,6 +650,7 @@ const STRINGS = {
       calculateToReady: "Рассчитайте KOOS на последней странице, чтобы отметить шаг готовым.",
       completeCurrentPage: "Ответьте на все вопросы страницы, чтобы продолжить.",
       completeAllKoos: "Ответьте на все 42 вопроса KOOS перед расчетом.",
+      includesNextSection: "Включает следующий раздел",
       noKlResult: "Результата KL пока нет.",
       noImuResult: "Результата ИМУ пока нет.",
       generateAfterReady: "Сформируйте отчет после готовности предыдущих шагов.",
@@ -879,6 +888,7 @@ const STRINGS = {
       calculateToReady: "Қадамды дайын ету үшін соңғы бетте KOOS есептеңіз.",
       completeCurrentPage: "Жалғастыру үшін беттегі барлық сұрақтарға жауап беріңіз.",
       completeAllKoos: "Есептеу алдында KOOS-тың барлық 42 сұрағына жауап беріңіз.",
+      includesNextSection: "Келесі бөлімді қамтиды",
       noKlResult: "KL нәтижесі әлі жоқ.",
       noImuResult: "ИМУ нәтижесі әлі жоқ.",
       generateAfterReady: "Алдыңғы қадамдар дайын болғаннан кейін есеп жасаңыз.",
@@ -1354,6 +1364,12 @@ export default function App() {
   const reportStatusKey = reportResult?.interpretation || "insufficient_data";
   const finalRehabScore = reportResult?.predicted_delta_KOOS;
   const reportExercises = Array.isArray(reportResult?.recommended_exercises) ? reportResult.recommended_exercises : [];
+  const localizedKoosPanelTag =
+    t.koosSections[KOOS_PANEL_TAG_KEYS[currentKoosPanel.tag]] || currentKoosPanel.tag || "";
+  const localizedKoosPanelNote =
+    currentKoosPanel.note === "Includes next section"
+      ? t.messages.includesNextSection
+      : currentKoosPanel.note || "";
 
   function translatedRecommendation(item) {
     const map = {
@@ -1790,8 +1806,8 @@ export default function App() {
                         </div>
                       </div>
                       <div className="chips koosPanelTags">
-                        {currentKoosPanel.tag ? <span className="chip teal">{currentKoosPanel.tag}</span> : null}
-                        {currentKoosPanel.note ? <span className="chip">{currentKoosPanel.note}</span> : null}
+                        {localizedKoosPanelTag ? <span className="chip teal">{localizedKoosPanelTag}</span> : null}
+                        {localizedKoosPanelNote ? <span className="chip">{localizedKoosPanelNote}</span> : null}
                         <span className="chip">{t.labels.scoreRange}</span>
                       </div>
                     </div>
@@ -2117,11 +2133,18 @@ export default function App() {
                   </div>
 
                   <div className="reportBlock" id="report-interpretation">
-                    <h4>{t.reportSections.scoreExplanation}</h4>
-                    <div className="explainList">
-                      <div className="explainItem">{t.explanations.higherScoreMeaning}</div>
-                      <div className="explainItem">{t.explanations.lowerScoreMeaning}</div>
-                      <div className="explainItem">{t.explanations.reportCombination}</div>
+                    <h4>{t.reportSections.interpretation}</h4>
+                    <p>{reportResult.interpretation || t.report.noInterpretation}</p>
+                    {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
+                    <div className="detailPanel">
+                      <div className="detailCard">
+                        <strong>{t.reportSections.scoreExplanation}</strong>
+                        <p>{t.explanations.higherScoreMeaning}</p>
+                      </div>
+                      <div className="detailCard">
+                        <strong>{t.report.calculationDetails}</strong>
+                        <p>{t.explanations.reportCombination}</p>
+                      </div>
                     </div>
                   </div>
 
