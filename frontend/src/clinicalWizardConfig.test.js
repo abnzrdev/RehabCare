@@ -33,9 +33,20 @@ describe("getSelectedVideo", () => {
     expect(getSelectedVideo(EXERCISE_VIDEO_ORDER, null)).toEqual(EXERCISE_VIDEO_ORDER[0]);
   });
 
+  it("returns the first video when the selected id is not found", () => {
+    expect(getSelectedVideo(EXERCISE_VIDEO_ORDER, "missing-video-id")).toEqual(
+      EXERCISE_VIDEO_ORDER[0],
+    );
+  });
+
   it("returns the selected video when the id matches", () => {
     expect(getSelectedVideo(EXERCISE_VIDEO_ORDER, EXERCISE_VIDEO_ORDER[1].id)).toEqual(
       EXERCISE_VIDEO_ORDER[1],
     );
+  });
+
+  it("returns null when videos is empty or absent", () => {
+    expect(getSelectedVideo([], EXERCISE_VIDEO_ORDER[0].id)).toBeNull();
+    expect(getSelectedVideo(undefined, EXERCISE_VIDEO_ORDER[0].id)).toBeNull();
   });
 });
