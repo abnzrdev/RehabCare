@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).resolve().parents[1] / "data" / "rehab.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "rehab.db"
+
+
+def get_db_path() -> Path:
+    value = os.environ.get("REHAB_DB_PATH")
+    if value:
+        return Path(value).expanduser()
+    return DEFAULT_DB_PATH
 
 
 @dataclass
@@ -25,8 +33,9 @@ class SessionRecord:
 
 
 def _connect() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    db_path = get_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 

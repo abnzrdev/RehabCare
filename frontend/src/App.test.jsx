@@ -83,6 +83,32 @@ describe("clinical wizard patient and KOOS flow", () => {
             beta2: 3,
             beta3_KL: 4,
             created_at: "2026-05-31T10:00:00Z",
+            recommended_exercises: [
+              {
+                level: "Level 4",
+                name: "Step-Ups",
+                description: "Step onto a low platform with slow control through the knee and hip.",
+                duration: "4 min",
+                target_area: "Knee strength",
+                youtube_url: "https://www.youtube-nocookie.com/embed/BHUu__ZSFEk?rel=0",
+              },
+              {
+                level: "Level 4",
+                name: "Lunges",
+                description: "Practice split-stance lowering with attention to knee tracking and balance.",
+                duration: "6 min",
+                target_area: "Knee control",
+                youtube_url: "https://www.youtube-nocookie.com/embed/bo_99bo4q3c?rel=0",
+              },
+              {
+                level: "Level 4",
+                name: "Single-Leg Balance",
+                description: "Stand on one leg to improve balance, hip control, and proprioception.",
+                duration: "5 min",
+                target_area: "Balance",
+                youtube_url: "https://www.youtube-nocookie.com/embed/8cp5gTaXqhk?rel=0",
+              },
+            ],
           });
         }
 
@@ -121,6 +147,97 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/^Pain$/)).not.toBeInTheDocument();
   });
 
+  it("shows a six-step workflow with a ROM-focused Step 4 and a separate Step 6 video page", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /exercise videos/i })[0]).toBeInTheDocument();
+
+    await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
+    await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
+    await screen.findByText(/panel 1 of 14/i);
+
+    for (let panelIndex = 0; panelIndex < 14; panelIndex += 1) {
+      const visibleRadios = screen.getAllByRole("radio");
+      const firstRadioPerQuestion = visibleRadios.filter((radio, index, radios) => {
+        return radios.findIndex((candidate) => candidate.name === radio.name) === index;
+      });
+
+      for (const radio of firstRadioPerQuestion) {
+        await user.click(radio);
+      }
+
+      if (panelIndex === 13) {
+        await user.click(screen.getByRole("button", { name: /calculate KOOS/i }));
+      } else {
+        await user.click(screen.getByRole("button", { name: /next questions/i }));
+      }
+    }
+
+    await user.click(await screen.findByRole("button", { name: /continue to KL image grading/i }));
+
+    const imageInput = container.querySelector('input[type="file"][accept*="image/png"]');
+    expect(imageInput).not.toBeNull();
+    await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to IMU/i }));
+
+    expect(screen.getByRole("heading", { name: /IMU movement analysis/i })).toBeInTheDocument();
+    expect(screen.getByText(/capture or upload IMU movement data to calculate knee ROM/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /analyze ROM/i })).toBeInTheDocument();
+    expect(screen.getByText(/no IMU result yet/i)).toBeInTheDocument();
+
+    const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
+    expect(imuInput).not.toBeNull();
+    await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    expect(await screen.findByText(/step 4 of 6 complete/i)).toBeInTheDocument();
+    expect(screen.getByText(/IMU movement analysis completed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/range of motion/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Rehab score$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/IMU rehab score/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /continue to final rehab report/i }));
+    await user.click(screen.getByRole("button", { name: /generate report/i }));
+
+    expect(await screen.findByText(/step 5 of 6 complete/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/final rehabilitation score/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/IMU rehab score/i).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /continue to exercise videos/i }));
+
+    expect(await screen.findByText(/step 6 of 6 complete/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /exercise videos/i })).toBeInTheDocument();
+    expect(screen.getByText(/review the prescribed exercise video library after the final rehabilitation report/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^3$/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/exercise videos ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/exercise guidance is available for the current rehabilitation level/i)).toBeInTheDocument();
+
+    expect(screen.getByText("Step-Ups")).toBeInTheDocument();
+    expect(screen.getByText("Lunges")).toBeInTheDocument();
+    expect(screen.getByText("Single-Leg Balance")).toBeInTheDocument();
+    expect(screen.getAllByText(/level 4/i)).toHaveLength(3);
+    expect(screen.getByText("4 min")).toBeInTheDocument();
+    expect(screen.getByText("6 min")).toBeInTheDocument();
+    expect(screen.getByText("5 min")).toBeInTheDocument();
+    expect(screen.getByText("Knee strength")).toBeInTheDocument();
+    expect(screen.getByText("Knee control")).toBeInTheDocument();
+    expect(screen.getByText("Balance")).toBeInTheDocument();
+    expect(screen.getAllByTitle(/Step-Ups video/i)).toHaveLength(1);
+    expect(screen.getAllByTitle(/Lunges video/i)).toHaveLength(1);
+    expect(screen.getAllByTitle(/Single-Leg Balance video/i)).toHaveLength(1);
+    expect(container.querySelectorAll("iframe")).toHaveLength(3);
+    expect(screen.getByTitle(/Step-Ups video/i)).toHaveAttribute(
+      "src",
+      expect.stringContaining("youtube-nocookie.com/embed/"),
+    );
+    expect(screen.getAllByRole("button", { name: /watch video/i })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(3);
+  });
+
   it("renders backend interpretation and delta note in the final report", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
@@ -154,12 +271,12 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(imageInput).not.toBeNull();
     await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
     await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
-    await user.click(await screen.findByRole("button", { name: /continue to IMU rehab analysis/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to IMU/i }));
 
     const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
     expect(imuInput).not.toBeNull();
     await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
-    await user.click(screen.getByRole("button", { name: /analyze IMU/i }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
     await user.click(await screen.findByRole("button", { name: /continue to final rehab report/i }));
 
     await user.click(screen.getByRole("button", { name: /generate report/i }));

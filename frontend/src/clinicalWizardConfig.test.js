@@ -66,9 +66,33 @@ describe("getSelectedVideo", () => {
 
   it("uses the approved redesign sample video data", () => {
     expect(EXERCISE_VIDEO_ORDER).toEqual([
-      { id: "advanced-squats", title: "Advanced Squats" },
-      { id: "lateral-step-downs", title: "Lateral Step-Downs" },
-      { id: "return-to-running-drills", title: "Return-to-Running Drills" },
+      {
+        id: "step-ups",
+        title: "Step-Ups",
+        description: "Step onto a low platform with slow control through the knee and hip.",
+        level: "Level 4",
+        duration: "4 min",
+        targetArea: "Knee strength",
+        embedUrl: "https://www.youtube-nocookie.com/embed/BHUu__ZSFEk?rel=0",
+      },
+      {
+        id: "lunges",
+        title: "Lunges",
+        description: "Practice split-stance lowering with attention to knee tracking and balance.",
+        level: "Level 4",
+        duration: "6 min",
+        targetArea: "Knee control",
+        embedUrl: "https://www.youtube-nocookie.com/embed/bo_99bo4q3c?rel=0",
+      },
+      {
+        id: "single-leg-balance",
+        title: "Single-Leg Balance",
+        description: "Stand on one leg to improve balance, hip control, and proprioception.",
+        level: "Level 4",
+        duration: "5 min",
+        targetArea: "Balance",
+        embedUrl: "https://www.youtube-nocookie.com/embed/8cp5gTaXqhk?rel=0",
+      },
     ]);
   });
 });

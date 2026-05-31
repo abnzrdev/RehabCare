@@ -2,13 +2,15 @@
 api/main.py  —  OrthoScan AI  ·  FastAPI backend
 =================================================
 Endpoints
-  GET  /health       → {"status":"ok", "model":"real"|"demo"}
+  GET  /health       → {"status":"ok", "binary_model":"real"|"demo"|"missing", "kl_model":"real_kl"|"demo_kl", "imu":"real"|"demo"}
   POST /predict      → image file + ?lang=en|ru|kz → full JSON report
 
-Model loading priority
-  1. Real ConvNeXt-Small checkpoint  →  rehab_platform/models/knee_oa/best_convnext.pth
-  2. Optional temperature file       →  rehab_platform/models/knee_oa/temperatures.pth
-  3. Falls back to deterministic demo analyser if checkpoint is missing
+Main KL grading model
+  rehab_platform/models/knee_oa/kl_grade_model.pt
+
+Legacy /predict binary endpoint
+  Optionally uses rehab_platform/models/knee_oa/best_convnext.pth.
+  If that checkpoint is missing, /predict falls back to the deterministic demo analyser.
 
 Run with (from Rehabilitation/ root):
   uvicorn api.main:app --reload --port 8000
@@ -47,6 +49,11 @@ from core.kl_grade import (  # noqa: E402
     _format_kl_prediction,
     infer_kl_class_probs,
     load_kl_model,
+)
+from core.rehab_levels import (  # noqa: E402
+    build_rehab_level_payload,
+    get_exercises_for_level,
+    get_rehab_level,
 )
 from core.storage import (
     SessionRecord,
@@ -90,14 +97,15 @@ _threshold = _THRESHOLD
 _mean      = _MEAN
 _std       = _STD
 _T         = 1.0    # temperature scalar (1.0 = no scaling)
-_mode      = "demo" # "real" | "demo"
+_mode      = "missing" # Legacy /predict status: "real" | "demo" | "missing"
+_binary_fail_reason = ""
 
 # IMU (LSTM activity classifier) model
 _imu_clf      = None
 _imu_scaler   = None
 _imu_meta     = None
 _imu_baseline = None
-_imu_mode     = "unavailable"  # "real" | "unavailable"
+_imu_mode     = "demo"         # "real" | "demo"
 _imu_fail_reason = ""          # human-readable reason stored for /health
 
 # KL (graded OA) model
@@ -144,22 +152,19 @@ def _build_model(arch: str, in_features: int | None = None):
 
 def _load_real_model() -> bool:
     """
-    Attempts to load the ConvNeXt-Small checkpoint.
-    Returns True on success, False if the file is missing.
-    Prints a loud warning to the terminal if the file is absent.
+    Attempts to load the legacy ConvNeXt-Small checkpoint used only by /predict.
+    Returns True on success, False if the endpoint should use demo analysis.
     """
-    global _model, _threshold, _mean, _std, _T, _mode
+    global _model, _threshold, _mean, _std, _T, _mode, _binary_fail_reason
 
     if not CKPT_PATH.exists():
-        log.warning("=" * 68)
-        log.warning("  CHECKPOINT NOT FOUND — running in DEMO mode.")
-        log.warning(f"  Expected path: {CKPT_PATH}")
-        log.warning("  To enable real inference:")
-        log.warning("    1. Download best_convnext_small_*.pth from Colab")
-        log.warning("    2. Rename it to  best_convnext.pth")
-        log.warning(f"    3. Place it at   {CKPT_PATH}")
-        log.warning("    4. Restart the backend (uvicorn auto-reloads)")
-        log.warning("=" * 68)
+        _model = None
+        _mode = "missing"
+        _binary_fail_reason = (
+            f"Legacy /predict binary checkpoint not found at {CKPT_PATH}; "
+            "/predict will use demo analysis. KL grading uses kl_grade_model.pt."
+        )
+        log.info(_binary_fail_reason)
         return False
 
     try:
@@ -178,6 +183,7 @@ def _load_real_model() -> bool:
         _mean      = float(ckpt.get("train_mean",     _MEAN))
         _std       = float(ckpt.get("train_std",      _STD))
         _mode      = "real"
+        _binary_fail_reason = ""
 
         log.info(f"  arch      : {arch}")
         log.info(f"  threshold : {_threshold:.4f}  (Youden's J, from val set)")
@@ -199,8 +205,9 @@ def _load_real_model() -> bool:
         return True
 
     except Exception as exc:
-        log.error(f"Failed to load checkpoint: {exc}")
-        log.error("Falling back to DEMO mode.")
+        _binary_fail_reason = f"Legacy /predict binary checkpoint load failed: {exc}"
+        log.error(_binary_fail_reason)
+        log.error("Legacy /predict will use demo analysis.")
         _model = None
         _mode  = "demo"
         return False
@@ -413,12 +420,20 @@ _HOTSPOT_LABELS = {
 
 KL_GRADE_MIN = 0
 KL_GRADE_MAX = 4
-PREDICTED_DELTA_COEFFS = {
-    "b0": 2.0,
-    "b1": -0.03,
-    "b2": 0.12,
-    "b3": -0.8,
+KL_GRADE_BETA3 = {
+    0: 1.0,
+    1: -23.29,
+    2: -7.93,
+    3: -0.81,
+    4: 0.0,
 }
+PREDICTED_DELTA_COEFFS = {
+    "beta0": 139.95,
+    "beta1": -0.93,
+    "beta2": -0.785,
+    "beta3_by_KL": KL_GRADE_BETA3,
+}
+PREDICTED_DELTA_FORMULA_TEXT = "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL"
 
 
 class RehabReportInput(BaseModel):
@@ -441,11 +456,13 @@ def _build_kl_response(pil_image: Image.Image, lang: str, scale_max: int) -> dic
             source="real_kl",
         )
         result["lang"] = lang
+        result["kl_model"] = _kl_mode
         return result
 
     oa_prob = _infer_real(pil_image) if _model is not None else _infer_demo(pil_image)
     result = _build_demo_kl_response(oa_prob=oa_prob)
     result["lang"] = lang
+    result["kl_model"] = _kl_mode
     return result
 
 
@@ -478,15 +495,15 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
     if rehab_score is None and isinstance(payload.imu_result, dict):
         rehab_score = payload.imu_result.get("overall_score")
     rehab_score = float(rehab_score) if rehab_score is not None else None
+    rehab_level_payload = build_rehab_level_payload(rehab_score)
 
-    b0 = PREDICTED_DELTA_COEFFS["b0"]
-    b1 = PREDICTED_DELTA_COEFFS["b1"]
-    b2 = PREDICTED_DELTA_COEFFS["b2"]
-    b3 = PREDICTED_DELTA_COEFFS["b3"]
-    # Placeholder clinical formula scaffold; replace with validated coefficients.
+    beta0 = PREDICTED_DELTA_COEFFS["beta0"]
+    beta1 = PREDICTED_DELTA_COEFFS["beta1"]
+    beta2 = PREDICTED_DELTA_COEFFS["beta2"]
+    beta3_kl = KL_GRADE_BETA3.get(payload.kl_grade) if payload.kl_grade is not None else None
     predicted_delta_koos = None
-    if payload.koos_pre is not None and delta_rom is not None and payload.kl_grade is not None:
-        predicted_delta_koos = round(b0 + b1 * payload.koos_pre + b2 * delta_rom + b3 * payload.kl_grade, 3)
+    if payload.koos_pre is not None and delta_rom is not None and beta3_kl is not None:
+        predicted_delta_koos = round(beta0 + beta1 * payload.koos_pre + beta2 * delta_rom + beta3_kl, 3)
 
     interpretation = "insufficient_data"
     if rehab_score is not None and delta_rom is not None:
@@ -534,12 +551,20 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
         "previous_ROM": previous_rom,
         "delta_ROM": delta_rom,
         "rehab_score": rehab_score,
+        "rehab_level": rehab_level_payload["rehab_level"],
+        "rehab_level_label": rehab_level_payload["rehab_level_label"],
         "KOOS_pre": payload.koos_pre,
         "KL_grade": payload.kl_grade,
+        "beta0": beta0,
+        "beta1": beta1,
+        "beta2": beta2,
+        "beta3_KL": beta3_kl,
         "predicted_delta_KOOS": predicted_delta_koos,
         "formula_coefficients": PREDICTED_DELTA_COEFFS,
+        "formula_text": PREDICTED_DELTA_FORMULA_TEXT,
         "interpretation": interpretation,
         "recommendations": recommendations,
+        "recommended_exercises": rehab_level_payload["recommended_exercises"],
         "delta_note": delta_note,
         "session_id": session_info["session_id"],
         "created_at": session_info["created_at"],
@@ -595,6 +620,7 @@ def _build_response(pil_image: Image.Image, lang: str) -> dict:
         "scale"          : lang_c["scale"],
         "urgency"        : "Routine" if grade == 0 else ("Soon" if conf_pct > 85 else "Routine"),
         "hotspots"       : hotspots,
+        "binary_model"   : _mode,
         "source"         : _mode,
     }
 
@@ -611,18 +637,20 @@ app.add_middleware(
 
 
 def _load_imu_model() -> bool:
-    """Attempt to load the LSTM IMU classifier. Returns True on success."""
+    """Attempt to load the LSTM IMU classifier; otherwise use the biomechanical scorer."""
     global _imu_clf, _imu_scaler, _imu_meta, _imu_baseline, _imu_mode, _imu_fail_reason
     if not _HAS_IMU_PIPELINE:
         _imu_fail_reason = "IMU pipeline import failed (tensorflow / joblib / pandas not installed?)"
         log.warning(_imu_fail_reason)
+        _imu_mode = "demo"
         return False
     if not _imu_assets():
         _imu_fail_reason = (
             f"LSTM model files not found at {_REHAB_DIR / 'models' / 'imu'}. "
-            "Need: lstm_classifier.keras, scaler.pkl"
+            "Using biomechanical demo scorer for /imu/analyze."
         )
-        log.warning(_imu_fail_reason)
+        _imu_mode = "demo"
+        log.info(_imu_fail_reason)
         return False
     try:
         log.info("Loading IMU LSTM classifier…")
@@ -637,7 +665,7 @@ def _load_imu_model() -> bool:
     except Exception as exc:
         _imu_fail_reason = f"Model load error: {exc}"
         log.error(_imu_fail_reason)
-        _imu_mode = "unavailable"
+        _imu_mode = "demo"
         return False
 
 
@@ -670,8 +698,8 @@ def _load_kl_model() -> bool:
 async def startup():
     """Load OA and IMU models at startup."""
     init_db()
-    _load_real_model()
     _load_kl_model()
+    _load_real_model()
     _load_imu_model()
     if _HAS_IMU_PIPELINE:
         log.info("✓ IMU endpoint → biomechanical rehab scorer (score_rehab_exercise)")
@@ -683,12 +711,14 @@ async def startup():
 async def health():
     resp = {
         "status":    "ok",
-        "model":     _mode,        # OA model: "real" | "demo"
+        "binary_model": _mode,     # Legacy /predict: "real" | "demo"
         "kl_model":  _kl_mode,     # KL model: "real_kl" | "demo_kl"
         "threshold": _threshold,
         "T":         _T,
-        "imu":       _imu_mode,    # IMU model: "real" | "unavailable"
+        "imu":       _imu_mode,    # IMU analysis: "real" | "demo"
     }
+    if _binary_fail_reason:
+        resp["binary_model_note"] = _binary_fail_reason
     if _imu_fail_reason:
         resp["imu_error"] = _imu_fail_reason
     if _kl_fail_reason:
@@ -791,8 +821,8 @@ async def koos_calculate(payload: dict[str, Any] = Body(...)):
 
 @app.post("/rehab/report")
 async def rehab_report(payload: RehabReportInput):
-    if payload.kl_grade is not None and not (KL_GRADE_MIN <= payload.kl_grade <= 5):
-        raise HTTPException(status_code=400, detail="kl_grade must be between 0 and 5.")
+    if payload.kl_grade is not None and not (KL_GRADE_MIN <= payload.kl_grade <= KL_GRADE_MAX):
+        raise HTTPException(status_code=400, detail="kl_grade must be between 0 and 4.")
     return _build_rehab_report(payload)
 
 

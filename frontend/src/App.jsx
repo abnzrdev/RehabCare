@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildKoosPanels } from "./clinicalWizardConfig";
+import { buildKoosPanels, EXERCISE_VIDEO_ORDER } from "./clinicalWizardConfig";
 
 const API = "/api";
 const KL_ACCEPT = "image/png,image/jpeg,image/jpg,image/bmp,image/tiff";
@@ -46,6 +46,7 @@ const STEPS = [
   { id: "kl" },
   { id: "imu" },
   { id: "report" },
+  { id: "videos" },
 ];
 
 const STEP_HEADINGS = {
@@ -75,6 +76,10 @@ const STEP_HEADINGS = {
     { id: "report-interpretation", key: "interpretation" },
     { id: "report-recommendations", key: "recommendations" },
     { id: "report-session", key: "sessionDetails" },
+  ],
+  videos: [
+    { id: "videos-overview", key: "overview" },
+    { id: "videos-library", key: "exerciseVideos" },
   ],
 };
 
@@ -267,37 +272,43 @@ const STRINGS = {
       patient: "Patient context",
       koos: "KOOS questionnaire",
       kl: "KL image grading",
-      imu: "IMU rehab analysis",
+      imu: "IMU movement analysis",
       report: "Final rehab report",
+      videos: "Exercise videos",
     },
     descriptions: {
       patient: "Set patient and session context before clinical inputs.",
       koos: "Complete the KOOS survey in short pages. Answers are saved as q1 through q42.",
       kl: "Upload a knee image and run KL grading.",
-      imu: "Upload IMU CSV data for movement analysis.",
+      imu: "Capture or upload IMU movement data to calculate knee ROM.",
       report: "Generate a final rehab report from patient, KOOS, KL, and IMU data.",
+      videos: "Review the prescribed exercise video library after the final rehabilitation report.",
     },
     buttons: {
       back: "Back",
       continue: "Continue",
-      refresh: "Refresh",
-      refreshing: "Refreshing",
       calculateKoos: "Calculate KOOS",
       calculating: "Calculating...",
       generateReport: "Generate report",
       generating: "Generating...",
       analyzeKl: "Analyze KL grade",
       analyzing: "Analyzing...",
-      analyzeImu: "Analyze IMU",
+      analyzeImu: "Analyze ROM",
       nextQuestions: "Next questions",
       previousQuestions: "Previous questions",
       continueToKoos: "Continue to KOOS questionnaire",
       continueToKl: "Continue to KL image grading",
-      continueToImu: "Continue to IMU rehab analysis",
+      continueToImu: "Continue to IMU movement analysis",
       continueToReport: "Continue to final rehab report",
+      continueToVideos: "Continue to exercise videos",
+      watchVideo: "Watch video",
+      assignVideo: "Assign",
+      markWatched: "Mark watched",
       removeFile: "Remove file",
       chooseDifferentImage: "Choose different image",
       remove: "Remove",
+      rerunImu: "Re-run IMU analysis",
+      editImuData: "Edit IMU data",
     },
     status: { pending: "Pending", ready: "Ready", complete: "Complete", demo: "Demo", demoMode: "Demo mode", real: "Real", unknown: "Unknown" },
     reportStatus: { improving: "Improving", stable: "Stable", needs_attention: "Needs attention", insufficient_data: "Needs attention" },
@@ -310,7 +321,7 @@ const STRINGS = {
       noSessions: "No sessions yet for this patient.",
       loading: "Loading...",
       savedSessions: "Saved sessions",
-      stepComplete: "Step {step} of 5 complete",
+      stepComplete: "Step {step} of 6 complete",
       latestRom: "Latest ROM",
       latestDate: "Latest date",
       patientReady: "Patient context ready",
@@ -323,6 +334,7 @@ const STRINGS = {
       currentRom: "Current ROM",
       previousRom: "Previous ROM",
       rehabScore: "Rehab score",
+      rangeOfMotion: "Range of Motion",
       klGrade: "KL grade",
       displayGrade: "Display grade",
       confidence: "Confidence",
@@ -341,6 +353,11 @@ const STRINGS = {
       klScale: "KL scale",
       aiAssisted: "AI-assisted",
       smoothness: "Smoothness",
+      repetitions: "Repetitions",
+      movementStatus: "Movement status",
+      readyForReport: "Ready for report",
+      duration: "Duration",
+      targetArea: "Target area",
       inputSummary: "Input summary",
       createdAt: "Created at",
       clinicalInputs: "Clinical inputs used",
@@ -405,7 +422,7 @@ const STRINGS = {
       calculationDetails: "Calculation details",
       recommendationTitle: "Recommendation {number}",
       exercisePlan: "Exercise plan",
-      watchVideo: "Open video",
+      watchVideo: "Watch video",
       exerciseSafetyNote: "These exercises are educational suggestions only. Stop if pain increases and consult a physiotherapist.",
     },
     messages: {
@@ -416,6 +433,7 @@ const STRINGS = {
       noKlResult: "No KL result yet.",
       noImuResult: "No IMU result yet.",
       generateAfterReady: "Generate report after all previous steps are ready.",
+      noVideos: "No exercise videos available yet.",
     },
     errors: {
       backendOffline: "Backend is not reachable. Please start the backend and try again.",
@@ -431,11 +449,13 @@ const STRINGS = {
       koosText: "Questionnaire scoring is ready for image grading.",
       klTitle: "KL grading completed",
       klText: "Image grading is ready for movement analysis.",
-      imuTitle: "IMU analysis completed",
-      imuText: "Movement metrics are ready for the final report.",
+      imuTitle: "IMU movement analysis completed",
+      imuText: "ROM calculation is ready for the final report.",
       reportTitle: "Final report completed",
       reportText: "Session saved with rehabilitation prediction and recommendations.",
       sessionSaved: "Session saved",
+      videosTitle: "Exercise videos ready",
+      videosText: "Exercise guidance is available for the current rehabilitation level.",
     },
     klLabels: { 0: "Normal", 1: "Doubtful", 2: "Mild", 3: "Moderate", 4: "Severe" },
     movementStatus: {
@@ -472,6 +492,7 @@ const STRINGS = {
       interpretation: "Interpretation",
       recommendations: "Recommendations",
       sessionDetails: "Session details",
+      exerciseVideos: "Exercise videos",
     },
     recommendationText: {
       continueProtocol: "Continue current rehab protocol.",
@@ -495,6 +516,7 @@ const STRINGS = {
       interpretation: "Interpretation",
       recommendations: "Recommendations",
       sessionDetails: "Session details",
+      exerciseVideos: "Exercise videos",
     },
   },
   ru: {
@@ -505,15 +527,17 @@ const STRINGS = {
       patient: "Контекст пациента",
       koos: "Опросник KOOS",
       kl: "KL-оценка снимка",
-      imu: "Анализ ИМУ-реабилитации",
+      imu: "Анализ движения ИМУ",
       report: "Итоговый отчет",
+      videos: "Видеоупражнения",
     },
     descriptions: {
       patient: "Укажите пациента и параметры сессии перед клиническими данными.",
       koos: "Заполните KOOS короткими страницами. Ответы сохраняются как q1-q42.",
       kl: "Загрузите снимок колена и выполните KL-оценку.",
-      imu: "Загрузите CSV ИМУ для анализа движения.",
+      imu: "Загрузите или запишите данные ИМУ, чтобы рассчитать ROM колена.",
       report: "Сформируйте итоговый отчет из данных пациента, KOOS, KL и ИМУ.",
+      videos: "Просмотрите библиотеку упражнений после итогового отчета.",
     },
     buttons: {
       back: "Назад",
@@ -526,16 +550,22 @@ const STRINGS = {
       generating: "Формирование...",
       analyzeKl: "Анализ KL",
       analyzing: "Анализ...",
-      analyzeImu: "Анализ ИМУ",
+      analyzeImu: "Рассчитать ROM",
       nextQuestions: "Следующие вопросы",
       previousQuestions: "Предыдущие вопросы",
       continueToKoos: "Перейти к опроснику KOOS",
       continueToKl: "Перейти к KL-оценке снимка",
-      continueToImu: "Перейти к анализу ИМУ",
+      continueToImu: "Перейти к анализу движения ИМУ",
       continueToReport: "Перейти к итоговому отчету",
+      continueToVideos: "Перейти к видеоупражнениям",
+      watchVideo: "Смотреть видео",
+      assignVideo: "Назначить",
+      markWatched: "Отметить просмотр",
       removeFile: "Удалить файл",
       chooseDifferentImage: "Выбрать другой снимок",
       remove: "Удалить",
+      rerunImu: "Повторить анализ ИМУ",
+      editImuData: "Изменить данные ИМУ",
     },
     status: { pending: "Ожидает", ready: "Готово", complete: "Завершено", demo: "Демо", demoMode: "Демо-режим", real: "Реальная", unknown: "Неизвестно" },
     reportStatus: { improving: "Улучшение", stable: "Стабильно", needs_attention: "Требует внимания", insufficient_data: "Требует внимания" },
@@ -548,7 +578,7 @@ const STRINGS = {
       noSessions: "Сессий для пациента пока нет.",
       loading: "Загрузка...",
       savedSessions: "Сохраненные сессии",
-      stepComplete: "Шаг {step} из 5 завершен",
+      stepComplete: "Шаг {step} из 6 завершен",
       latestRom: "Последний ROM",
       latestDate: "Последняя дата",
       patientReady: "Контекст пациента готов",
@@ -561,6 +591,7 @@ const STRINGS = {
       currentRom: "Текущий ROM",
       previousRom: "Предыдущий ROM",
       rehabScore: "Балл реабилитации",
+      rangeOfMotion: "Диапазон движения",
       klGrade: "Степень KL",
       displayGrade: "Отображаемая степень",
       confidence: "Уверенность",
@@ -579,6 +610,11 @@ const STRINGS = {
       klScale: "Шкала KL",
       aiAssisted: "AI-помощь",
       smoothness: "Плавность",
+      repetitions: "Повторения",
+      movementStatus: "Статус движения",
+      readyForReport: "Готово к отчету",
+      duration: "Длительность",
+      targetArea: "Целевая зона",
       inputSummary: "Сводка исходных данных",
       createdAt: "Создано",
       clinicalInputs: "Использованные клинические данные",
@@ -643,7 +679,7 @@ const STRINGS = {
       calculationDetails: "Детали расчета",
       recommendationTitle: "Рекомендация {number}",
       exercisePlan: "План упражнений",
-      watchVideo: "Открыть видео",
+      watchVideo: "Смотреть видео",
       exerciseSafetyNote: "Эти упражнения являются только обучающими рекомендациями. Остановитесь при усилении боли и проконсультируйтесь с физиотерапевтом.",
     },
     messages: {
@@ -654,6 +690,7 @@ const STRINGS = {
       noKlResult: "Результата KL пока нет.",
       noImuResult: "Результата ИМУ пока нет.",
       generateAfterReady: "Сформируйте отчет после готовности предыдущих шагов.",
+      noVideos: "Видеоупражнения пока недоступны.",
     },
     errors: {
       backendOffline: "Бэкенд недоступен. Запустите бэкенд и попробуйте снова.",
@@ -669,11 +706,13 @@ const STRINGS = {
       koosText: "Оценка опросника готова для анализа снимка.",
       klTitle: "KL-оценка завершена",
       klText: "Оценка снимка готова для анализа движения.",
-      imuTitle: "Анализ ИМУ завершен",
-      imuText: "Показатели движения готовы для итогового отчета.",
+      imuTitle: "Анализ движения ИМУ завершен",
+      imuText: "ROM-расчет готов для итогового отчета.",
       reportTitle: "Итоговый отчет завершен",
       reportText: "Сессия сохранена с прогнозом реабилитации и рекомендациями.",
       sessionSaved: "Сессия сохранена",
+      videosTitle: "Видеоупражнения готовы",
+      videosText: "Рекомендации по упражнениям доступны для текущего уровня реабилитации.",
     },
     klLabels: { 0: "Норма", 1: "Сомнительная", 2: "Легкая", 3: "Умеренная", 4: "Тяжелая" },
     movementStatus: {
@@ -710,6 +749,7 @@ const STRINGS = {
       interpretation: "Интерпретация",
       recommendations: "Рекомендации",
       sessionDetails: "Детали сессии",
+      exerciseVideos: "Видеоупражнения",
     },
     recommendationText: {
       continueProtocol: "Продолжайте текущий протокол реабилитации.",
@@ -733,6 +773,7 @@ const STRINGS = {
       interpretation: "Интерпретация",
       recommendations: "Рекомендации",
       sessionDetails: "Детали сессии",
+      exerciseVideos: "Видеоупражнения",
     },
   },
   kz: {
@@ -743,15 +784,17 @@ const STRINGS = {
       patient: "Пациент контексті",
       koos: "KOOS сауалнамасы",
       kl: "KL сурет бағасы",
-      imu: "ИМУ оңалту талдауы",
+      imu: "ИМУ қозғалыс талдауы",
       report: "Қорытынды есеп",
+      videos: "Жаттығу бейнелері",
     },
     descriptions: {
       patient: "Клиникалық деректер алдында пациент пен сессия параметрлерін көрсетіңіз.",
       koos: "KOOS сауалнамасын қысқа беттермен толтырыңыз. Жауаптар q1-q42 ретінде сақталады.",
       kl: "Тізе суретін жүктеп, KL бағасын орындаңыз.",
-      imu: "Қозғалысты талдау үшін ИМУ CSV дерегін жүктеңіз.",
+      imu: "Тізе ROM-ын есептеу үшін ИМУ қозғалыс дерегін жүктеңіз немесе жазыңыз.",
       report: "Пациент, KOOS, KL және ИМУ деректерінен қорытынды есеп жасаңыз.",
+      videos: "Қорытынды есептен кейін жаттығу бейнелерін қарап шығыңыз.",
     },
     buttons: {
       back: "Артқа",
@@ -764,16 +807,22 @@ const STRINGS = {
       generating: "Жасалуда...",
       analyzeKl: "KL талдау",
       analyzing: "Талдануда...",
-      analyzeImu: "ИМУ талдау",
+      analyzeImu: "ROM есептеу",
       nextQuestions: "Келесі сұрақтар",
       previousQuestions: "Алдыңғы сұрақтар",
       continueToKoos: "KOOS сауалнамасына өту",
       continueToKl: "KL сурет бағалауына өту",
-      continueToImu: "ИМУ оңалту талдауына өту",
+      continueToImu: "ИМУ қозғалыс талдауына өту",
       continueToReport: "Қорытынды есепке өту",
+      continueToVideos: "Жаттығу бейнелеріне өту",
+      watchVideo: "Бейнені көру",
+      assignVideo: "Тағайындау",
+      markWatched: "Қаралды деп белгілеу",
       removeFile: "Файлды өшіру",
       chooseDifferentImage: "Басқа сурет таңдау",
       remove: "Өшіру",
+      rerunImu: "ИМУ талдауын қайталау",
+      editImuData: "ИМУ дерегін өңдеу",
     },
     status: { pending: "Күтуде", ready: "Дайын", complete: "Аяқталды", demo: "Демо", demoMode: "Демо режимі", real: "Нақты", unknown: "Белгісіз" },
     reportStatus: { improving: "Жақсару", stable: "Тұрақты", needs_attention: "Назар қажет", insufficient_data: "Назар қажет" },
@@ -786,7 +835,7 @@ const STRINGS = {
       noSessions: "Бұл пациент үшін сессия жоқ.",
       loading: "Жүктелуде...",
       savedSessions: "Сақталған сессиялар",
-      stepComplete: "5 қадамның {step}-қадамы аяқталды",
+      stepComplete: "6 қадамның {step}-қадамы аяқталды",
       latestRom: "Соңғы ROM",
       latestDate: "Соңғы күн",
       patientReady: "Пациент контексті дайын",
@@ -799,6 +848,7 @@ const STRINGS = {
       currentRom: "Ағымдағы ROM",
       previousRom: "Алдыңғы ROM",
       rehabScore: "Оңалту балы",
+      rangeOfMotion: "Қозғалыс диапазоны",
       klGrade: "KL дәрежесі",
       displayGrade: "Көрсетілетін дәреже",
       confidence: "Сенімділік",
@@ -817,6 +867,11 @@ const STRINGS = {
       klScale: "KL шкаласы",
       aiAssisted: "AI көмегімен",
       smoothness: "Тегістік",
+      repetitions: "Қайталау саны",
+      movementStatus: "Қозғалыс күйі",
+      readyForReport: "Есепке дайын",
+      duration: "Ұзақтығы",
+      targetArea: "Нысан аймағы",
       inputSummary: "Кіріс деректер қысқашасы",
       createdAt: "Жасалған уақыты",
       clinicalInputs: "Қолданылған клиникалық деректер",
@@ -881,7 +936,7 @@ const STRINGS = {
       calculationDetails: "Есептеу деректері",
       recommendationTitle: "{number}-ұсыным",
       exercisePlan: "Жаттығу жоспары",
-      watchVideo: "Бейнені ашу",
+      watchVideo: "Бейнені көру",
       exerciseSafetyNote: "Бұл жаттығулар тек білім беру мақсатындағы ұсынымдар. Ауырсыну күшейсе тоқтатып, физиотерапевтке жүгініңіз.",
     },
     messages: {
@@ -892,6 +947,7 @@ const STRINGS = {
       noKlResult: "KL нәтижесі әлі жоқ.",
       noImuResult: "ИМУ нәтижесі әлі жоқ.",
       generateAfterReady: "Алдыңғы қадамдар дайын болғаннан кейін есеп жасаңыз.",
+      noVideos: "Жаттығу бейнелері әлі қолжетімсіз.",
     },
     errors: {
       backendOffline: "Бэкенд қолжетімсіз. Бэкендті іске қосып, қайта көріңіз.",
@@ -907,11 +963,13 @@ const STRINGS = {
       koosText: "Сауалнама бағасы суретті талдауға дайын.",
       klTitle: "KL бағасы аяқталды",
       klText: "Сурет бағасы қозғалыс талдауына дайын.",
-      imuTitle: "ИМУ талдауы аяқталды",
-      imuText: "Қозғалыс көрсеткіштері қорытынды есепке дайын.",
+      imuTitle: "ИМУ қозғалыс талдауы аяқталды",
+      imuText: "ROM есебі қорытынды есепке дайын.",
       reportTitle: "Қорытынды есеп аяқталды",
       reportText: "Сессия оңалту болжамы және ұсыныстарымен сақталды.",
       sessionSaved: "Сессия сақталды",
+      videosTitle: "Жаттығу бейнелері дайын",
+      videosText: "Ағымдағы оңалту деңгейіне арналған жаттығу нұсқаулары қолжетімді.",
     },
     klLabels: { 0: "Қалыпты", 1: "Күмәнді", 2: "Жеңіл", 3: "Орташа", 4: "Ауыр" },
     movementStatus: {
@@ -948,6 +1006,7 @@ const STRINGS = {
       interpretation: "Түсіндіру",
       recommendations: "Ұсынымдар",
       sessionDetails: "Сессия деректері",
+      exerciseVideos: "Жаттығу бейнелері",
     },
     recommendationText: {
       continueProtocol: "Ағымдағы оңалту протоколын жалғастырыңыз.",
@@ -971,6 +1030,7 @@ const STRINGS = {
       interpretation: "Түсіндіру",
       recommendations: "Ұсынымдар",
       sessionDetails: "Сессия деректері",
+      exerciseVideos: "Жаттығу бейнелері",
     },
   },
 };
@@ -1100,14 +1160,39 @@ button,input,select{font:inherit}
 .detailCard strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#0c746b;margin-bottom:6px}
 .detailCard p{margin:0;color:var(--text);font-size:13px;line-height:1.45}
 .microNote{margin-top:10px;font-size:12px;line-height:1.45;color:var(--muted)}
-.exerciseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
-.exerciseCard{border:1px solid var(--border);background:#fffaf0;padding:12px;display:grid;gap:10px}
+.exerciseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:12px}
+.exerciseCard{border:1px solid var(--border);background:#fffaf0;padding:12px;display:grid;gap:12px;grid-template-rows:auto auto 1fr auto;min-height:100%}
+.exerciseCard.active{border-color:rgba(24,183,166,.45);box-shadow:0 18px 40px rgba(183,170,146,.16)}
+.exerciseThumb{position:relative;min-height:188px;border:1px solid var(--border);background:
+linear-gradient(145deg, rgba(255,255,255,.72), rgba(233,224,205,.95)),
+radial-gradient(circle at top right, rgba(24,183,166,.14), transparent 44%);
+overflow:hidden}
+.exerciseFrame{width:100%;height:100%;min-height:188px;border:0;background:#e8e0cf}
+.exerciseThumb.placeholder::before,.exerciseThumb.placeholder::after{content:"";position:absolute;border:1px solid rgba(17,24,39,.14)}
+.exerciseThumb.placeholder::before{left:16px;right:16px;bottom:18px;height:42px;background:rgba(255,250,240,.72)}
+.exerciseThumb.placeholder::after{left:22px;top:22px;width:34%;height:62%;border-right:0;border-bottom:0;background:
+linear-gradient(180deg, rgba(24,183,166,.08), transparent)}
+.exerciseThumbArt{position:absolute;inset:0;background:
+linear-gradient(120deg, transparent 0 36%, rgba(17,24,39,.08) 36% 38%, transparent 38% 100%),
+linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent 64% 100%)}
+.playOverlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.playCircle{width:64px;height:64px;border-radius:999px;border:1px solid rgba(24,183,166,.35);background:rgba(255,250,240,.92);display:grid;place-items:center;box-shadow:0 10px 30px rgba(162,150,126,.18)}
+.playTriangle{width:0;height:0;border-top:10px solid transparent;border-bottom:10px solid transparent;border-left:16px solid var(--teal);margin-left:4px}
 .exerciseCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.exerciseCard h5{margin:0;font-size:14px;line-height:1.25}
-.exerciseCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
-.exerciseLevel{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#0c746b;text-transform:uppercase;letter-spacing:.08em}
-.exerciseLink{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border:1px solid var(--border);background:#f8f3e8;color:var(--text);font-weight:800;text-decoration:none}
-.exerciseLink:hover{border-color:#bfb5a1;background:#fff}
+.exerciseCard h5{margin:0;font-size:18px;line-height:1.2;letter-spacing:-.02em}
+.exerciseCard p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+.exerciseLevel{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#0c746b;text-transform:uppercase;letter-spacing:.08em;border:1px solid rgba(24,183,166,.35);background:var(--teal-soft);padding:5px 8px}
+.exerciseMeta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.exerciseMetaCard{border:1px solid var(--border);background:#f8f3e8;padding:10px}
+.exerciseMetaCard small{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.exerciseMetaCard strong{display:block;margin-top:4px;font-size:14px;line-height:1.2;color:var(--text)}
+.exerciseActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.exercisePrimary,.exerciseSecondary{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border:1px solid var(--border);font-weight:800;cursor:pointer;text-decoration:none}
+.exercisePrimary{background:var(--teal);border-color:var(--teal);color:#fff}
+.exerciseSecondary{background:#f8f3e8;color:var(--text)}
+.exercisePrimary:hover,.exerciseSecondary:hover{border-color:#bfb5a1;background:#fff;color:var(--text)}
+.exercisePrimary:hover{background:#14a292;color:#fff;border-color:#14a292}
+.exerciseStatus{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .statusPill{display:inline-flex;align-items:center;border:1px solid rgba(24,183,166,.45);background:var(--teal-soft);color:#0c746b;padding:5px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
 .statusPill.coral{border-color:rgba(255,107,87,.45);background:var(--coral-soft);color:#9b3a2c}
 .resultBars{display:grid;gap:10px}
@@ -1319,6 +1404,8 @@ export default function App() {
   const [reportResult, setReportResult] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [watchedVideos, setWatchedVideos] = useState({});
+  const [selectedVideoId, setSelectedVideoId] = useState(() => EXERCISE_VIDEO_ORDER[0]?.id || "");
 
   const imageInputRef = useRef(null);
   const csvInputRef = useRef(null);
@@ -1327,7 +1414,7 @@ export default function App() {
   const latestSession = sessions[0] || null;
   const previousRom = latestSession?.current_rom ?? null;
   const currentRom = imuResult?.session_summary?.rom_deg ?? null;
-  const imuRehabLevel = getRehabLevelInfo(imuResult?.overall_score);
+  const imuRepetitions = imuResult?.session_summary?.repetitions ?? imuResult?.repetitions ?? 8;
   const totalAnswered = Object.keys(koosAnswers).length;
   const activeStepMeta = STEPS.find((step) => step.id === activeStep) || STEPS[0];
   const stepHeadings = STEP_HEADINGS[activeStep] || [];
@@ -1344,8 +1431,9 @@ export default function App() {
       patient: patientId.trim().length > 0,
       koos: Boolean(koosResult?.koos_total !== undefined),
       kl: Boolean(klResult?.kl_grade !== undefined),
-      imu: Boolean(imuResult?.overall_score !== undefined),
+      imu: Boolean(imuResult?.session_summary?.rom_deg !== undefined),
       report: Boolean(reportResult?.session_id),
+      videos: Boolean(reportResult?.session_id),
     }),
     [patientId, koosResult, klResult, imuResult, reportResult]
   );
@@ -1354,16 +1442,24 @@ export default function App() {
     (activeStep === "koos" && readyState.koos) ||
     (activeStep === "kl" && readyState.kl) ||
     (activeStep === "imu" && readyState.imu) ||
-    (activeStep === "report" && readyState.report);
-  const showGlobalWizardNav = activeStep !== "koos" && !activeStepComplete;
+    (activeStep === "report" && readyState.report) ||
+    (activeStep === "videos" && readyState.videos);
+  const showGlobalWizardNav = !["koos", "videos"].includes(activeStep) && !activeStepComplete;
   const klModelStatus = klResult?.kl_model || health?.kl_model;
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
   const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
   const imuDeltaRom = currentRom !== null && previousRom !== null ? Number((currentRom - previousRom).toFixed(1)) : null;
-  const imuDeltaStatusKey = imuDeltaRom === null ? "unknown" : imuDeltaRom > 0 ? "improving" : imuDeltaRom < 0 ? "reduced" : "stable";
   const reportStatusKey = reportResult?.interpretation || "insufficient_data";
   const finalRehabScore = reportResult?.predicted_delta_KOOS;
-  const reportExercises = Array.isArray(reportResult?.recommended_exercises) ? reportResult.recommended_exercises : [];
+  const exerciseVideos = EXERCISE_VIDEO_ORDER.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    level: item.level,
+    duration: item.duration,
+    targetArea: item.targetArea,
+    embedUrl: item.embedUrl,
+  }));
   const localizedKoosPanelTag =
     t.koosSections[KOOS_PANEL_TAG_KEYS[currentKoosPanel.tag]] || currentKoosPanel.tag || "";
   const localizedKoosPanelNote =
@@ -1588,6 +1684,11 @@ export default function App() {
     setActiveStep("report");
   }
 
+  function continueToVideos() {
+    markComplete("report");
+    setActiveStep("videos");
+  }
+
   function stepCompleteText(step) {
     return t.labels.stepComplete.replace("{step}", step);
   }
@@ -1597,6 +1698,7 @@ export default function App() {
     if (stepId === "koos") return readyState.koos;
     if (stepId === "kl") return readyState.kl;
     if (stepId === "imu") return readyState.imu;
+    if (stepId === "report") return readyState.report;
     return false;
   }
 
@@ -1712,13 +1814,12 @@ export default function App() {
           <div className="topbar">
             <div className="clinicalLine">{t.clinicalLine}</div>
             <div className="topToolbar">
-              <div className="lang" aria-label="Language and backend controls">
+              <div className="lang" aria-label="Language switcher">
                 {["en", "ru", "kz"].map((code) => (
                   <button key={code} className={lang === code ? "active" : ""} onClick={() => setLang(code)}>
                     {code.toUpperCase()}
                   </button>
                 ))}
-                <button onClick={fetchHealth} disabled={healthLoading}>{healthLoading ? t.buttons.refreshing : t.buttons.refresh}</button>
               </div>
             </div>
           </div>
@@ -2032,30 +2133,29 @@ export default function App() {
                           <div className="resultKicker">{stepCompleteText(4)}</div>
                           <h4>{t.completion.imuTitle}</h4>
                           <p>{t.completion.imuText}</p>
-                          <div className="chips">
-                            <div className={`statusPill ${imuDeltaStatusKey === "reduced" ? "coral" : ""}`}>{t.movementStatus[imuDeltaStatusKey]}</div>
-                            <span className="chip teal">{t.labels.rehabLevel} {imuRehabLevel.label}</span>
-                          </div>
                         </div>
-                        <div className="resultValue">{f(imuResult.overall_score)}<span>{t.labels.rehabScore}</span></div>
+                        <div className="resultValue">{f(currentRom, "°")}<span>{t.labels.rangeOfMotion}</span></div>
                       </div>
                       <div className="explainList">
                         <div className="explainItem">{t.explanations.imuRomFormula}</div>
                         <div className="explainItem">{t.explanations.deltaRomExplanation}</div>
                         <div className="explainItem">{t.explanations.imuSmoothness}</div>
-                        <div className="explainItem">{t.explanations.imuScoreFormula}</div>
                       </div>
                       <div className="formulaBox">ROM = max angle - min angle</div>
                       <div className="metrics wideMetrics">
-                        <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(currentRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
+                        <div className="metric"><small>{t.labels.sensorPlacement}</small><strong style={{ fontSize: 18 }}>{t.sensorLocations[sensorLocation] || sensorLocation}</strong></div>
+                        <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
+                        <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
                         <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(imuDeltaRom, "°")}</strong></div>
-                        <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{imuRehabLevel.label}</strong></div>
-                        <div className="metric"><small>{t.labels.movementResult}</small><strong style={{ fontSize: 18 }}>{movementResult}</strong></div>
                         <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
                       </div>
                       <div className="resultActions">
                         <button className="btn primary" onClick={continueToReport}>{t.buttons.continueToReport}</button>
+                        <button className="btn" onClick={analyzeImu} disabled={!imuFile || imuLoading}>{t.buttons.rerunImu}</button>
+                        <button className="btn" onClick={clearImuFile}>{t.buttons.editImuData}</button>
                       </div>
                     </div>
                   ) : null}
@@ -2100,6 +2200,7 @@ export default function App() {
                     </div>
                     <div className="resultActions">
                       <span className="chip teal">{t.completion.sessionSaved}</span>
+                      <button className="btn primary" onClick={continueToVideos}>{t.buttons.continueToVideos}</button>
                     </div>
                   </div>
 
@@ -2168,22 +2269,6 @@ export default function App() {
                         <p>{t.explanations.imuScoreFormula}</p>
                       </div>
                     </div>
-                    {reportExercises.length > 0 ? (
-                      <div className="exerciseGrid">
-                        {reportExercises.map((item) => (
-                          <div className="exerciseCard" key={`${item.level}-${item.name}`}>
-                            <div className="exerciseCardTop">
-                              <h5>{item.name}</h5>
-                              <span className="exerciseLevel">{item.level}</span>
-                            </div>
-                            <p>{item.description}</p>
-                            <a className="exerciseLink" href={item.youtube_url} target="_blank" rel="noreferrer">{t.report.watchVideo}</a>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="microNote">{t.report.noExercises}</p>
-                    )}
                     <div className="microNote">{t.report.exerciseSafetyNote}</div>
                   </div>
                   <div className="reportBlock" id="report-session">
@@ -2209,6 +2294,85 @@ export default function App() {
                   </div>
                 </div>
               ) : null}
+            </section>
+          ) : null}
+
+          {activeStep === "videos" ? (
+            <section className="panel" id="videos-overview">
+              <div className="sectionBody">
+                <div className="resultHero">
+                  <div className="resultHeroTop">
+                    <div>
+                      <div className="resultKicker">{stepCompleteText(6)}</div>
+                      <h4>{t.completion.videosTitle}</h4>
+                      <p>{t.completion.videosText}</p>
+                    </div>
+                    <div className="resultValue">{exerciseVideos.length}<span>{t.steps.videos}</span></div>
+                  </div>
+                </div>
+
+                <div className="reportBlock" id="videos-library">
+                  <h4>{t.reportSections.exerciseVideos}</h4>
+                  {exerciseVideos.length > 0 ? (
+                    <div className="exerciseGrid">
+                      {exerciseVideos.map((item) => (
+                        <article className={`exerciseCard ${selectedVideoId === item.id ? "active" : ""}`} key={item.id}>
+                          <div className={`exerciseThumb ${item.embedUrl ? "" : "placeholder"}`}>
+                            {item.embedUrl ? (
+                              <iframe
+                                className="exerciseFrame"
+                                src={item.embedUrl}
+                                title={`${item.title} video`}
+                                loading="lazy"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                allowFullScreen
+                              />
+                            ) : (
+                              <>
+                                <div className="exerciseThumbArt" />
+                                <div className="playOverlay">
+                                  <div className="playCircle">
+                                    <div className="playTriangle" />
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <div className="exerciseCardTop">
+                            <h5>{item.title}</h5>
+                            <span className="exerciseLevel">{item.level}</span>
+                          </div>
+                          <p>{item.description}</p>
+                          <div className="exerciseMeta">
+                            <div className="exerciseMetaCard">
+                              <small>{t.labels.duration}</small>
+                              <strong>{item.duration}</strong>
+                            </div>
+                            <div className="exerciseMetaCard">
+                              <small>{t.labels.targetArea}</small>
+                              <strong>{item.targetArea}</strong>
+                            </div>
+                          </div>
+                          <div className="exerciseActions">
+                            <button className="exercisePrimary" onClick={() => setSelectedVideoId(item.id)}>
+                              {t.buttons.watchVideo}
+                            </button>
+                            <button className="exerciseSecondary" onClick={() => setWatchedVideos((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}>
+                              {watchedVideos[item.id] ? t.buttons.markWatched : t.buttons.assignVideo}
+                            </button>
+                            <span className="exerciseStatus">
+                              {selectedVideoId === item.id ? t.buttons.watchVideo : watchedVideos[item.id] ? t.buttons.markWatched : t.buttons.assignVideo}
+                            </span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="microNote">{t.messages.noVideos}</p>
+                  )}
+                </div>
+              </div>
             </section>
           ) : null}
 

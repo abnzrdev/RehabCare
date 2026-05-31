@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY api/requirements.txt /tmp/requirements.txt
+
+# Install CPU-only ML packages first.
+# This avoids huge NVIDIA/CUDA downloads inside Docker.
+RUN python -m pip install --upgrade pip \
+  && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision \
+  && pip install --no-cache-dir "tensorflow-cpu>=2.12.0" \
+  && grep -vE "^(torch|torchvision|tensorflow)" /tmp/requirements.txt > /tmp/requirements.cpu.txt \
+  && pip install --no-cache-dir -r /tmp/requirements.cpu.txt
+
+COPY . /app
+
+EXPOSE 8000

@@ -4,38 +4,31 @@ set -e
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-echo "🚀 Starting OrthoScan AI..."
-
-if [ ! -d ".venv" ]; then
-  python3 -m venv .venv
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE="docker compose"
+else
+  COMPOSE="docker-compose"
 fi
 
-source .venv/bin/activate
-
-echo "📦 Installing backend requirements..."
-python -m pip install -r api/requirements.txt
-
-echo "🧠 Starting FastAPI backend on http://localhost:8000 ..."
-python -m uvicorn api.main:app --reload --port 8000 &
-BACKEND_PID=$!
-
-echo "📦 Checking frontend requirements..."
-cd frontend
-if [ ! -x "node_modules/.bin/vite" ]; then
-  echo "Frontend dependencies missing or broken. Reinstalling..."
-  rm -rf node_modules
-  npm install
-fi
-
-echo "🌐 Starting frontend..."
-npm run dev &
-FRONTEND_PID=$!
-
-echo
-echo "===== ORTHOSCAN AI RUNNING ====="
-echo "Backend:  http://localhost:8000"
-echo "Frontend: usually http://localhost:5173"
-echo "Press Ctrl+C to stop both."
-
-trap "echo 'Stopping...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true" EXIT
-wait
+case "${1:-up}" in
+  up)
+    echo "🐳 Starting OrthoScan AI with Docker..."
+    $COMPOSE -f docker-compose.dev.yml up --build
+    ;;
+  down)
+    echo "🛑 Stopping OrthoScan AI..."
+    $COMPOSE -f docker-compose.dev.yml down
+    ;;
+  logs)
+    $COMPOSE -f docker-compose.dev.yml logs -f
+    ;;
+  rebuild)
+    echo "♻️ Rebuilding OrthoScan AI..."
+    $COMPOSE -f docker-compose.dev.yml down
+    $COMPOSE -f docker-compose.dev.yml up --build
+    ;;
+  *)
+    echo "Usage: ./start.sh [up|down|logs|rebuild]"
+    exit 1
+    ;;
+esac

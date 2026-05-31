@@ -37,3 +37,7 @@ backups/
 rehab_platform/data/
 AGENTS.md
 .git.backup.*/
+.gitignore.backup.*
+AGENTS.md.backup.*
+start.sh.backup.*
+*.db
