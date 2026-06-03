@@ -13,10 +13,13 @@ function jsonResponse(payload) {
 }
 
 describe("clinical wizard patient and KOOS flow", () => {
+  let rehabReportScore;
+
   beforeEach(() => {
     cleanup();
     window.localStorage.clear();
     vi.restoreAllMocks();
+    rehabReportScore = 8.2;
     vi.stubGlobal("URL", {
       ...URL,
       createObjectURL: vi.fn(() => "blob:mock-image"),
@@ -68,8 +71,8 @@ describe("clinical wizard patient and KOOS flow", () => {
         if (url.includes("/api/rehab/report")) {
           return jsonResponse({
             session_id: "session-123",
-            predicted_delta_KOOS: 8.2,
-            rehab_level_label: "Level 2",
+            predicted_delta_KOOS: rehabReportScore,
+            rehab_level_label: `Level ${Math.min(5, Math.max(1, Math.ceil(Math.max(0, rehabReportScore) / 20)))}`,
             KOOS_pre: 72.4,
             delta_ROM: 12,
             current_ROM: 94,
@@ -83,32 +86,7 @@ describe("clinical wizard patient and KOOS flow", () => {
             beta2: 3,
             beta3_KL: 4,
             created_at: "2026-05-31T10:00:00Z",
-            recommended_exercises: [
-              {
-                level: "Level 4",
-                name: "Step-Ups",
-                description: "Step onto a low platform with slow control through the knee and hip.",
-                duration: "4 min",
-                target_area: "Knee strength",
-                youtube_url: "https://www.youtube-nocookie.com/embed/BHUu__ZSFEk?rel=0",
-              },
-              {
-                level: "Level 4",
-                name: "Lunges",
-                description: "Practice split-stance lowering with attention to knee tracking and balance.",
-                duration: "6 min",
-                target_area: "Knee control",
-                youtube_url: "https://www.youtube-nocookie.com/embed/bo_99bo4q3c?rel=0",
-              },
-              {
-                level: "Level 4",
-                name: "Single-Leg Balance",
-                description: "Stand on one leg to improve balance, hip control, and proprioception.",
-                duration: "5 min",
-                target_area: "Balance",
-                youtube_url: "https://www.youtube-nocookie.com/embed/8cp5gTaXqhk?rel=0",
-              },
-            ],
+            recommended_exercises: [],
           });
         }
 
@@ -212,30 +190,35 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(await screen.findByText(/step 6 of 6 complete/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /exercise videos/i })).toBeInTheDocument();
     expect(screen.getByText(/review the prescribed exercise video library after the final rehabilitation report/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/^3$/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^2$/).length).toBeGreaterThan(0);
     expect(screen.getByText(/exercise videos ready/i)).toBeInTheDocument();
     expect(screen.getByText(/exercise guidance is available for the current rehabilitation level/i)).toBeInTheDocument();
+    expect(screen.getByText(/level 1 exercise plan/i)).toBeInTheDocument();
+    expect(screen.getByText(/based on final rehab score: 8.2/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/these exercises are guidance only\. a clinician should confirm the final exercise plan/i),
+    ).toBeInTheDocument();
 
-    expect(screen.getByText("Step-Ups")).toBeInTheDocument();
-    expect(screen.getByText("Lunges")).toBeInTheDocument();
-    expect(screen.getByText("Single-Leg Balance")).toBeInTheDocument();
-    expect(screen.getAllByText(/level 4/i)).toHaveLength(3);
+    expect(screen.getByText("Quad Sets")).toBeInTheDocument();
+    expect(screen.getByText("Heel Slides")).toBeInTheDocument();
+    expect(screen.getAllByText(/^Level 1$/i)).toHaveLength(2);
+    expect(screen.queryByText("Step Ups")).not.toBeInTheDocument();
     expect(screen.getByText("4 min")).toBeInTheDocument();
-    expect(screen.getByText("6 min")).toBeInTheDocument();
-    expect(screen.getByText("5 min")).toBeInTheDocument();
-    expect(screen.getByText("Knee strength")).toBeInTheDocument();
-    expect(screen.getByText("Knee control")).toBeInTheDocument();
-    expect(screen.getByText("Balance")).toBeInTheDocument();
-    expect(screen.getAllByTitle(/Step-Ups video/i)).toHaveLength(1);
-    expect(screen.getAllByTitle(/Lunges video/i)).toHaveLength(1);
-    expect(screen.getAllByTitle(/Single-Leg Balance video/i)).toHaveLength(1);
-    expect(container.querySelectorAll("iframe")).toHaveLength(3);
-    expect(screen.getByTitle(/Step-Ups video/i)).toHaveAttribute(
+    expect(screen.getByText("3 min")).toBeInTheDocument();
+    expect(screen.getByText("Knee ROM")).toBeInTheDocument();
+    expect(screen.getByText("Quad activation")).toBeInTheDocument();
+    expect(container.querySelectorAll("iframe")).toHaveLength(0);
+
+    await user.click(screen.getAllByRole("button", { name: /watch video/i })[0]);
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByTitle("Quad Sets")).toHaveAttribute(
       "src",
       expect.stringContaining("youtube-nocookie.com/embed/"),
     );
-    expect(screen.getAllByRole("button", { name: /watch video/i })).toHaveLength(3);
-    expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: /open on youtube/i }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders backend interpretation and delta note in the final report", async () => {
@@ -287,5 +270,55 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(
       screen.getByText("ROM improved by 12° compared with the previous session."),
     ).toBeInTheDocument();
+  });
+
+  it("shows three advanced videos when the final rehab score maps to level 5", async () => {
+    rehabReportScore = 88;
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
+    await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
+    await screen.findByText(/panel 1 of 14/i);
+
+    for (let panelIndex = 0; panelIndex < 14; panelIndex += 1) {
+      const visibleRadios = screen.getAllByRole("radio");
+      const firstRadioPerQuestion = visibleRadios.filter((radio, index, radios) => {
+        return radios.findIndex((candidate) => candidate.name === radio.name) === index;
+      });
+
+      for (const radio of firstRadioPerQuestion) {
+        await user.click(radio);
+      }
+
+      if (panelIndex === 13) {
+        await user.click(screen.getByRole("button", { name: /calculate KOOS/i }));
+      } else {
+        await user.click(screen.getByRole("button", { name: /next questions/i }));
+      }
+    }
+
+    await user.click(await screen.findByRole("button", { name: /continue to KL image grading/i }));
+
+    const imageInput = container.querySelector('input[type="file"][accept*="image/png"]');
+    expect(imageInput).not.toBeNull();
+    await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to IMU/i }));
+
+    const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
+    expect(imuInput).not.toBeNull();
+    await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to final rehab report/i }));
+    await user.click(screen.getByRole("button", { name: /generate report/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to exercise videos/i }));
+
+    expect(await screen.findByText(/level 5 exercise plan/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^3$/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Step Up Variations")).toBeInTheDocument();
+    expect(screen.getByText("Lateral Step-Up")).toBeInTheDocument();
+    expect(screen.getByText("Physio Lunge")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(3);
   });
 });

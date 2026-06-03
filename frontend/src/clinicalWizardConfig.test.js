@@ -3,7 +3,10 @@ import {
   buildKoosPanels,
   EXERCISE_VIDEO_ORDER,
   KOOS_CATEGORY_RANGES,
+  REHAB_EXERCISE_VIDEOS,
+  getExerciseVideosForScore,
   getPanelCategoryMeta,
+  getRehabLevel,
   getSelectedVideo,
 } from "./clinicalWizardConfig";
 
@@ -64,35 +67,62 @@ describe("getSelectedVideo", () => {
     expect(getSelectedVideo(undefined, EXERCISE_VIDEO_ORDER[0].id)).toBeNull();
   });
 
-  it("uses the approved redesign sample video data", () => {
-    expect(EXERCISE_VIDEO_ORDER).toEqual([
+  it("keeps the seeded rehab exercise dataset", () => {
+    expect(REHAB_EXERCISE_VIDEOS.slice(0, 2)).toEqual([
       {
-        id: "step-ups",
-        title: "Step-Ups",
-        description: "Step onto a low platform with slow control through the knee and hip.",
-        level: "Level 4",
+        id: "quad-sets",
+        level: 1,
+        title: "Quad Sets",
+        youtubeId: "5TUK4uT2nnw",
+        youtubeUrl: "https://www.youtube.com/watch?v=5TUK4uT2nnw",
+        duration: "3 min",
+        targetArea: "Quad activation",
+        description: "Very easy knee activation exercise for early rehab.",
+      },
+      {
+        id: "heel-slides",
+        level: 1,
+        title: "Heel Slides",
+        youtubeId: "Bz0wSFRjH2c",
+        youtubeUrl: "https://www.youtube.com/watch?v=Bz0wSFRjH2c",
         duration: "4 min",
-        targetArea: "Knee strength",
-        embedUrl: "https://www.youtube-nocookie.com/embed/BHUu__ZSFEk?rel=0",
-      },
-      {
-        id: "lunges",
-        title: "Lunges",
-        description: "Practice split-stance lowering with attention to knee tracking and balance.",
-        level: "Level 4",
-        duration: "6 min",
-        targetArea: "Knee control",
-        embedUrl: "https://www.youtube-nocookie.com/embed/bo_99bo4q3c?rel=0",
-      },
-      {
-        id: "single-leg-balance",
-        title: "Single-Leg Balance",
-        description: "Stand on one leg to improve balance, hip control, and proprioception.",
-        level: "Level 4",
-        duration: "5 min",
-        targetArea: "Balance",
-        embedUrl: "https://www.youtube-nocookie.com/embed/8cp5gTaXqhk?rel=0",
+        targetArea: "Knee ROM",
+        description: "Gentle movement to improve knee bending range.",
       },
     ]);
+    expect(EXERCISE_VIDEO_ORDER).toBe(REHAB_EXERCISE_VIDEOS);
+  });
+});
+
+describe("rehab video helpers", () => {
+  it("maps scores into the expected five rehab levels", () => {
+    expect(getRehabLevel(Number.NaN)).toBe(1);
+    expect(getRehabLevel(0)).toBe(1);
+    expect(getRehabLevel(20)).toBe(1);
+    expect(getRehabLevel(21)).toBe(2);
+    expect(getRehabLevel(40)).toBe(2);
+    expect(getRehabLevel(41)).toBe(3);
+    expect(getRehabLevel(60)).toBe(3);
+    expect(getRehabLevel(61)).toBe(4);
+    expect(getRehabLevel(80)).toBe(4);
+    expect(getRehabLevel(81)).toBe(5);
+    expect(getRehabLevel(140)).toBe(5);
+  });
+
+  it("returns the correct number of videos for each rehab level", () => {
+    expect(getExerciseVideosForScore(10)).toHaveLength(2);
+    expect(getExerciseVideosForScore(35)).toHaveLength(2);
+    expect(getExerciseVideosForScore(58)).toHaveLength(2);
+    expect(getExerciseVideosForScore(79)).toHaveLength(2);
+    expect(getExerciseVideosForScore(95)).toHaveLength(3);
+  });
+
+  it("builds the privacy-friendly embed URLs for modal playback", () => {
+    expect(getExerciseVideosForScore(79)[0].embedUrl).toContain(
+      "https://www.youtube-nocookie.com/embed/",
+    );
+    expect(getExerciseVideosForScore(79)[0].embedUrl).toContain(
+      "?rel=0&modestbranding=1",
+    );
   });
 });
