@@ -6,6 +6,9 @@ export const KOOS_CATEGORY_RANGES = [
   { key: "qol", tag: "Quality of life", start: 39, end: 42 },
 ];
 
+export const RAW_SCORE_MAPPING_LOW = 20.6;
+export const RAW_SCORE_MAPPING_HIGH = 140.55;
+
 export const REHAB_EXERCISE_VIDEOS = [
   {
     id: "quad-sets",
@@ -121,10 +124,42 @@ export const REHAB_EXERCISE_VIDEOS = [
 
 export const EXERCISE_VIDEO_ORDER = REHAB_EXERCISE_VIDEOS;
 
+export function clampScore(value) {
+  if (!Number.isFinite(value)) return null;
+  return Math.min(100, Math.max(0, value));
+}
+
+export function mapRawRehabScoreTo100(rawScore) {
+  if (!Number.isFinite(rawScore)) return null;
+  const mapped =
+    (100 * (RAW_SCORE_MAPPING_HIGH - rawScore)) /
+    (RAW_SCORE_MAPPING_HIGH - RAW_SCORE_MAPPING_LOW);
+  return clampScore(Number(mapped.toFixed(2)));
+}
+
+export function rehabLevelFromScore(score) {
+  const normalized = clampScore(score);
+  if (!Number.isFinite(normalized)) return 1;
+  if (normalized <= 20) return 1;
+  if (normalized <= 40) return 2;
+  if (normalized <= 60) return 3;
+  if (normalized <= 80) return 4;
+  return 5;
+}
+
+export function rehabMeaningFromScore(score) {
+  const level = rehabLevelFromScore(score);
+  return {
+    1: "weak / high rehab need / easiest exercise plan",
+    2: "below average / needs careful rehab",
+    3: "moderate",
+    4: "good progress",
+    5: "strong / lower rehab gap / harder exercise plan",
+  }[level];
+}
+
 export function getRehabLevel(finalRehabScore) {
-  if (!Number.isFinite(finalRehabScore)) return 1;
-  const level = Math.ceil(Math.max(0, finalRehabScore) / 20);
-  return Math.min(5, Math.max(1, level));
+  return rehabLevelFromScore(finalRehabScore);
 }
 
 export function getExerciseVideosForScore(finalRehabScore) {

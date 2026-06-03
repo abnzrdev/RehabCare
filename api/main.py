@@ -51,9 +51,11 @@ from core.kl_grade import (  # noqa: E402
     load_kl_model,
 )
 from core.rehab_levels import (  # noqa: E402
+    RAW_SCORE_MAPPING_HIGH,
+    RAW_SCORE_MAPPING_LOW,
     build_rehab_level_payload,
-    get_exercises_for_level,
-    get_rehab_level,
+    map_raw_rehab_score_to_100,
+    rehab_meaning_from_score,
 )
 from core.storage import (
     SessionRecord,
@@ -433,7 +435,7 @@ PREDICTED_DELTA_COEFFS = {
     "beta2": -0.785,
     "beta3_by_KL": KL_GRADE_BETA3,
 }
-PREDICTED_DELTA_FORMULA_TEXT = "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL"
+PREDICTED_DELTA_FORMULA_TEXT = "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL"
 
 
 class RehabReportInput(BaseModel):
@@ -526,25 +528,27 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
     delta_rom_signed = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
     delta_rom_abs = None if delta_rom_signed is None else round(abs(delta_rom_signed), 2)
     delta_rom_used_in_score = delta_rom_signed
-    rehab_score = payload.rehab_score
-    if rehab_score is None and isinstance(payload.imu_result, dict):
-        rehab_score = payload.imu_result.get("overall_score")
-    rehab_score = float(rehab_score) if rehab_score is not None else None
-    rehab_level_payload = build_rehab_level_payload(rehab_score)
+    imu_rehab_score = payload.rehab_score
+    if imu_rehab_score is None and isinstance(payload.imu_result, dict):
+        imu_rehab_score = payload.imu_result.get("overall_score")
+    imu_rehab_score = float(imu_rehab_score) if imu_rehab_score is not None else None
 
     beta0 = PREDICTED_DELTA_COEFFS["beta0"]
     beta1 = PREDICTED_DELTA_COEFFS["beta1"]
     beta2 = PREDICTED_DELTA_COEFFS["beta2"]
     beta3_kl = KL_GRADE_BETA3.get(payload.kl_grade) if payload.kl_grade is not None else None
-    predicted_delta_koos = None
+    raw_score = None
+    final_rehab_score = None
     if payload.koos_pre is not None and delta_rom_used_in_score is not None and beta3_kl is not None:
-        predicted_delta_koos = round(beta0 + beta1 * payload.koos_pre + beta2 * delta_rom_used_in_score + beta3_kl, 3)
+        raw_score = round(beta0 + beta1 * payload.koos_pre + beta2 * delta_rom_used_in_score + beta3_kl, 3)
+        final_rehab_score = map_raw_rehab_score_to_100(raw_score)
+    rehab_level_payload = build_rehab_level_payload(final_rehab_score)
 
     interpretation = "insufficient_data"
-    if rehab_score is not None and delta_rom_signed is not None:
-        if rehab_score >= 75 and delta_rom_signed > 0:
+    if final_rehab_score is not None and delta_rom_signed is not None:
+        if final_rehab_score >= 61 and delta_rom_signed > 0 and (payload.koos_pre or 0) >= 55:
             interpretation = "improving"
-        elif rehab_score < 50 or delta_rom_signed < 0:
+        elif final_rehab_score <= 40 or delta_rom_signed < 0 or (payload.kl_grade or 0) >= 3:
             interpretation = "needs_attention"
         else:
             interpretation = "stable"
@@ -572,11 +576,33 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
             current_rom=current_rom,
             previous_rom=previous_rom,
             delta_rom=delta_rom_signed,
-            rehab_score=rehab_score,
+            rehab_score=final_rehab_score,
             image_result=payload.image_result,
             imu_result=payload.imu_result,
         )
     )
+
+    simple_meaning = None
+    if final_rehab_score is not None:
+        meaning_label = rehab_meaning_from_score(final_rehab_score)
+        if interpretation == "improving":
+            simple_meaning = (
+                f"This patient is improving: KOOS_pre {payload.koos_pre:.2f}, "
+                f"Delta ROM {delta_rom_signed:.2f}°, KL grade {payload.kl_grade}, "
+                f"mapped score {final_rehab_score:.2f}/100 ({meaning_label})."
+            )
+        elif interpretation == "stable":
+            simple_meaning = (
+                f"This patient is stable: KOOS_pre {payload.koos_pre:.2f}, "
+                f"Delta ROM {delta_rom_signed:.2f}°, KL grade {payload.kl_grade}, "
+                f"mapped score {final_rehab_score:.2f}/100 ({meaning_label})."
+            )
+        elif interpretation == "needs_attention":
+            simple_meaning = (
+                f"This patient needs attention: KOOS_pre {payload.koos_pre:.2f}, "
+                f"Delta ROM {delta_rom_signed:.2f}°, KL grade {payload.kl_grade}, "
+                f"mapped score {final_rehab_score:.2f}/100 ({meaning_label})."
+            )
 
     return {
         "patient_id": payload.patient_id,
@@ -601,19 +627,27 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
                 "Absolute Delta ROM = abs(current ROM - previous ROM)",
             ],
         },
-        "rehab_score": rehab_score,
+        "rehab_score": imu_rehab_score,
         "rehab_level": rehab_level_payload["rehab_level"],
         "rehab_level_label": rehab_level_payload["rehab_level_label"],
+        "rehab_level_meaning": rehab_level_payload["rehab_level_meaning"],
         "KOOS_pre": payload.koos_pre,
         "KL_grade": payload.kl_grade,
         "beta0": beta0,
         "beta1": beta1,
         "beta2": beta2,
         "beta3_KL": beta3_kl,
-        "predicted_delta_KOOS": predicted_delta_koos,
+        "raw_score": raw_score,
+        "predicted_delta_KOOS": raw_score,
+        "final_rehab_score": final_rehab_score,
         "formula_coefficients": PREDICTED_DELTA_COEFFS,
         "formula_text": PREDICTED_DELTA_FORMULA_TEXT,
+        "raw_score_mapping_low": RAW_SCORE_MAPPING_LOW,
+        "raw_score_mapping_high": RAW_SCORE_MAPPING_HIGH,
+        "mapped_score_formula": "final_rehab_score = 100 * (raw_high - raw_score) / (raw_high - raw_low)",
+        "mapped_score_clamp_formula": "final_rehab_score = clamp(final_rehab_score, 0, 100)",
         "interpretation": interpretation,
+        "score_meaning": simple_meaning,
         "recommendations": recommendations,
         "recommended_exercises": rehab_level_payload["recommended_exercises"],
         "delta_note": delta_note,

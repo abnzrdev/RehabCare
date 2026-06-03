@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampScore,
   buildKoosPanels,
   EXERCISE_VIDEO_ORDER,
   KOOS_CATEGORY_RANGES,
@@ -7,6 +8,9 @@ import {
   getExerciseVideosForScore,
   getPanelCategoryMeta,
   getRehabLevel,
+  mapRawRehabScoreTo100,
+  rehabLevelFromScore,
+  rehabMeaningFromScore,
   getSelectedVideo,
 } from "./clinicalWizardConfig";
 
@@ -95,9 +99,17 @@ describe("getSelectedVideo", () => {
 });
 
 describe("rehab video helpers", () => {
+  it("maps raw rehab scores into the calibrated 0-100 range", () => {
+    expect(mapRawRehabScoreTo100(140.55)).toBe(0);
+    expect(mapRawRehabScoreTo100(20.6)).toBe(100);
+    expect(mapRawRehabScoreTo100(80.575)).toBe(50);
+    expect(clampScore(-10)).toBe(0);
+    expect(clampScore(120)).toBe(100);
+  });
+
   it("maps scores into the expected five rehab levels", () => {
     expect(getRehabLevel(Number.NaN)).toBe(1);
-    expect(getRehabLevel(0)).toBe(1);
+    expect(rehabLevelFromScore(0)).toBe(1);
     expect(getRehabLevel(20)).toBe(1);
     expect(getRehabLevel(21)).toBe(2);
     expect(getRehabLevel(40)).toBe(2);
@@ -107,6 +119,7 @@ describe("rehab video helpers", () => {
     expect(getRehabLevel(80)).toBe(4);
     expect(getRehabLevel(81)).toBe(5);
     expect(getRehabLevel(140)).toBe(5);
+    expect(rehabMeaningFromScore(95)).toMatch(/strong/i);
   });
 
   it("returns the correct number of videos for each rehab level", () => {

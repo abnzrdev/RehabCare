@@ -2,6 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+RAW_SCORE_MAPPING_LOW = 20.60
+RAW_SCORE_MAPPING_HIGH = 140.55
+
+LEVEL_INTERPRETATIONS: dict[int, str] = {
+    1: "weak / high rehab need / easiest exercise plan",
+    2: "below average / needs careful rehab",
+    3: "moderate",
+    4: "good progress",
+    5: "strong / lower rehab gap / harder exercise plan",
+}
+
 LEVEL_EXERCISES: dict[int, list[dict[str, str]]] = {
     1: [
         {
@@ -91,22 +102,53 @@ LEVEL_EXERCISES: dict[int, list[dict[str, str]]] = {
 }
 
 
-def get_rehab_level(score: float | int | None) -> dict[str, Any]:
-    if score is None:
-        return {"level": None, "label": None}
+def clamp_score(value: float | int | None) -> float | None:
+    if value is None:
+        return None
+    return max(0.0, min(100.0, float(value)))
 
-    value = max(0.0, min(100.0, float(score)))
+
+def map_raw_rehab_score_to_100(raw_score: float | int | None) -> float | None:
+    if raw_score is None:
+        return None
+
+    mapped = 100.0 * (RAW_SCORE_MAPPING_HIGH - float(raw_score)) / (
+        RAW_SCORE_MAPPING_HIGH - RAW_SCORE_MAPPING_LOW
+    )
+    return round(clamp_score(mapped), 2)
+
+
+def rehab_level_from_score(score: float | int | None) -> int | None:
+    value = clamp_score(score)
+    if value is None:
+        return None
     if value <= 20:
-        level = 1
-    elif value <= 40:
-        level = 2
-    elif value <= 60:
-        level = 3
-    elif value <= 80:
-        level = 4
-    else:
-        level = 5
-    return {"level": level, "label": f"Level {level}"}
+        return 1
+    if value <= 40:
+        return 2
+    if value <= 60:
+        return 3
+    if value <= 80:
+        return 4
+    return 5
+
+
+def rehab_meaning_from_score(score: float | int | None) -> str | None:
+    level = rehab_level_from_score(score)
+    if level is None:
+        return None
+    return LEVEL_INTERPRETATIONS[level]
+
+
+def get_rehab_level(score: float | int | None) -> dict[str, Any]:
+    level = rehab_level_from_score(score)
+    if level is None:
+        return {"level": None, "label": None, "meaning": None}
+    return {
+        "level": level,
+        "label": f"Level {level}",
+        "meaning": rehab_meaning_from_score(score),
+    }
 
 
 def get_exercises_for_level(level: int | None) -> list[dict[str, str]]:
@@ -120,7 +162,9 @@ def build_rehab_level_payload(score: float | int | None) -> dict[str, Any]:
     info = get_rehab_level(score)
     level = info["level"]
     return {
+        "final_rehab_score": clamp_score(score),
         "rehab_level": level,
         "rehab_level_label": info["label"],
+        "rehab_level_meaning": info["meaning"],
         "recommended_exercises": get_exercises_for_level(level),
     }

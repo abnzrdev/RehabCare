@@ -69,22 +69,29 @@ describe("clinical wizard patient and KOOS flow", () => {
         }
 
         if (url.includes("/api/rehab/report")) {
+          const rawScore = 140.55 - ((rehabReportScore / 100) * (140.55 - 20.6));
           return jsonResponse({
             session_id: "session-123",
-            predicted_delta_KOOS: rehabReportScore,
+            raw_score: Number(rawScore.toFixed(3)),
+            predicted_delta_KOOS: Number(rawScore.toFixed(3)),
+            final_rehab_score: rehabReportScore,
             rehab_level_label: `Level ${Math.min(5, Math.max(1, Math.ceil(Math.max(0, rehabReportScore) / 20)))}`,
+            rehab_level_meaning: rehabReportScore > 80 ? "strong / lower rehab gap / harder exercise plan" : "weak / high rehab need / easiest exercise plan",
             KOOS_pre: 72.4,
             delta_ROM: 12,
             current_ROM: 94,
             rehab_score: 0.78,
             KL_grade: 2,
             interpretation: "Functional progress is improving with current rehab tolerance.",
+            score_meaning: "This patient is improving based on KOOS, Delta ROM, KL grade, and the mapped rehab score.",
             delta_note: "ROM improved by 12° compared with the previous session.",
             recommendations: [],
             beta0: 1,
             beta1: 2,
             beta2: 3,
             beta3_KL: 4,
+            raw_score_mapping_low: 20.6,
+            raw_score_mapping_high: 140.55,
             created_at: "2026-05-31T10:00:00Z",
             recommended_exercises: [],
           });

@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildKoosPanels,
+  clampScore,
   getExerciseVideosForScore,
-  getRehabLevel,
+  mapRawRehabScoreTo100,
+  rehabLevelFromScore,
+  rehabMeaningFromScore,
+  RAW_SCORE_MAPPING_HIGH,
+  RAW_SCORE_MAPPING_LOW,
   getSelectedVideo,
 } from "./clinicalWizardConfig";
 import FormulaBreakdown from "./components/FormulaBreakdown";
@@ -1532,8 +1537,9 @@ export default function App() {
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
   const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
   const reportStatusKey = reportResult?.interpretation || "insufficient_data";
-  const finalRehabScore = reportResult?.predicted_delta_KOOS;
-  const rehabLevel = getRehabLevel(finalRehabScore);
+  const rawFormulaScore = reportResult?.raw_score ?? reportResult?.predicted_delta_KOOS;
+  const finalRehabScore = reportResult?.final_rehab_score ?? mapRawRehabScoreTo100(Number(rawFormulaScore));
+  const rehabLevel = rehabLevelFromScore(finalRehabScore);
   const exerciseVideos = useMemo(() => getExerciseVideosForScore(finalRehabScore), [finalRehabScore]);
   const selectedVideo = getSelectedVideo(exerciseVideos, selectedVideoId);
   const localizedKoosPanelTag =
@@ -1671,11 +1677,18 @@ export default function App() {
     const deltaRom = Number(reportResult.delta_rom_used_in_score_deg ?? reportResult.delta_ROM);
     const beta2Term = roundCalc(Number(reportResult.beta2) * deltaRom, 3);
     const beta3 = Number(reportResult.beta3_KL);
-    const predicted = Number(reportResult.predicted_delta_KOOS);
-    if (!Number.isFinite(koosPre) || !Number.isFinite(deltaRom) || !Number.isFinite(beta3) || !Number.isFinite(predicted)) {
+    const rawScore = Number(reportResult.raw_score ?? reportResult.predicted_delta_KOOS);
+    const mappedScore =
+      Number(reportResult.final_rehab_score ?? mapRawRehabScoreTo100(rawScore));
+    const mappedLevel = rehabLevelFromScore(mappedScore);
+    const mappedMeaning =
+      reportResult.rehab_level_meaning || rehabMeaningFromScore(mappedScore);
+    const rawLow = Number(reportResult.raw_score_mapping_low ?? RAW_SCORE_MAPPING_LOW);
+    const rawHigh = Number(reportResult.raw_score_mapping_high ?? RAW_SCORE_MAPPING_HIGH);
+    if (!Number.isFinite(koosPre) || !Number.isFinite(deltaRom) || !Number.isFinite(beta3) || !Number.isFinite(rawScore)) {
       return {
         title: t.reportSections.finalRehabilitationScore,
-        formula: reportResult.formula_text || "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL",
+        formula: reportResult.formula_text || "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL",
         inputs: [
           { label: "KOOS_pre", value: f(reportResult.KOOS_pre) },
           { label: "Signed delta ROM used in score", value: f(reportResult.delta_rom_used_in_score_deg, "°") },
@@ -1683,59 +1696,71 @@ export default function App() {
         ],
         steps: [],
         finalAnswer: "The full formula cannot be completed because a previous ROM value is not available yet.",
-        meaningText: "The backend only calculates predicted_delta_KOOS when KOOS_pre, delta_ROM, and the KL coefficient are all available.",
+        meaningText: "The backend only calculates the raw formula output and mapped rehab score when KOOS_pre, Delta ROM, and the KL coefficient are all available.",
       };
     }
     const additionText = [beta0, beta1Term, beta2Term, beta3]
       .map((value) => (Number.isFinite(Number(value)) ? formatMaybeSigned(value, 3) : "-"))
       .join(" + ");
+    const mappedNumerator = roundCalc(rawHigh - rawScore, 3);
+    const mappedDenominator = roundCalc(rawHigh - rawLow, 2);
+    const unclampedMapped = roundCalc(
+      (100 * (rawHigh - rawScore)) / (rawHigh - rawLow),
+      3,
+    );
 
     return {
       title: t.reportSections.finalRehabilitationScore,
-      formula: reportResult.formula_text || "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL",
+      formula: reportResult.formula_text || "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL",
       inputs: [
         { label: "KOOS_pre", value: formatCalcNumber(koosPre, 2) },
         { label: "Signed delta ROM used in score", value: `${formatCalcNumber(deltaRom, 2)}°` },
         { label: "Absolute delta ROM", value: `${formatCalcNumber(reportResult.delta_rom_abs_deg, 2)}°` },
         { label: "KL grade", value: String(reportResult.KL_grade ?? "-") },
         { label: "β3_KL", value: formatMaybeSigned(beta3, 3) },
+        { label: "Mapped final rehab score", value: `${formatCalcNumber(mappedScore, 2)} / 100` },
       ],
       steps: [
-        { label: "Substitute values", value: `predicted_delta_KOOS = ${formatCalcNumber(beta0, 2)} + (${formatCalcNumber(reportResult.beta1, 3)} × ${formatCalcNumber(koosPre, 2)}) + (${formatCalcNumber(reportResult.beta2, 3)} × ${formatCalcNumber(deltaRom, 2)}) + ${formatMaybeSigned(beta3, 3)}` },
-        { label: "Multiply each part", value: `predicted_delta_KOOS = ${formatCalcNumber(beta0, 2)} + ${formatMaybeSigned(beta1Term, 3)} + ${formatMaybeSigned(beta2Term, 3)} + ${formatMaybeSigned(beta3, 3)}` },
-        { label: "Add results", value: `predicted_delta_KOOS = ${additionText}` },
+        { label: "Original raw formula", value: "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL" },
+        { label: "Substitute patient values", value: `raw_score = ${formatCalcNumber(beta0, 2)} + (${formatCalcNumber(reportResult.beta1, 3)} × ${formatCalcNumber(koosPre, 2)}) + (${formatCalcNumber(reportResult.beta2, 3)} × ${formatCalcNumber(deltaRom, 2)}) + ${formatMaybeSigned(beta3, 3)}` },
+        { label: "Raw score result", value: `raw_score = ${additionText} = ${formatCalcNumber(rawScore, 3)}` },
+        { label: "0-100 mapping formula", value: `final_rehab_score = 100 × (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawScore, 3)}) / (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawLow, 2)})` },
+        { label: "Map and clamp", value: `final_rehab_score = clamp(100 × ${formatCalcNumber(mappedNumerator, 3)} / ${formatCalcNumber(mappedDenominator, 2)}, 0, 100) = clamp(${formatCalcNumber(unclampedMapped, 3)}, 0, 100)` },
+        { label: "Final mapped score", value: `final_rehab_score = ${formatCalcNumber(mappedScore, 2)} / 100` },
+        { label: "Selected level", value: `Level ${mappedLevel}` },
+        { label: "Simple meaning", value: reportResult.score_meaning || `This patient is ${reportStatusKey.replace("_", " ")} based on KOOS, Delta ROM, KL grade, and the mapped rehab score.` },
       ],
-      finalAnswer: `predicted_delta_KOOS = ${formatCalcNumber(predicted, 3)}`,
-      meaningText: "The backend score uses the signed Delta ROM. The absolute Delta ROM is shown separately as the difference size.",
+      finalAnswer: `Raw score ${formatCalcNumber(rawScore, 3)} -> Final rehab score ${formatCalcNumber(mappedScore, 2)}/100 -> Level ${mappedLevel}`,
+      meaningText: `The raw formula stays visible for transparency. The mapped 0-100 score drives Level ${mappedLevel}: ${mappedMeaning}.`,
     };
-  }, [reportResult, t.reportSections.finalRehabilitationScore]);
+  }, [reportResult, reportStatusKey, t.reportSections.finalRehabilitationScore]);
   const exerciseLevelBreakdown = useMemo(() => {
     if (!Number.isFinite(Number(finalRehabScore))) {
       return {
         title: "Exercise level selection",
-        formula: "Rehab level = min(5, max(1, ceil(max(0, predicted_delta_KOOS) / 20)))",
-        inputs: [{ label: "predicted_delta_KOOS", value: "-" }],
+        formula: "Rehab level is selected from the mapped final rehab score (0-100).",
+        inputs: [{ label: "Mapped final rehab score", value: "-" }],
         steps: [],
         finalAnswer: `Level ${rehabLevel} exercise plan selected.`,
         meaningText: "The current frontend falls back to Level 1 when the report score is unavailable.",
       };
     }
-    const clampedScore = Math.max(0, Number(finalRehabScore));
-    const divided = roundCalc(clampedScore / 20, 3);
+    const clampedMappedScore = clampScore(Number(finalRehabScore));
     return {
       title: "Exercise level selection",
-      formula: "Rehab level = min(5, max(1, ceil(max(0, predicted_delta_KOOS) / 20)))",
+      formula: "Use the same mapped final rehab score helpers as the final report: clampScore -> rehabLevelFromScore -> rehabMeaningFromScore",
       inputs: [
-        { label: "predicted_delta_KOOS", value: formatCalcNumber(finalRehabScore, 3) },
+        { label: "Mapped final rehab score", value: formatCalcNumber(finalRehabScore, 2) },
         { label: "Selected level", value: `Level ${rehabLevel}` },
+        { label: "Patient interpretation", value: rehabMeaningFromScore(finalRehabScore) },
       ],
       steps: [
-        { label: "Substitute", value: `Rehab level = min(5, max(1, ceil(max(0, ${formatCalcNumber(finalRehabScore, 3)}) / 20)))` },
-        { label: "Divide", value: `Rehab level = ceil(${formatCalcNumber(divided, 3)})` },
-        { label: "Clamp to level 1-5", value: `Rehab level = ${rehabLevel}` },
+        { label: "Clamp score", value: `clampScore(${formatCalcNumber(finalRehabScore, 2)}) = ${formatCalcNumber(clampedMappedScore, 2)}` },
+        { label: "Select level band", value: `${formatCalcNumber(clampedMappedScore, 2)} falls in the ${rehabLevel === 1 ? "0-20" : rehabLevel === 2 ? "21-40" : rehabLevel === 3 ? "41-60" : rehabLevel === 4 ? "61-80" : "81-100"} range` },
+        { label: "Patient interpretation", value: rehabMeaningFromScore(finalRehabScore) },
       ],
       finalAnswer: `Level ${rehabLevel} exercise plan selected.`,
-      meaningText: "This matches the existing frontend rehab-level mapping function.",
+      meaningText: "This uses the same mapped-score helpers as the final rehab report.",
     };
   }, [finalRehabScore, rehabLevel]);
 
@@ -2529,9 +2554,10 @@ export default function App() {
                             {t.reportStatus[reportStatusKey] || t.reportStatus.insufficient_data}
                           </div>
                           <span className="chip teal">{t.labels.rehabLevel} {reportResult.rehab_level_label || "-"}</span>
+                          {reportResult.rehab_level_meaning ? <span className="chip">{reportResult.rehab_level_meaning}</span> : null}
                         </div>
                       </div>
-                      <div className="resultValue">{f(finalRehabScore)}<span>{t.labels.finalRehabilitationScore}</span></div>
+                      <div className="resultValue">{f(finalRehabScore)}<span>{t.labels.finalRehabilitationScore} / 100</span></div>
                     </div>
                     <div className="resultActions">
                       <span className="chip teal">{t.completion.sessionSaved}</span>
@@ -2549,7 +2575,7 @@ export default function App() {
                     <span className="flowItem">{t.labels.finalRehabilitationScore}</span>
                   </div>
                   <div className="flowLine" aria-label={t.labels.rehabLevel}>
-                    <span className="flowItem">{t.labels.imuRehabScore}</span>
+                    <span className="flowItem">{t.labels.finalRehabilitationScore}</span>
                     <span className="flowArrow">→</span>
                     <span className="flowItem">{t.labels.rehabLevel}</span>
                     <span className="flowArrow">→</span>
@@ -2569,6 +2595,8 @@ export default function App() {
                       <div className="metric"><small>Delta ROM used in score</small><strong>{f(reportResult.delta_rom_used_in_score_deg, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.klGrade}</small><strong>{reportResult.KL_grade ?? "-"}</strong></div>
                       <div className="metric"><small>{t.labels.imuRehabScore}</small><strong>{f(reportResult.rehab_score)}</strong></div>
+                      <div className="metric"><small>Raw formula output</small><strong>{f(rawFormulaScore)}</strong></div>
+                      <div className="metric"><small>{t.labels.finalRehabilitationScore}</small><strong>{f(finalRehabScore)}</strong></div>
                       <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{reportResult.rehab_level_label || "-"}</strong></div>
                     </div>
                   </div>
@@ -2576,6 +2604,7 @@ export default function App() {
                   <div className="reportBlock" id="report-interpretation">
                     <h4>{t.reportSections.interpretation}</h4>
                     <p>{reportResult.interpretation || t.report.noInterpretation}</p>
+                    {reportResult.score_meaning ? <p style={{ marginTop: 8 }}>{reportResult.score_meaning}</p> : null}
                     {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
                     {reportResult.delta_rom_formula_explanation?.steps ? (
                       <div className="microNote">

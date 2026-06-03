@@ -15,7 +15,8 @@ class RehabReportFormulaTests(unittest.TestCase):
             "previous_rom": 100.0,
             "imu_result": {"overall_score": 80.0},
         }
-        expected = 139.95 + (-0.93 * 62.5) + (-0.785 * 8.2) + (-7.93)
+        expected_raw = 139.95 + (-0.93 * 62.5) + (-0.785 * 8.2) + (-7.93)
+        expected_mapped = round(100 * (140.55 - expected_raw) / (140.55 - 20.60), 2)
 
         with patch("api.main.get_last_session", return_value=None), patch(
             "api.main.save_session",
@@ -30,8 +31,12 @@ class RehabReportFormulaTests(unittest.TestCase):
         self.assertEqual(result["beta1"], -0.93)
         self.assertEqual(result["beta2"], -0.785)
         self.assertEqual(result["beta3_KL"], -7.93)
-        self.assertAlmostEqual(result["predicted_delta_KOOS"], expected, places=3)
-        self.assertIn("beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL", result["formula_text"])
+        self.assertAlmostEqual(result["raw_score"], expected_raw, places=3)
+        self.assertAlmostEqual(result["predicted_delta_KOOS"], expected_raw, places=3)
+        self.assertAlmostEqual(result["final_rehab_score"], expected_mapped, places=2)
+        self.assertEqual(result["rehab_level_label"], "Level 4")
+        self.assertIn("raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL", result["formula_text"])
+        self.assertIn("This patient is improving", result["score_meaning"])
 
 
 if __name__ == "__main__":
