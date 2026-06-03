@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildKoosPanels, EXERCISE_VIDEO_ORDER } from "./clinicalWizardConfig";
+import {
+  buildKoosPanels,
+  getExerciseVideosForScore,
+  getRehabLevel,
+  getSelectedVideo,
+} from "./clinicalWizardConfig";
+import FormulaBreakdown from "./components/FormulaBreakdown";
 
 const API = "/api";
 const KL_ACCEPT = "image/png,image/jpeg,image/jpg,image/bmp,image/tiff";
@@ -91,6 +97,7 @@ const KOOS_PANEL_TAG_KEYS = {
   "Sport / recreation": "sport_rec",
   "Quality of life": "qol",
 };
+const KOOS_SUBSCALE_ORDER = ["pain", "symptoms", "adl", "sport_rec", "qol"];
 
 const KOOS_QUESTION_TEXT = {
   q1: "P1. How often do you experience knee pain?",
@@ -304,6 +311,8 @@ const STRINGS = {
       watchVideo: "Watch video",
       assignVideo: "Assign",
       markWatched: "Mark watched",
+      closeVideo: "Close video",
+      openOnYouTube: "Open on YouTube",
       removeFile: "Remove file",
       chooseDifferentImage: "Choose different image",
       remove: "Remove",
@@ -358,6 +367,7 @@ const STRINGS = {
       readyForReport: "Ready for report",
       duration: "Duration",
       targetArea: "Target area",
+      exerciseCount: "Exercise count",
       inputSummary: "Input summary",
       createdAt: "Created at",
       clinicalInputs: "Clinical inputs used",
@@ -434,6 +444,9 @@ const STRINGS = {
       noImuResult: "No IMU result yet.",
       generateAfterReady: "Generate report after all previous steps are ready.",
       noVideos: "No exercise videos available yet.",
+      exercisePlanLevel: "Level {level} exercise plan",
+      basedOnFinalScore: "Based on final rehab score: {score}",
+      videoPlanDisclaimer: "These exercises are guidance only. A clinician should confirm the final exercise plan.",
     },
     errors: {
       backendOffline: "Backend is not reachable. Please start the backend and try again.",
@@ -480,7 +493,7 @@ const STRINGS = {
       higherScoreMeaning: "Higher score means better expected rehabilitation progress.",
       lowerScoreMeaning: "Lower score means closer monitoring may be needed.",
       reportCombination: "KOOS_pre and KL grade affect the report formula, while IMU ROM and rehab score drive change tracking, rehab level, and exercise suggestions.",
-      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+      formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
     reportSections: {
       overallPrediction: "Overall rehabilitation prediction",
@@ -561,6 +574,8 @@ const STRINGS = {
       watchVideo: "Смотреть видео",
       assignVideo: "Назначить",
       markWatched: "Отметить просмотр",
+      closeVideo: "Закрыть видео",
+      openOnYouTube: "Открыть на YouTube",
       removeFile: "Удалить файл",
       chooseDifferentImage: "Выбрать другой снимок",
       remove: "Удалить",
@@ -615,6 +630,7 @@ const STRINGS = {
       readyForReport: "Готово к отчету",
       duration: "Длительность",
       targetArea: "Целевая зона",
+      exerciseCount: "Количество упражнений",
       inputSummary: "Сводка исходных данных",
       createdAt: "Создано",
       clinicalInputs: "Использованные клинические данные",
@@ -691,6 +707,9 @@ const STRINGS = {
       noImuResult: "Результата ИМУ пока нет.",
       generateAfterReady: "Сформируйте отчет после готовности предыдущих шагов.",
       noVideos: "Видеоупражнения пока недоступны.",
+      exercisePlanLevel: "План упражнений уровня {level}",
+      basedOnFinalScore: "На основе итогового балла реабилитации: {score}",
+      videoPlanDisclaimer: "Эти упражнения служат только ориентиром. Итоговый план упражнений должен подтвердить клиницист.",
     },
     errors: {
       backendOffline: "Бэкенд недоступен. Запустите бэкенд и попробуйте снова.",
@@ -737,7 +756,7 @@ const STRINGS = {
       higherScoreMeaning: "Более высокий балл означает лучший ожидаемый прогресс реабилитации.",
       lowerScoreMeaning: "Более низкий балл означает, что может потребоваться более тщательное наблюдение.",
       reportCombination: "KOOS_pre и степень KL влияют на формулу отчета, а ROM и балл ИМУ влияют на отслеживание изменений, уровень реабилитации и подбор упражнений.",
-      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+      formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
     reportSections: {
       overallPrediction: "Общий прогноз реабилитации",
@@ -818,6 +837,8 @@ const STRINGS = {
       watchVideo: "Бейнені көру",
       assignVideo: "Тағайындау",
       markWatched: "Қаралды деп белгілеу",
+      closeVideo: "Бейнені жабу",
+      openOnYouTube: "YouTube-та ашу",
       removeFile: "Файлды өшіру",
       chooseDifferentImage: "Басқа сурет таңдау",
       remove: "Өшіру",
@@ -872,6 +893,7 @@ const STRINGS = {
       readyForReport: "Есепке дайын",
       duration: "Ұзақтығы",
       targetArea: "Нысан аймағы",
+      exerciseCount: "Жаттығу саны",
       inputSummary: "Кіріс деректер қысқашасы",
       createdAt: "Жасалған уақыты",
       clinicalInputs: "Қолданылған клиникалық деректер",
@@ -948,6 +970,9 @@ const STRINGS = {
       noImuResult: "ИМУ нәтижесі әлі жоқ.",
       generateAfterReady: "Алдыңғы қадамдар дайын болғаннан кейін есеп жасаңыз.",
       noVideos: "Жаттығу бейнелері әлі қолжетімсіз.",
+      exercisePlanLevel: "{level}-деңгей жаттығу жоспары",
+      basedOnFinalScore: "Қорытынды оңалту балына негізделген: {score}",
+      videoPlanDisclaimer: "Бұл жаттығулар тек бағдар ретінде берілген. Қорытынды жаттығу жоспарын клиницист растауы керек.",
     },
     errors: {
       backendOffline: "Бэкенд қолжетімсіз. Бэкендті іске қосып, қайта көріңіз.",
@@ -994,7 +1019,7 @@ const STRINGS = {
       higherScoreMeaning: "Жоғары балл күтілетін оңалту прогресі жақсырақ екенін білдіреді.",
       lowerScoreMeaning: "Төмен балл мұқият бақылау қажет болуы мүмкін екенін білдіреді.",
       reportCombination: "KOOS_pre мен KL дәрежесі есеп формуласына әсер етеді, ал ИМУ ROM және балы өзгеріс трегіне, оңалту деңгейіне және жаттығу ұсынымдарына әсер етеді.",
-      formulaReadable: "final_rehab_score = β0 + β1×KOOS_pre + β2×delta_ROM + β3_KL",
+      formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
     reportSections: {
       overallPrediction: "Жалпы оңалту болжамы",
@@ -1167,6 +1192,8 @@ button,input,select{font:inherit}
 linear-gradient(145deg, rgba(255,255,255,.72), rgba(233,224,205,.95)),
 radial-gradient(circle at top right, rgba(24,183,166,.14), transparent 44%);
 overflow:hidden}
+.exerciseThumbButton{display:block;width:100%;padding:0;border:0;background:transparent;cursor:pointer;text-align:left}
+.exerciseThumbButton:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .exerciseFrame{width:100%;height:100%;min-height:188px;border:0;background:#e8e0cf}
 .exerciseThumb.placeholder::before,.exerciseThumb.placeholder::after{content:"";position:absolute;border:1px solid rgba(17,24,39,.14)}
 .exerciseThumb.placeholder::before{left:16px;right:16px;bottom:18px;height:42px;background:rgba(255,250,240,.72)}
@@ -1193,6 +1220,17 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
 .exercisePrimary:hover,.exerciseSecondary:hover{border-color:#bfb5a1;background:#fff;color:var(--text)}
 .exercisePrimary:hover{background:#14a292;color:#fff;border-color:#14a292}
 .exerciseStatus{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.exercisePlanMeta{display:grid;gap:6px;margin-top:12px}
+.exercisePlanTitle{font-size:18px;font-weight:800;line-height:1.2;color:var(--text)}
+.exercisePlanScore{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.videoModal{position:fixed;inset:0;background:rgba(17,24,39,.56);display:grid;place-items:center;padding:24px;z-index:40}
+.videoModalCard{width:min(920px,100%);background:var(--paper);border:1px solid var(--border);box-shadow:0 30px 60px rgba(17,24,39,.18);padding:18px;display:grid;gap:14px}
+.videoModalTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.videoModalTop h5{margin:0;font-size:24px;line-height:1.1;letter-spacing:-.03em}
+.videoModalMeta{display:flex;gap:8px;flex-wrap:wrap}
+.videoModalFrame{aspect-ratio:16/9;width:100%;border:1px solid var(--border);background:#e8e0cf}
+.videoModalFrame iframe{width:100%;height:100%;border:0}
+.videoModalActions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .statusPill{display:inline-flex;align-items:center;border:1px solid rgba(24,183,166,.45);background:var(--teal-soft);color:#0c746b;padding:5px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
 .statusPill.coral{border-color:rgba(255,107,87,.45);background:var(--coral-soft);color:#9b3a2c}
 .resultBars{display:grid;gap:10px}
@@ -1201,6 +1239,29 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
 .resultBarTrack{height:8px;background:#eadfcb;border:1px solid var(--border)}
 .resultBarFill{height:100%;background:var(--teal)}
 .resultBarValue{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);text-align:right}
+.calcCardGrid{display:grid;gap:12px;margin-top:14px}
+.calcCard{border:1px solid var(--border);background:#fffaf0}
+.calcCardHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 14px 0;flex-wrap:wrap}
+.calcCardTitleWrap{display:grid;gap:4px}
+.calcCardTitleWrap h5{margin:0;font-size:15px;line-height:1.25}
+.calcCardTitleWrap p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
+.calcToggle{border:1px solid var(--border);background:#f8f3e8;color:var(--text);padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer}
+.calcCardBody{display:grid;gap:12px;padding:14px}
+.calcFormulaBlock{display:grid;gap:6px}
+.calcLabel{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.calcFormulaText{margin:0}
+.calcInputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.calcInput{border:1px solid var(--border);background:#f8f3e8;padding:10px}
+.calcInput small{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.calcInput strong{display:block;margin-top:4px;font-size:13px;line-height:1.35;color:var(--text)}
+.calcSteps{display:grid;gap:8px}
+.calcStep{display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;align-items:flex-start}
+.calcStepIndex{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#0c746b;text-transform:uppercase;letter-spacing:.08em;padding-top:2px}
+.calcStepBody{border:1px solid var(--border);background:#fff;padding:10px}
+.calcStepBody strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#0c746b;margin-bottom:5px}
+.calcStepBody p{margin:0;color:var(--text);font-size:13px;line-height:1.45}
+.calcFinal{border:1px solid rgba(24,183,166,.32);background:var(--teal-soft);padding:12px}
+.calcFinal strong{display:block;margin-top:6px;font-size:16px;line-height:1.3;color:var(--text)}
 
 .koosWrap{display:grid;gap:10px;padding-bottom:18px}
 .koosHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
@@ -1269,12 +1330,16 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid{grid-template-columns:1fr}
+  .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
   .resultBarValue{text-align:left}
+  .calcStep{grid-template-columns:1fr}
   .koosOpts{grid-template-columns:1fr}
   .fileDrop,.fileDrop.large,.klPreviewShell,.xrayPreview{min-height:260px}
+  .videoModal{padding:12px}
+  .videoModalCard{padding:14px}
+  .videoModalTop h5{font-size:20px}
 }
 `;
 
@@ -1348,16 +1413,27 @@ function friendlyError(error, t, fallbackKey = "backendOffline") {
   return raw;
 }
 
-function getRehabLevelInfo(score) {
-  if (score === null || score === undefined || Number.isNaN(Number(score))) {
-    return { level: null, label: "-" };
-  }
-  const value = Math.max(0, Math.min(100, Number(score)));
-  if (value <= 20) return { level: 1, label: "Level 1" };
-  if (value <= 40) return { level: 2, label: "Level 2" };
-  if (value <= 60) return { level: 3, label: "Level 3" };
-  if (value <= 80) return { level: 4, label: "Level 4" };
-  return { level: 5, label: "Level 5" };
+function formatScore(value) {
+  if (!Number.isFinite(Number(value))) return "-";
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+}
+
+function roundCalc(value, digits = 2) {
+  if (!Number.isFinite(Number(value))) return null;
+  const factor = 10 ** digits;
+  return Math.round(Number(value) * factor) / factor;
+}
+
+function formatCalcNumber(value, digits = 2) {
+  if (!Number.isFinite(Number(value))) return "-";
+  return Number(value).toFixed(digits);
+}
+
+function formatMaybeSigned(value, digits = 2) {
+  if (!Number.isFinite(Number(value))) return "-";
+  const num = Number(value);
+  return `${num < 0 ? "-" : ""}${Math.abs(num).toFixed(digits)}`;
 }
 
 function statusLabel(active, ready, complete, t) {
@@ -1405,15 +1481,22 @@ export default function App() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [watchedVideos, setWatchedVideos] = useState({});
-  const [selectedVideoId, setSelectedVideoId] = useState(() => EXERCISE_VIDEO_ORDER[0]?.id || "");
+  const [selectedVideoId, setSelectedVideoId] = useState("");
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   const imageInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const t = STRINGS[lang];
 
   const latestSession = sessions[0] || null;
-  const previousRom = latestSession?.current_rom ?? null;
-  const currentRom = imuResult?.session_summary?.rom_deg ?? null;
+  const previousSessionRom = latestSession?.current_rom ?? null;
+  const currentMinAngle = imuResult?.min_angle_deg ?? imuResult?.session_summary?.min_angle_deg ?? imuResult?.rom_scores?.[0]?.min_angle_deg ?? null;
+  const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
+  const currentRom = imuResult?.rom_deg ?? imuResult?.session_summary?.rom_deg ?? imuResult?.rom_scores?.[0]?.rom_deg ?? null;
+  const imuSignedDeltaRom = currentRom !== null && previousSessionRom !== null
+    ? Number((Number(currentRom) - Number(previousSessionRom)).toFixed(1))
+    : null;
+  const imuAbsoluteDeltaRom = imuSignedDeltaRom !== null ? Number(Math.abs(imuSignedDeltaRom).toFixed(1)) : null;
   const imuRepetitions = imuResult?.session_summary?.repetitions ?? imuResult?.repetitions ?? 8;
   const totalAnswered = Object.keys(koosAnswers).length;
   const activeStepMeta = STEPS.find((step) => step.id === activeStep) || STEPS[0];
@@ -1448,24 +1531,213 @@ export default function App() {
   const klModelStatus = klResult?.kl_model || health?.kl_model;
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
   const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
-  const imuDeltaRom = currentRom !== null && previousRom !== null ? Number((currentRom - previousRom).toFixed(1)) : null;
   const reportStatusKey = reportResult?.interpretation || "insufficient_data";
   const finalRehabScore = reportResult?.predicted_delta_KOOS;
-  const exerciseVideos = EXERCISE_VIDEO_ORDER.map((item) => ({
-    id: item.id,
-    title: item.title,
-    description: item.description,
-    level: item.level,
-    duration: item.duration,
-    targetArea: item.targetArea,
-    embedUrl: item.embedUrl,
-  }));
+  const rehabLevel = getRehabLevel(finalRehabScore);
+  const exerciseVideos = useMemo(() => getExerciseVideosForScore(finalRehabScore), [finalRehabScore]);
+  const selectedVideo = getSelectedVideo(exerciseVideos, selectedVideoId);
   const localizedKoosPanelTag =
     t.koosSections[KOOS_PANEL_TAG_KEYS[currentKoosPanel.tag]] || currentKoosPanel.tag || "";
   const localizedKoosPanelNote =
     currentKoosPanel.note === "Includes next section"
       ? t.messages.includesNextSection
       : currentKoosPanel.note || "";
+  const koosBreakdowns = useMemo(() => {
+    if (!koosResult) return [];
+
+    const details = koosResult.subscale_details || {};
+    const subscaleCards = KOOS_SUBSCALE_ORDER.filter((key) => Number.isFinite(Number(koosResult?.subscales?.[key]))).map((key) => {
+      const score = Number(koosResult.subscales[key]);
+      const detail = details[key] || {};
+      const meanAnswer = Number(detail.mean_answer);
+      const answeredValues = Array.isArray(detail.answered_values) ? detail.answered_values : [];
+      const divideResult = roundCalc(meanAnswer / 4, 4);
+      const multiplyResult = roundCalc((meanAnswer / 4) * 100, 2);
+      const label = t.koosSections[key] || key;
+
+      return {
+        title: label,
+        formula: detail.formula || "KOOS subscale = 100 - (mean answer / 4) * 100",
+        inputs: [
+          { label: "Answered values", value: answeredValues.length ? answeredValues.join(", ") : "-" },
+          { label: "Mean answer", value: formatCalcNumber(meanAnswer, 4) },
+        ],
+        steps: [
+          { label: "Substitute patient values", value: `${label} = 100 - (${formatCalcNumber(meanAnswer, 4)} / 4) × 100` },
+          { label: "Divide", value: `${label} = 100 - ${formatCalcNumber(divideResult, 4)} × 100` },
+          { label: "Multiply", value: `${label} = 100 - ${formatCalcNumber(multiplyResult, 2)}` },
+        ],
+        finalAnswer: `${label} = ${formatCalcNumber(score, 2)}`,
+        meaningText: "Higher KOOS values indicate better knee status.",
+      };
+    });
+
+    const totalDetails = koosResult.total_details || {};
+    const totalValues = Array.isArray(totalDetails.values) ? totalDetails.values.map(Number) : [];
+    const totalLabels = (totalDetails.available_subscales || []).map((key) => t.koosSections[key] || key);
+    const totalSum = Number(totalDetails.sum);
+    const totalCount = Number(totalDetails.count);
+    if (totalValues.length > 0 && totalCount > 0) {
+      subscaleCards.push({
+        title: t.labels.koosTotal,
+        formula: totalDetails.formula || "Total KOOS = average of available KOOS subscales",
+        inputs: totalLabels.map((label, index) => ({
+          label,
+          value: formatCalcNumber(totalValues[index], 2),
+        })),
+        steps: [
+          { label: "Substitute values", value: `Total KOOS = (${totalLabels.join(" + ")}) / ${totalCount}` },
+          { label: "Use patient values", value: `Total KOOS = (${totalValues.map((value) => formatCalcNumber(value, 2)).join(" + ")}) / ${totalCount}` },
+          { label: "Add", value: `Total KOOS = ${formatCalcNumber(totalSum, 2)} / ${totalCount}` },
+        ],
+        finalAnswer: `Total KOOS = ${formatCalcNumber(koosResult.koos_total, 2)}`,
+        meaningText: "This total is the average of the available KOOS subscales.",
+      });
+    }
+
+    return subscaleCards;
+  }, [koosResult, t]);
+  const imuSummary = imuResult?.session_summary || {};
+  const imuRomDetail = useMemo(() => {
+    if (!imuResult || !Number.isFinite(Number(currentRom))) return null;
+    const gyroStd = Number(imuSummary.gyro_std_dps);
+    const smoothnessScore = Number.isFinite(gyroStd) ? roundCalc(Math.max(0, Math.min(100, 100 * (1 - gyroStd / 80))), 1) : null;
+    const signedDelta = imuSignedDeltaRom;
+    const absoluteDelta = imuAbsoluteDeltaRom;
+    const deltaExplanation = imuResult?.delta_rom_formula_explanation?.steps || [];
+
+    return {
+      title: "Range of Motion",
+      formula: "ROM = max angle - min angle",
+      inputs: [
+        { label: "Max angle", value: Number.isFinite(Number(currentMaxAngle)) ? `${formatCalcNumber(currentMaxAngle, 1)}°` : "-" },
+        { label: "Min angle", value: Number.isFinite(Number(currentMinAngle)) ? `${formatCalcNumber(currentMinAngle, 1)}°` : "-" },
+        { label: "Previous ROM", value: previousSessionRom !== null ? `${formatCalcNumber(previousSessionRom, 1)}°` : "No previous session" },
+      ],
+      romSteps: Number.isFinite(Number(currentMaxAngle)) && Number.isFinite(Number(currentMinAngle)) ? [
+        { label: "Patient values", value: `Max angle = ${formatCalcNumber(currentMaxAngle, 1)}°, Min angle = ${formatCalcNumber(currentMinAngle, 1)}°` },
+        { label: "Substitute", value: `ROM = ${formatCalcNumber(currentMaxAngle, 1)} - ${formatCalcNumber(currentMinAngle, 1)}` },
+        { label: "Calculate", value: `ROM = ${formatCalcNumber(currentRom, 1)}°` },
+      ] : [],
+      romFinal: `Range of Motion = ${formatCalcNumber(currentRom, 1)}°`,
+      deltaFormula: "Delta ROM = current session ROM - previous session ROM",
+      deltaSteps: previousSessionRom !== null ? [
+        { label: "Current ROM", value: `Current ROM = ${formatCalcNumber(currentRom, 1)}°` },
+        { label: "Previous ROM", value: `Previous ROM = ${formatCalcNumber(previousSessionRom, 1)}°` },
+        { label: "Signed delta", value: `Delta ROM = ${formatCalcNumber(currentRom, 1)} - ${formatCalcNumber(previousSessionRom, 1)} = ${formatCalcNumber(signedDelta, 1)}°` },
+        { label: "Absolute difference", value: `Absolute Delta ROM = abs(${formatCalcNumber(signedDelta, 1)}) = ${formatCalcNumber(absoluteDelta, 1)}°` },
+      ] : deltaExplanation.map((item) => ({ label: "Rule", value: item })),
+      deltaFinal: previousSessionRom !== null
+        ? `Delta ROM difference = ${formatCalcNumber(absoluteDelta, 1)}°`
+        : "Delta ROM cannot be calculated because this is the first available session.",
+      smoothnessText: Number.isFinite(smoothnessScore)
+        ? `Signed delta shows direction, absolute delta shows difference size. Smoothness score = clip(100 × (1 - gyro_std / 80), 0, 100). Current gyro_std = ${formatCalcNumber(gyroStd, 2)} °/s, smoothness = ${formatCalcNumber(smoothnessScore, 1)}%.`
+        : "Smoothness status is based on movement analysis output from the backend.",
+    };
+  }, [currentMaxAngle, currentMinAngle, currentRom, imuAbsoluteDeltaRom, imuResult, imuSignedDeltaRom, imuSummary.gyro_std_dps, previousSessionRom]);
+  const klBreakdown = useMemo(() => {
+    if (!klResult) return null;
+    const mapping = klResult.report_score_mapping || {};
+    const betaMap = mapping.beta3_by_kl || {};
+    const beta3 = mapping.beta3_kl;
+    const mappingText = Object.entries(betaMap)
+      .map(([grade, value]) => `KL ${grade} -> β3_KL ${value}`)
+      .join(", ");
+
+    return {
+      title: "KL grading and report coefficient",
+      formula: "X-ray image -> KL grading model -> KL grade -> β3_KL lookup for the report formula",
+      inputs: [
+        { label: "Model source", value: klResult.source || klResult.kl_model || "-" },
+        { label: "KL grade", value: String(klResult.kl_grade ?? "-") },
+        { label: "Confidence", value: pct(klResult.confidence) },
+      ],
+      steps: [
+        { label: "Model output", value: `KL grade = ${klResult.kl_grade ?? "-"} (${klResult.label || klGradeLabel})` },
+        { label: "Use the project mapping", value: mappingText || "KL coefficient mapping is loaded from the backend report formula." },
+        { label: "Selected coefficient", value: Number.isFinite(Number(beta3)) ? `β3_KL = ${formatMaybeSigned(beta3, 2)}` : "β3_KL is not available for this result." },
+      ],
+      finalAnswer: Number.isFinite(Number(beta3))
+        ? `KL grade ${klResult.kl_grade} contributes β3_KL = ${formatMaybeSigned(beta3, 2)}`
+        : `KL grade = ${klResult.kl_grade ?? "-"}`,
+      meaningText: "The image model predicts the KL grade directly. The report then looks up the existing KL coefficient from backend code.",
+    };
+  }, [klGradeLabel, klResult]);
+  const reportBreakdown = useMemo(() => {
+    if (!reportResult) return null;
+    const beta0 = Number(reportResult.beta0);
+    const koosPre = Number(reportResult.KOOS_pre);
+    const beta1Term = roundCalc(Number(reportResult.beta1) * koosPre, 3);
+    const deltaRom = Number(reportResult.delta_rom_used_in_score_deg ?? reportResult.delta_ROM);
+    const beta2Term = roundCalc(Number(reportResult.beta2) * deltaRom, 3);
+    const beta3 = Number(reportResult.beta3_KL);
+    const predicted = Number(reportResult.predicted_delta_KOOS);
+    if (!Number.isFinite(koosPre) || !Number.isFinite(deltaRom) || !Number.isFinite(beta3) || !Number.isFinite(predicted)) {
+      return {
+        title: t.reportSections.finalRehabilitationScore,
+        formula: reportResult.formula_text || "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL",
+        inputs: [
+          { label: "KOOS_pre", value: f(reportResult.KOOS_pre) },
+          { label: "Signed delta ROM used in score", value: f(reportResult.delta_rom_used_in_score_deg, "°") },
+          { label: "KL grade", value: String(reportResult.KL_grade ?? "-") },
+        ],
+        steps: [],
+        finalAnswer: "The full formula cannot be completed because a previous ROM value is not available yet.",
+        meaningText: "The backend only calculates predicted_delta_KOOS when KOOS_pre, delta_ROM, and the KL coefficient are all available.",
+      };
+    }
+    const additionText = [beta0, beta1Term, beta2Term, beta3]
+      .map((value) => (Number.isFinite(Number(value)) ? formatMaybeSigned(value, 3) : "-"))
+      .join(" + ");
+
+    return {
+      title: t.reportSections.finalRehabilitationScore,
+      formula: reportResult.formula_text || "predicted_delta_KOOS = beta0 + beta1 * KOOS_pre + beta2 * delta_ROM + beta3_KL",
+      inputs: [
+        { label: "KOOS_pre", value: formatCalcNumber(koosPre, 2) },
+        { label: "Signed delta ROM used in score", value: `${formatCalcNumber(deltaRom, 2)}°` },
+        { label: "Absolute delta ROM", value: `${formatCalcNumber(reportResult.delta_rom_abs_deg, 2)}°` },
+        { label: "KL grade", value: String(reportResult.KL_grade ?? "-") },
+        { label: "β3_KL", value: formatMaybeSigned(beta3, 3) },
+      ],
+      steps: [
+        { label: "Substitute values", value: `predicted_delta_KOOS = ${formatCalcNumber(beta0, 2)} + (${formatCalcNumber(reportResult.beta1, 3)} × ${formatCalcNumber(koosPre, 2)}) + (${formatCalcNumber(reportResult.beta2, 3)} × ${formatCalcNumber(deltaRom, 2)}) + ${formatMaybeSigned(beta3, 3)}` },
+        { label: "Multiply each part", value: `predicted_delta_KOOS = ${formatCalcNumber(beta0, 2)} + ${formatMaybeSigned(beta1Term, 3)} + ${formatMaybeSigned(beta2Term, 3)} + ${formatMaybeSigned(beta3, 3)}` },
+        { label: "Add results", value: `predicted_delta_KOOS = ${additionText}` },
+      ],
+      finalAnswer: `predicted_delta_KOOS = ${formatCalcNumber(predicted, 3)}`,
+      meaningText: "The backend score uses the signed Delta ROM. The absolute Delta ROM is shown separately as the difference size.",
+    };
+  }, [reportResult, t.reportSections.finalRehabilitationScore]);
+  const exerciseLevelBreakdown = useMemo(() => {
+    if (!Number.isFinite(Number(finalRehabScore))) {
+      return {
+        title: "Exercise level selection",
+        formula: "Rehab level = min(5, max(1, ceil(max(0, predicted_delta_KOOS) / 20)))",
+        inputs: [{ label: "predicted_delta_KOOS", value: "-" }],
+        steps: [],
+        finalAnswer: `Level ${rehabLevel} exercise plan selected.`,
+        meaningText: "The current frontend falls back to Level 1 when the report score is unavailable.",
+      };
+    }
+    const clampedScore = Math.max(0, Number(finalRehabScore));
+    const divided = roundCalc(clampedScore / 20, 3);
+    return {
+      title: "Exercise level selection",
+      formula: "Rehab level = min(5, max(1, ceil(max(0, predicted_delta_KOOS) / 20)))",
+      inputs: [
+        { label: "predicted_delta_KOOS", value: formatCalcNumber(finalRehabScore, 3) },
+        { label: "Selected level", value: `Level ${rehabLevel}` },
+      ],
+      steps: [
+        { label: "Substitute", value: `Rehab level = min(5, max(1, ceil(max(0, ${formatCalcNumber(finalRehabScore, 3)}) / 20)))` },
+        { label: "Divide", value: `Rehab level = ceil(${formatCalcNumber(divided, 3)})` },
+        { label: "Clamp to level 1-5", value: `Rehab level = ${rehabLevel}` },
+      ],
+      finalAnswer: `Level ${rehabLevel} exercise plan selected.`,
+      meaningText: "This matches the existing frontend rehab-level mapping function.",
+    };
+  }, [finalRehabScore, rehabLevel]);
 
   function translatedRecommendation(item) {
     const map = {
@@ -1510,6 +1782,18 @@ export default function App() {
       if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
+
+  useEffect(() => {
+    if (exerciseVideos.length === 0) {
+      setSelectedVideoId("");
+      setIsVideoModalOpen(false);
+      return;
+    }
+
+    setSelectedVideoId((current) =>
+      exerciseVideos.some((video) => video.id === current) ? current : exerciseVideos[0].id,
+    );
+  }, [exerciseVideos]);
 
   async function fetchHealth() {
     setHealthLoading(true);
@@ -1996,6 +2280,19 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  <div className="calcCardGrid">
+                    {koosBreakdowns.map((card) => (
+                      <FormulaBreakdown
+                        key={card.title}
+                        title={card.title}
+                        formula={card.formula}
+                        inputs={card.inputs}
+                        steps={card.steps}
+                        finalAnswer={card.finalAnswer}
+                        meaningText={card.meaningText}
+                      />
+                    ))}
+                  </div>
                   <div className="resultActions">
                     <button className="btn primary" onClick={continueToKl}>{t.buttons.continueToKl}</button>
                   </div>
@@ -2075,6 +2372,18 @@ export default function App() {
                         <div className="metric"><small>{t.labels.aiAssisted}</small><strong style={{ fontSize: 18 }}>{t.status.ready}</strong></div>
                       </div>
                       <div className="formulaBox">Image preprocessing → KL classifier → class probabilities → predicted KL grade</div>
+                      {klBreakdown ? (
+                        <div className="calcCardGrid">
+                          <FormulaBreakdown
+                            title={klBreakdown.title}
+                            formula={klBreakdown.formula}
+                            inputs={klBreakdown.inputs}
+                            steps={klBreakdown.steps}
+                            finalAnswer={klBreakdown.finalAnswer}
+                            meaningText={klBreakdown.meaningText}
+                          />
+                        </div>
+                      ) : null}
                       <div className="microNote">{t.explanations.klSafety}</div>
                       {klModelStatus === "demo_kl" ? (
                         <div className="chips">
@@ -2143,15 +2452,41 @@ export default function App() {
                       </div>
                       <div className="formulaBox">ROM = max angle - min angle</div>
                       <div className="metrics wideMetrics">
+                        <div className="metric"><small>Min angle</small><strong>{f(currentMinAngle, "°")}</strong></div>
+                        <div className="metric"><small>Max angle</small><strong>{f(currentMaxAngle, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
                         <div className="metric"><small>{t.labels.sensorPlacement}</small><strong style={{ fontSize: 18 }}>{t.sensorLocations[sensorLocation] || sensorLocation}</strong></div>
                         <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
                         <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
-                        <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousRom, "°")}</strong></div>
-                        <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(imuDeltaRom, "°")}</strong></div>
+                        <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
+                        <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
+                        <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
                       </div>
+                      {imuRomDetail ? (
+                        <div className="calcCardGrid">
+                          <FormulaBreakdown
+                            title={imuRomDetail.title}
+                            formula={imuRomDetail.formula}
+                            inputs={imuRomDetail.inputs}
+                            steps={imuRomDetail.romSteps}
+                            finalAnswer={imuRomDetail.romFinal}
+                            meaningText={imuRomDetail.smoothnessText}
+                          />
+                          <FormulaBreakdown
+                            title="Delta ROM"
+                            formula={imuRomDetail.deltaFormula}
+                            inputs={[
+                              { label: "Current ROM", value: `${formatCalcNumber(currentRom, 1)}°` },
+                              { label: "Previous ROM", value: previousSessionRom !== null ? `${formatCalcNumber(previousSessionRom, 1)}°` : "No previous session" },
+                            ]}
+                            steps={imuRomDetail.deltaSteps}
+                            finalAnswer={imuRomDetail.deltaFinal}
+                            meaningText="Signed Delta ROM shows direction of change. Absolute Delta ROM shows the size of the difference."
+                          />
+                        </div>
+                      ) : null}
                       <div className="resultActions">
                         <button className="btn primary" onClick={continueToReport}>{t.buttons.continueToReport}</button>
                         <button className="btn" onClick={analyzeImu} disabled={!imuFile || imuLoading}>{t.buttons.rerunImu}</button>
@@ -2225,9 +2560,14 @@ export default function App() {
                     <h4>{t.reportSections.inputSummary}</h4>
                     <div className="metrics wideMetrics">
                       <div className="metric"><small>{t.labels.koosPre}</small><strong>{f(reportResult.KOOS_pre)}</strong></div>
-                      <div className="metric"><small>{t.labels.deltaRom}</small><strong>{f(reportResult.delta_ROM, "°")}</strong></div>
+                      <div className="metric"><small>Min angle</small><strong>{f(reportResult.min_angle_deg, "°")}</strong></div>
+                      <div className="metric"><small>Max angle</small><strong>{f(reportResult.max_angle_deg, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.rom_deg, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(reportResult.previous_rom_deg, "°")}</strong></div>
+                      <div className="metric"><small>Signed Delta ROM</small><strong>{f(reportResult.delta_rom_signed_deg, "°")}</strong></div>
+                      <div className="metric"><small>Absolute Delta ROM</small><strong>{f(reportResult.delta_rom_abs_deg, "°")}</strong></div>
+                      <div className="metric"><small>Delta ROM used in score</small><strong>{f(reportResult.delta_rom_used_in_score_deg, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.klGrade}</small><strong>{reportResult.KL_grade ?? "-"}</strong></div>
-                      <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.current_ROM, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.imuRehabScore}</small><strong>{f(reportResult.rehab_score)}</strong></div>
                       <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{reportResult.rehab_level_label || "-"}</strong></div>
                     </div>
@@ -2237,6 +2577,11 @@ export default function App() {
                     <h4>{t.reportSections.interpretation}</h4>
                     <p>{reportResult.interpretation || t.report.noInterpretation}</p>
                     {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
+                    {reportResult.delta_rom_formula_explanation?.steps ? (
+                      <div className="microNote">
+                        {reportResult.delta_rom_formula_explanation.steps.join(" | ")}
+                      </div>
+                    ) : null}
                     <div className="detailPanel">
                       <div className="detailCard">
                         <strong>{t.reportSections.scoreExplanation}</strong>
@@ -2291,6 +2636,19 @@ export default function App() {
                         <tr><th>β3_KL</th><td>{f(reportResult.beta3_KL)}</td></tr>
                       </tbody>
                     </table>
+                    {reportBreakdown ? (
+                      <div className="calcCardGrid">
+                        <FormulaBreakdown
+                          title={reportBreakdown.title}
+                          formula={reportBreakdown.formula}
+                          inputs={reportBreakdown.inputs}
+                          steps={reportBreakdown.steps}
+                          finalAnswer={reportBreakdown.finalAnswer}
+                          meaningText={reportBreakdown.meaningText}
+                          defaultOpen
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -2313,21 +2671,49 @@ export default function App() {
 
                 <div className="reportBlock" id="videos-library">
                   <h4>{t.reportSections.exerciseVideos}</h4>
+                  <div className="exercisePlanMeta">
+                    <div className="exercisePlanTitle">
+                      {t.messages.exercisePlanLevel.replace("{level}", String(rehabLevel))}
+                    </div>
+                    <div className="exercisePlanScore">
+                      {t.messages.basedOnFinalScore.replace("{score}", formatScore(finalRehabScore))}
+                    </div>
+                  </div>
+                  {exerciseLevelBreakdown ? (
+                    <div className="calcCardGrid">
+                      <FormulaBreakdown
+                        title={exerciseLevelBreakdown.title}
+                        formula={exerciseLevelBreakdown.formula}
+                        inputs={exerciseLevelBreakdown.inputs}
+                        steps={exerciseLevelBreakdown.steps}
+                        finalAnswer={exerciseLevelBreakdown.finalAnswer}
+                        meaningText={exerciseLevelBreakdown.meaningText}
+                        defaultOpen
+                      />
+                    </div>
+                  ) : null}
                   {exerciseVideos.length > 0 ? (
                     <div className="exerciseGrid">
                       {exerciseVideos.map((item) => (
                         <article className={`exerciseCard ${selectedVideoId === item.id ? "active" : ""}`} key={item.id}>
-                          <div className={`exerciseThumb ${item.embedUrl ? "" : "placeholder"}`}>
+                          <button
+                            className={`exerciseThumb exerciseThumbButton ${item.embedUrl ? "" : "placeholder"}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedVideoId(item.id);
+                              setIsVideoModalOpen(true);
+                            }}
+                            aria-label={`${t.buttons.watchVideo}: ${item.title}`}
+                          >
                             {item.embedUrl ? (
-                              <iframe
-                                className="exerciseFrame"
-                                src={item.embedUrl}
-                                title={`${item.title} video`}
-                                loading="lazy"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                referrerPolicy="strict-origin-when-cross-origin"
-                                allowFullScreen
-                              />
+                              <>
+                                <div className="exerciseThumbArt" />
+                                <div className="playOverlay">
+                                  <div className="playCircle">
+                                    <div className="playTriangle" />
+                                  </div>
+                                </div>
+                              </>
                             ) : (
                               <>
                                 <div className="exerciseThumbArt" />
@@ -2338,10 +2724,10 @@ export default function App() {
                                 </div>
                               </>
                             )}
-                          </div>
+                          </button>
                           <div className="exerciseCardTop">
                             <h5>{item.title}</h5>
-                            <span className="exerciseLevel">{item.level}</span>
+                            <span className="exerciseLevel">{item.levelLabel}</span>
                           </div>
                           <p>{item.description}</p>
                           <div className="exerciseMeta">
@@ -2355,9 +2741,18 @@ export default function App() {
                             </div>
                           </div>
                           <div className="exerciseActions">
-                            <button className="exercisePrimary" onClick={() => setSelectedVideoId(item.id)}>
+                            <button
+                              className="exercisePrimary"
+                              onClick={() => {
+                                setSelectedVideoId(item.id);
+                                setIsVideoModalOpen(true);
+                              }}
+                            >
                               {t.buttons.watchVideo}
                             </button>
+                            <a className="exerciseSecondary" href={item.youtubeUrl} target="_blank" rel="noreferrer">
+                              {t.buttons.openOnYouTube}
+                            </a>
                             <button className="exerciseSecondary" onClick={() => setWatchedVideos((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}>
                               {watchedVideos[item.id] ? t.buttons.markWatched : t.buttons.assignVideo}
                             </button>
@@ -2371,9 +2766,45 @@ export default function App() {
                   ) : (
                     <p className="microNote">{t.messages.noVideos}</p>
                   )}
+                  <div className="microNote">{t.messages.videoPlanDisclaimer}</div>
                 </div>
               </div>
             </section>
+          ) : null}
+
+          {activeStep === "videos" && isVideoModalOpen && selectedVideo?.embedUrl ? (
+            <div className="videoModal" role="dialog" aria-modal="true" aria-labelledby="exercise-video-modal-title">
+              <div className="videoModalCard">
+                <div className="videoModalTop">
+                  <div>
+                    <h5 id="exercise-video-modal-title">{selectedVideo.title}</h5>
+                    <div className="videoModalMeta">
+                      <span className="exerciseLevel">{selectedVideo.levelLabel}</span>
+                      <span className="chip">{selectedVideo.duration}</span>
+                      <span className="chip">{selectedVideo.targetArea}</span>
+                    </div>
+                  </div>
+                  <button className="btn" type="button" onClick={() => setIsVideoModalOpen(false)}>
+                    {t.buttons.closeVideo}
+                  </button>
+                </div>
+                <div className="videoModalFrame">
+                  <iframe
+                    src={selectedVideo.embedUrl}
+                    title={selectedVideo.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+                <div className="videoModalActions">
+                  <span className="exerciseStatus">{selectedVideo.description}</span>
+                  <a className="exerciseSecondary" href={selectedVideo.youtubeUrl} target="_blank" rel="noreferrer">
+                    {t.buttons.openOnYouTube}
+                  </a>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {showGlobalWizardNav ? (
