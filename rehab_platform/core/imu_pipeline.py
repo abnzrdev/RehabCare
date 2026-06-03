@@ -610,12 +610,16 @@ def analyze_imu_csv(
         angles = knee_per_act[act]
         if len(angles) < 50:
             continue
-        rom     = float(max(angles) - min(angles))
+        min_angle = float(min(angles))
+        max_angle = float(max(angles))
+        rom     = float(max_angle - min_angle)
         healthy = float(baseline.get(act, 0.0))
         score   = min((rom / healthy) * 100.0, 100.0) if healthy > 0 else 0.0
         rom_scores.append({
             "activity":         act,
             "activity_label":   ACTIVITY_LABELS.get(act, act.replace("_", " ").title()),
+            "min_angle_deg":    round(min_angle, 1),
+            "max_angle_deg":    round(max_angle, 1),
             "rom_deg":          round(rom, 1),
             "healthy_baseline": round(healthy, 1),
             "score_pct":        round(score, 1),
@@ -637,6 +641,22 @@ def analyze_imu_csv(
             "n_simulated_channels": len(report["simulated"]),
             "real_channel_names":   report["real"],
             "sensor_location":      sensor_location,
+        },
+        "min_angle_deg":    None,
+        "max_angle_deg":    None,
+        "rom_deg":          rom_scores[0]["rom_deg"] if rom_scores else None,
+        "previous_rom_deg": None,
+        "delta_rom_signed_deg": None,
+        "delta_rom_abs_deg": None,
+        "delta_rom_used_in_score_deg": None,
+        "delta_rom_formula_explanation": {
+            "title": "Delta ROM calculation",
+            "steps": [
+                "Current ROM = current max angle - current min angle",
+                "Previous ROM = previous max angle - previous min angle",
+                "Delta ROM = current ROM - previous ROM",
+                "Absolute Delta ROM = abs(current ROM - previous ROM)",
+            ],
         },
         "dominant_activity":       dominant,
         "dominant_activity_label": ACTIVITY_LABELS.get(dominant, dominant),
@@ -732,7 +752,9 @@ def score_rehab_exercise(
     else:
         angle_arr = None
 
-    rom_deg = float(np.max(angle_arr) - np.min(angle_arr)) if angle_arr is not None else 0.0
+    min_angle_deg = float(np.min(angle_arr)) if angle_arr is not None else None
+    max_angle_deg = float(np.max(angle_arr)) if angle_arr is not None else None
+    rom_deg = float(max_angle_deg - min_angle_deg) if angle_arr is not None else 0.0
 
     # ── Continuous component scores (0–100) ───────────────────────────────────
     gyro_score = float(np.clip(
@@ -800,6 +822,8 @@ def score_rehab_exercise(
         rom_scores.append({
             "activity":         "knee_extension",
             "activity_label":   "Knee Extension",
+            "min_angle_deg":    round(min_angle_deg, 1),
+            "max_angle_deg":    round(max_angle_deg, 1),
             "rom_deg":          round(rom_deg, 1),
             "healthy_baseline": _REHAB_GOOD_ROM_DEG,
             "score_pct":        rs_pct,
@@ -865,8 +889,26 @@ def score_rehab_exercise(
             "sensor_location":      sensor_location,
             "scoring_method":       "biomechanical",
             "gyro_std_dps":         round(gyro_std, 2),
+            "min_angle_deg":        round(min_angle_deg, 1) if min_angle_deg is not None else None,
+            "max_angle_deg":        round(max_angle_deg, 1) if max_angle_deg is not None else None,
             "rom_deg":              round(rom_deg, 1),
             "file_hash":            file_hash,
+        },
+        "min_angle_deg":        round(min_angle_deg, 1) if min_angle_deg is not None else None,
+        "max_angle_deg":        round(max_angle_deg, 1) if max_angle_deg is not None else None,
+        "rom_deg":              round(rom_deg, 1),
+        "previous_rom_deg":     None,
+        "delta_rom_signed_deg": None,
+        "delta_rom_abs_deg":    None,
+        "delta_rom_used_in_score_deg": None,
+        "delta_rom_formula_explanation": {
+            "title": "Delta ROM calculation",
+            "steps": [
+                "Current ROM = current max angle - current min angle",
+                "Previous ROM = previous max angle - previous min angle",
+                "Delta ROM = current ROM - previous ROM",
+                "Absolute Delta ROM = abs(current ROM - previous ROM)",
+            ],
         },
         "dominant_activity":       "knee_extension",
         "dominant_activity_label": dominant_lbl,

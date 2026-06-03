@@ -457,12 +457,22 @@ def _build_kl_response(pil_image: Image.Image, lang: str, scale_max: int) -> dic
         )
         result["lang"] = lang
         result["kl_model"] = _kl_mode
+        result["report_score_mapping"] = {
+            "formula": PREDICTED_DELTA_FORMULA_TEXT,
+            "beta3_by_kl": KL_GRADE_BETA3,
+            "beta3_kl": KL_GRADE_BETA3.get(result["kl_grade"]),
+        }
         return result
 
     oa_prob = _infer_real(pil_image) if _model is not None else _infer_demo(pil_image)
     result = _build_demo_kl_response(oa_prob=oa_prob)
     result["lang"] = lang
     result["kl_model"] = _kl_mode
+    result["report_score_mapping"] = {
+        "formula": PREDICTED_DELTA_FORMULA_TEXT,
+        "beta3_by_kl": KL_GRADE_BETA3,
+        "beta3_kl": KL_GRADE_BETA3.get(result["kl_grade"]),
+    }
     return result
 
 
@@ -476,8 +486,31 @@ def _extract_current_rom(imu_result: dict[str, Any] | None, provided_current_rom
     return float(rom_val) if rom_val is not None else None
 
 
+def _extract_imu_angle_metrics(imu_result: dict[str, Any] | None) -> dict[str, float | None]:
+    if not isinstance(imu_result, dict):
+        return {
+            "min_angle_deg": None,
+            "max_angle_deg": None,
+            "rom_deg": None,
+        }
+
+    summary = imu_result.get("session_summary", {}) or {}
+    rom_scores = imu_result.get("rom_scores") or []
+    primary = rom_scores[0] if isinstance(rom_scores, list) and rom_scores else {}
+
+    def _num(value):
+        return float(value) if value is not None else None
+
+    return {
+        "min_angle_deg": _num(summary.get("min_angle_deg", primary.get("min_angle_deg"))),
+        "max_angle_deg": _num(summary.get("max_angle_deg", primary.get("max_angle_deg"))),
+        "rom_deg": _num(summary.get("rom_deg", primary.get("rom_deg"))),
+    }
+
+
 def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
     current_rom = _extract_current_rom(payload.imu_result, payload.current_rom)
+    current_metrics = _extract_imu_angle_metrics(payload.imu_result)
     previous_row = get_last_session(payload.patient_id, payload.exercise)
 
     if payload.previous_rom is not None:
@@ -490,7 +523,9 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
         previous_rom = None
         delta_note = "No previous session ROM for this patient/exercise"
 
-    delta_rom = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
+    delta_rom_signed = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
+    delta_rom_abs = None if delta_rom_signed is None else round(abs(delta_rom_signed), 2)
+    delta_rom_used_in_score = delta_rom_signed
     rehab_score = payload.rehab_score
     if rehab_score is None and isinstance(payload.imu_result, dict):
         rehab_score = payload.imu_result.get("overall_score")
@@ -502,14 +537,14 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
     beta2 = PREDICTED_DELTA_COEFFS["beta2"]
     beta3_kl = KL_GRADE_BETA3.get(payload.kl_grade) if payload.kl_grade is not None else None
     predicted_delta_koos = None
-    if payload.koos_pre is not None and delta_rom is not None and beta3_kl is not None:
-        predicted_delta_koos = round(beta0 + beta1 * payload.koos_pre + beta2 * delta_rom + beta3_kl, 3)
+    if payload.koos_pre is not None and delta_rom_used_in_score is not None and beta3_kl is not None:
+        predicted_delta_koos = round(beta0 + beta1 * payload.koos_pre + beta2 * delta_rom_used_in_score + beta3_kl, 3)
 
     interpretation = "insufficient_data"
-    if rehab_score is not None and delta_rom is not None:
-        if rehab_score >= 75 and delta_rom > 0:
+    if rehab_score is not None and delta_rom_signed is not None:
+        if rehab_score >= 75 and delta_rom_signed > 0:
             interpretation = "improving"
-        elif rehab_score < 50 or delta_rom < 0:
+        elif rehab_score < 50 or delta_rom_signed < 0:
             interpretation = "needs_attention"
         else:
             interpretation = "stable"
@@ -536,7 +571,7 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
             kl_grade=payload.kl_grade,
             current_rom=current_rom,
             previous_rom=previous_rom,
-            delta_rom=delta_rom,
+            delta_rom=delta_rom_signed,
             rehab_score=rehab_score,
             image_result=payload.image_result,
             imu_result=payload.imu_result,
@@ -549,7 +584,23 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
         "exercise": payload.exercise,
         "current_ROM": current_rom,
         "previous_ROM": previous_rom,
-        "delta_ROM": delta_rom,
+        "delta_ROM": delta_rom_signed,
+        "min_angle_deg": current_metrics["min_angle_deg"],
+        "max_angle_deg": current_metrics["max_angle_deg"],
+        "rom_deg": current_metrics["rom_deg"] if current_metrics["rom_deg"] is not None else current_rom,
+        "previous_rom_deg": previous_rom,
+        "delta_rom_signed_deg": delta_rom_signed,
+        "delta_rom_abs_deg": delta_rom_abs,
+        "delta_rom_used_in_score_deg": delta_rom_used_in_score,
+        "delta_rom_formula_explanation": {
+            "title": "Delta ROM calculation",
+            "steps": [
+                "Current ROM = current max angle - current min angle",
+                "Previous ROM = previous max angle - previous min angle",
+                "Delta ROM = current ROM - previous ROM",
+                "Absolute Delta ROM = abs(current ROM - previous ROM)",
+            ],
+        },
         "rehab_score": rehab_score,
         "rehab_level": rehab_level_payload["rehab_level"],
         "rehab_level_label": rehab_level_payload["rehab_level_label"],

@@ -32,6 +32,7 @@ def _normalize_answers(answers: dict[str, Any]) -> dict[str, float]:
 def calculate_koos(answers: dict[str, Any]) -> dict[str, Any]:
     data = _normalize_answers(answers)
     subscales: dict[str, float] = {}
+    subscale_details: dict[str, dict[str, Any]] = {}
     missing: dict[str, list[str]] = {}
 
     for name, keys in KOOS_SUBSCALES.items():
@@ -42,6 +43,14 @@ def calculate_koos(answers: dict[str, Any]) -> dict[str, Any]:
         mean_item = sum(vals) / len(vals)
         score = 100.0 - (mean_item / 4.0) * 100.0
         subscales[name] = round(score, 2)
+        subscale_details[name] = {
+            "items": keys,
+            "answered_items": [k for k in keys if k in data],
+            "answered_values": [round(data[k], 2) for k in keys if k in data],
+            "mean_answer": round(mean_item, 4),
+            "score": round(score, 2),
+            "formula": "KOOS subscale = 100 - (mean answer / 4) * 100",
+        }
         if len(vals) != len(keys):
             missing[name] = [k for k in keys if k not in data]
 
@@ -49,8 +58,18 @@ def calculate_koos(answers: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("No valid KOOS answers found.")
 
     total = round(sum(subscales.values()) / len(subscales), 2)
+    total_inputs = list(subscales.values())
     return {
         "koos_total": total,
         "subscales": subscales,
+        "subscale_details": subscale_details,
+        "total_details": {
+            "available_subscales": list(subscales.keys()),
+            "values": total_inputs,
+            "sum": round(sum(total_inputs), 4),
+            "count": len(total_inputs),
+            "formula": "Total KOOS = average of available KOOS subscales",
+            "score": total,
+        },
         "missing_items": missing,
     }
