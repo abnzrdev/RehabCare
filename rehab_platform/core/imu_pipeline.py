@@ -259,6 +259,7 @@ def _emg_channel_summary(source_column: Optional[str], values: Optional[np.ndarr
 
 def _resolve_uploaded_sensor_columns(df: pd.DataFrame) -> dict:
     cols_lc = {c.strip().lower(): c for c in df.columns}
+    source_columns = list(df.columns)
 
     # Prefer exact/full schema matches first.
     orthoscan_channels: dict[str, np.ndarray] = {}
@@ -369,12 +370,17 @@ def _resolve_uploaded_sensor_columns(df: pd.DataFrame) -> dict:
         }
 
     return {
-        "sensor_format": "simple_single_sensor",
+        "sensor_format": "unknown_partial" if source_columns else "simple_single_sensor",
         "channels": {},
         "real_channel_names": [],
         "emg_detected": False,
         "emg_channels": [],
-        "sensor_setup_note": _IMU_SENSOR_SETUP_NOTES["simple_single_sensor"],
+        "sensor_setup_note": (
+            "Partial or unsupported IMU CSV detected. The uploader found some columns but could not map "
+            "them to the simple, OrthoScan, or HuGaDB schemas."
+            if source_columns
+            else _IMU_SENSOR_SETUP_NOTES["simple_single_sensor"]
+        ),
         "emg_summary": {"EMG_right": None, "EMG_left": None},
     }
 
@@ -401,6 +407,79 @@ def _estimate_segment_angles(
             angle = angle + (gyro_dps * DT)
         out[i] = angle
     return out
+
+
+def _detrend_signal(arr: np.ndarray) -> np.ndarray:
+    if len(arr) < 2:
+        return arr.astype(np.float64)
+    t = np.arange(len(arr), dtype=np.float64)
+    slope, intercept = np.polyfit(t, arr, 1)
+    return arr.astype(np.float64) - (slope * t + intercept)
+
+
+def _smooth_signal(arr: np.ndarray, window: int = 5) -> np.ndarray:
+    if len(arr) < 3 or window <= 1:
+        return arr.astype(np.float64)
+    width = min(window, len(arr))
+    if width % 2 == 0:
+        width = max(1, width - 1)
+    kernel = np.ones(width, dtype=np.float64) / width
+    return np.convolve(arr.astype(np.float64), kernel, mode="same")
+
+
+def validate_rom_candidate(
+    name: str,
+    min_angle: Optional[float],
+    max_angle: Optional[float],
+    rom: Optional[float],
+    angle_array: Optional[np.ndarray],
+) -> tuple[bool, str]:
+    if angle_array is None or len(angle_array) == 0:
+        return False, "Missing angle data."
+    if not np.all(np.isfinite(angle_array)):
+        return False, "Angle data contains NaN or infinite values."
+    if min_angle is None or max_angle is None or rom is None:
+        return False, "ROM statistics are incomplete."
+    if not np.isfinite(min_angle) or not np.isfinite(max_angle) or not np.isfinite(rom):
+        return False, "ROM statistics are not finite."
+    if rom < 0 or rom > PHYSIOLOGICAL_MAX_ROM_DEG:
+        return False, "ROM exceeded physiological range."
+    if abs(min_angle) > MAX_ABS_ANGLE_DEG or abs(max_angle) > MAX_ABS_ANGLE_DEG:
+        return False, "Angle extrema exceeded physiological range."
+    steps = np.abs(np.diff(angle_array.astype(np.float64)))
+    if len(steps) and float(np.nanmax(steps)) > MAX_REASONABLE_STEP_DEG:
+        return False, "Angle trace contains unrealistic jumps."
+    return True, f"{name} accepted."
+
+
+def _make_rom_candidate(
+    name: str,
+    angle_array: Optional[np.ndarray],
+) -> dict:
+    if angle_array is None or len(angle_array) == 0:
+        return {
+            "name": name,
+            "rom_deg": None,
+            "min_angle_deg": None,
+            "max_angle_deg": None,
+            "valid": False,
+            "reason": "Required columns are missing.",
+            "angle_array": None,
+        }
+    work = angle_array.astype(np.float64)
+    min_angle = float(np.min(work))
+    max_angle = float(np.max(work))
+    rom = float(max_angle - min_angle)
+    valid, reason = validate_rom_candidate(name, min_angle, max_angle, rom, work)
+    return {
+        "name": name,
+        "rom_deg": round(rom, 1) if np.isfinite(rom) else None,
+        "min_angle_deg": round(min_angle, 1) if np.isfinite(min_angle) else None,
+        "max_angle_deg": round(max_angle, 1) if np.isfinite(max_angle) else None,
+        "valid": valid,
+        "reason": reason,
+        "angle_array": work,
+    }
 
 
 def generate_clinical_feedback(
@@ -884,6 +963,9 @@ _REHAB_GOOD_ROM_DEG  = 45.0   # degrees — healthy knee extension target
 _REHAB_MIN_ROM_DEG   = 15.0   # degrees — poor/incomplete ROM cutoff
 _REHAB_HIGH_GYRO_STD = 80.0   # °/s — shaky/unstable threshold
 _REHAB_MED_GYRO_STD  = 35.0   # °/s — moderate instability threshold
+PHYSIOLOGICAL_MAX_ROM_DEG = 180.0
+MAX_ABS_ANGLE_DEG = 180.0
+MAX_REASONABLE_STEP_DEG = 45.0
 
 
 def score_rehab_exercise(
@@ -923,18 +1005,17 @@ def score_rehab_exercise(
 
     n = len(df)
 
+    pitch = channels.get("pitch")
+    ax = channels.get("acc_x")
+    az = channels.get("acc_z")
+
     if sensor_format == "simple_single_sensor":
         gx = channels.get("gyro_x")
         gy = channels.get("gyro_y")
         gz = channels.get("gyro_z")
-        pitch = channels.get("pitch")
-        ax = channels.get("acc_x")
-        az = channels.get("acc_z")
         smoothness_components = [c for c in [gx, gy, gz] if c is not None]
+        primary_gyro_x = gx
     else:
-        pitch = None
-        ax = None
-        az = None
         gx = channels.get("gyroscope_right_thigh_x")
         gy = channels.get("gyroscope_right_thigh_y")
         gz = channels.get("gyroscope_right_thigh_z")
@@ -947,8 +1028,19 @@ def score_rehab_exercise(
             channels.get("gyroscope_right_shin_z"),
         ]
         smoothness_components = [c for c in smoothness_components if c is not None]
+        primary_gyro_x = channels.get("gyroscope_right_thigh_x")
+        if primary_gyro_x is None:
+            primary_gyro_x = channels.get("gyroscope_right_shin_x")
 
-    if not smoothness_components:
+    has_rom_inputs = (
+        pitch is not None
+        or (ax is not None and az is not None)
+        or (
+            channels.get("accelerometer_right_thigh_x") is not None
+            and channels.get("accelerometer_right_thigh_z") is not None
+        )
+    )
+    if not smoothness_components and not has_rom_inputs:
         raise ValueError(
             "No gyroscope columns found in CSV. Expected either simple columns "
             "gyro_x/gyro_y/gyro_z, full 38-channel OrthoScan columns, or HuGaDB-style "
@@ -956,59 +1048,114 @@ def score_rehab_exercise(
         )
 
     # ── Shakiness: std of gyro-magnitude per sample ───────────────────────────
-    gyro_mag = np.sqrt(sum(c ** 2 for c in smoothness_components))
-    gyro_std   = float(np.std(gyro_mag))
+    gyro_std = None
+    if smoothness_components:
+        gyro_mag = np.sqrt(sum(c ** 2 for c in smoothness_components))
+        gyro_std = float(np.std(gyro_mag))
 
-    # ── ROM: detrend before computing range to strip integration drift ────────
-    # RPi MPU6050 libraries often output pitch as an integrated (cumulative)
-    # angle, not a bounded arctan value.  Without detrending, a 60-second
-    # recording can show 10 000°+ range while the actual knee motion is ~45°.
-    # Linear detrending removes the DC drift while preserving the oscillations.
-    def _detrend(arr: np.ndarray) -> np.ndarray:
-        if len(arr) < 2:
-            return arr
-        t = np.arange(len(arr), dtype=np.float64)
-        slope, intercept = np.polyfit(t, arr, 1)
-        return arr - (slope * t + intercept)
+    rom_candidate_diagnostics: list[dict] = []
 
-    if sensor_format == "simple_single_sensor" and pitch is not None:
-        angle_arr = _detrend(pitch)
-    elif sensor_format == "simple_single_sensor" and ax is not None and az is not None:
-        # arctan2 is already bounded (-180 to 180); no detrending needed
-        angle_arr = np.degrees(np.arctan2(ax, np.abs(az)))
-    else:
-        thigh_angles = _estimate_segment_angles(
-            channels.get("gyroscope_right_thigh_x"),
-            channels.get("accelerometer_right_thigh_x"),
-            channels.get("accelerometer_right_thigh_z"),
-            n,
-        )
-        shin_gyro_x = channels.get("gyroscope_right_shin_x")
+    pitch_candidate_arr = _detrend_signal(pitch) if pitch is not None else None
+    pitch_candidate = _make_rom_candidate("pitch_detrended", pitch_candidate_arr)
+    rom_candidate_diagnostics.append({k: v for k, v in pitch_candidate.items() if k != "angle_array"})
+
+    gyro_candidate_arr = None
+    if primary_gyro_x is not None:
+        integrated = np.cumsum(primary_gyro_x.astype(np.float64) * DT)
+        gyro_candidate_arr = _detrend_signal(integrated)
+    gyro_candidate = _make_rom_candidate("gyro_integrated_detrended", gyro_candidate_arr)
+    rom_candidate_diagnostics.append({k: v for k, v in gyro_candidate.items() if k != "angle_array"})
+
+    accel_candidate_arr = None
+    if sensor_format in {"hugadb_6imu_2emg", "orthoscan_38ch"}:
+        thigh_acc_x = channels.get("accelerometer_right_thigh_x")
+        thigh_acc_z = channels.get("accelerometer_right_thigh_z")
         shin_acc_x = channels.get("accelerometer_right_shin_x")
         shin_acc_z = channels.get("accelerometer_right_shin_z")
-        if shin_gyro_x is not None or (shin_acc_x is not None and shin_acc_z is not None):
-            shin_angles = _estimate_segment_angles(shin_gyro_x, shin_acc_x, shin_acc_z, n)
-            angle_arr = thigh_angles - shin_angles
-        else:
-            angle_arr = thigh_angles
+        if thigh_acc_x is not None and thigh_acc_z is not None:
+            thigh_angle = np.degrees(np.arctan2(thigh_acc_x.astype(np.float64), np.abs(thigh_acc_z.astype(np.float64))))
+            thigh_angle = np.clip(thigh_angle, -180.0, 180.0)
+            if shin_acc_x is not None and shin_acc_z is not None:
+                shin_angle = np.degrees(np.arctan2(shin_acc_x.astype(np.float64), np.abs(shin_acc_z.astype(np.float64))))
+                shin_angle = np.clip(shin_angle, -180.0, 180.0)
+                accel_candidate_arr = thigh_angle - shin_angle
+            else:
+                accel_candidate_arr = thigh_angle
+        if accel_candidate_arr is not None:
+            accel_candidate_arr = accel_candidate_arr.astype(np.float64)
+            accel_candidate_arr = accel_candidate_arr - float(np.median(accel_candidate_arr))
+            accel_candidate_arr = _smooth_signal(accel_candidate_arr, window=5)
+    elif ax is not None and az is not None:
+        accel_candidate_arr = np.degrees(np.arctan2(ax.astype(np.float64), np.abs(az.astype(np.float64))))
+        accel_candidate_arr = np.clip(accel_candidate_arr, -180.0, 180.0)
+        accel_candidate_arr = accel_candidate_arr - float(np.median(accel_candidate_arr))
+        accel_candidate_arr = _smooth_signal(accel_candidate_arr, window=5)
+    accel_candidate = _make_rom_candidate("accelerometer_relative_tilt", accel_candidate_arr)
+    rom_candidate_diagnostics.append({k: v for k, v in accel_candidate.items() if k != "angle_array"})
 
-    min_angle_deg = float(np.min(angle_arr)) if angle_arr is not None else None
-    max_angle_deg = float(np.max(angle_arr)) if angle_arr is not None else None
-    rom_deg = float(max_angle_deg - min_angle_deg) if angle_arr is not None else 0.0
+    candidate_lookup = {
+        "pitch_detrended": pitch_candidate,
+        "gyro_integrated_detrended": gyro_candidate,
+        "accelerometer_relative_tilt": accel_candidate,
+    }
+    if sensor_format in {"hugadb_6imu_2emg", "orthoscan_38ch"}:
+        candidate_priority = ["pitch_detrended", "accelerometer_relative_tilt", "gyro_integrated_detrended"]
+    else:
+        candidate_priority = ["pitch_detrended", "gyro_integrated_detrended", "accelerometer_relative_tilt"]
+
+    selected_candidate = None
+    fallback_warning = None
+    for name in candidate_priority:
+        candidate = candidate_lookup[name]
+        if not candidate["valid"]:
+            continue
+        selected_candidate = candidate
+        if name != candidate_priority[0]:
+            rejected_primary = candidate_lookup[candidate_priority[0]]
+            if not rejected_primary["valid"]:
+                fallback_warning = (
+                    f"Raw {candidate_priority[0].replace('_', ' ')} was rejected because "
+                    f"{rejected_primary['reason'].rstrip('.').lower()}; {name.replace('_', ' ')} was used instead."
+                )
+        break
+
+    if selected_candidate is None:
+        angle_arr = None
+        min_angle_deg = None
+        max_angle_deg = None
+        rom_deg = None
+        rom_method_used = "invalid"
+        rom_warning = (
+            "ROM could not be calculated reliably because sensor values are outside physiological "
+            "range. Check units/calibration."
+        )
+    else:
+        angle_arr = selected_candidate["angle_array"]
+        min_angle_deg = float(np.min(angle_arr))
+        max_angle_deg = float(np.max(angle_arr))
+        rom_deg = float(max_angle_deg - min_angle_deg)
+        rom_method_used = selected_candidate["name"]
+        rom_warning = fallback_warning
 
     # ── Continuous component scores (0–100) ───────────────────────────────────
     gyro_score = float(np.clip(
         100.0 * (1.0 - gyro_std / _REHAB_HIGH_GYRO_STD), 0.0, 100.0
-    ))
+    )) if gyro_std is not None else 50.0
     rom_score = float(np.clip(
         rom_deg / _REHAB_GOOD_ROM_DEG * 100.0, 0.0, 100.0
-    )) if angle_arr is not None else 50.0
+    )) if rom_deg is not None else 0.0
 
     # Shakiness 40%, ROM 60% — weighted overall
     overall_score = round(0.4 * gyro_score + 0.6 * rom_score, 1)
 
     # ── Primary condition: evaluated in priority order ────────────────────────
-    if gyro_std >= _REHAB_HIGH_GYRO_STD:
+    if rom_method_used == "invalid":
+        level        = "alert"
+        fb_title     = "Range of Motion"
+        fb_text      = rom_warning
+        dominant_lbl = "Knee Extension (ROM Invalid)"
+
+    elif gyro_std is not None and gyro_std >= _REHAB_HIGH_GYRO_STD:
         level        = "alert"
         fb_title     = "Movement Stability"
         fb_text      = (
@@ -1027,7 +1174,7 @@ def score_rehab_exercise(
         )
         dominant_lbl = "Knee Extension (Incomplete ROM)"
 
-    elif gyro_std >= _REHAB_MED_GYRO_STD:
+    elif gyro_std is not None and gyro_std >= _REHAB_MED_GYRO_STD:
         level        = "warn"
         fb_title     = "Movement Control"
         fb_text      = (
@@ -1072,11 +1219,11 @@ def score_rehab_exercise(
     # ── Feedback cards ─────────────────────────────────────────────────────────
     smoothness_score = round(float(np.clip(
         100.0 * (1.0 - gyro_std / _REHAB_HIGH_GYRO_STD), 0.0, 100.0
-    )), 1)
+    )), 1) if gyro_std is not None else 50.0
     smoothness_level = (
-        "ok"    if gyro_std < _REHAB_MED_GYRO_STD  else
-        "warn"  if gyro_std < _REHAB_HIGH_GYRO_STD else
-        "alert"
+        "ok"    if gyro_std is not None and gyro_std < _REHAB_MED_GYRO_STD  else
+        "warn"  if gyro_std is not None and gyro_std < _REHAB_HIGH_GYRO_STD else
+        "warn"
     )
     rom_fb_level = (
         "ok"    if (angle_arr is None or rom_deg >= _REHAB_GOOD_ROM_DEG) else
@@ -1097,11 +1244,13 @@ def score_rehab_exercise(
             "text":  (
                 f"Gyroscope stability: {smoothness_score:.0f}% — "
                 f"gyro-magnitude std: {gyro_std:.1f} °/s."
+                if gyro_std is not None else
+                "Gyroscope stability could not be measured because no usable gyroscope channels were available."
             ),
             "score": smoothness_score,
         },
     ]
-    if angle_arr is not None:
+    if angle_arr is not None and rom_deg is not None:
         feedback.append({
             "level": rom_fb_level,
             "title": "Range of Motion",
@@ -1126,18 +1275,22 @@ def score_rehab_exercise(
             "emg_detected":         emg_detected,
             "emg_channels":         emg_channels,
             "sensor_setup_note":    sensor_setup_note,
+            "rom_method_used":      rom_method_used,
+            "rom_candidate_diagnostics": rom_candidate_diagnostics,
+            "rom_warning":          rom_warning,
+            "rom_valid":            rom_method_used != "invalid",
             "EMG_right":            emg_summary["EMG_right"],
             "EMG_left":             emg_summary["EMG_left"],
             "scoring_method":       "biomechanical",
-            "gyro_std_dps":         round(gyro_std, 2),
+            "gyro_std_dps":         round(gyro_std, 2) if gyro_std is not None else None,
             "min_angle_deg":        round(min_angle_deg, 1) if min_angle_deg is not None else None,
             "max_angle_deg":        round(max_angle_deg, 1) if max_angle_deg is not None else None,
-            "rom_deg":              round(rom_deg, 1),
+            "rom_deg":              round(rom_deg, 1) if rom_deg is not None else None,
             "file_hash":            file_hash,
         },
         "min_angle_deg":        round(min_angle_deg, 1) if min_angle_deg is not None else None,
         "max_angle_deg":        round(max_angle_deg, 1) if max_angle_deg is not None else None,
-        "rom_deg":              round(rom_deg, 1),
+        "rom_deg":              round(rom_deg, 1) if rom_deg is not None else None,
         "previous_rom_deg":     None,
         "delta_rom_signed_deg": None,
         "delta_rom_abs_deg":    None,
@@ -1164,4 +1317,5 @@ def score_rehab_exercise(
         "overall_score": overall_score,
         "feedback":      feedback,
         "source":        "biomechanical",
+        "warning":       rom_warning,
     }

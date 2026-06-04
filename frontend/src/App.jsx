@@ -1498,6 +1498,21 @@ export default function App() {
   const currentMinAngle = imuResult?.min_angle_deg ?? imuResult?.session_summary?.min_angle_deg ?? imuResult?.rom_scores?.[0]?.min_angle_deg ?? null;
   const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
   const currentRom = imuResult?.rom_deg ?? imuResult?.session_summary?.rom_deg ?? imuResult?.rom_scores?.[0]?.rom_deg ?? null;
+  const imuSummary = imuResult?.session_summary || {};
+  const imuRomValid = imuSummary.rom_valid !== false && currentRom !== null && currentRom !== undefined;
+  const imuRomMethodUsed = imuSummary.rom_method_used || "-";
+  const imuRomDiagnostics = Array.isArray(imuSummary.rom_candidate_diagnostics) ? imuSummary.rom_candidate_diagnostics : [];
+  const gyroRomDiagnostic = imuRomDiagnostics.find((item) => item?.name === "gyro_integrated_detrended");
+  const imuFallbackWarning = !imuRomValid
+    ? (imuSummary.rom_warning || imuResult?.warning || "ROM could not be calculated reliably from this file.")
+    : (
+        imuSummary.rom_warning
+        || (
+          imuRomMethodUsed === "accelerometer_relative_tilt" && gyroRomDiagnostic && gyroRomDiagnostic.valid === false
+            ? `Raw gyro ROM was rejected because ${String(gyroRomDiagnostic.reason || "").replace(/\.$/, "").toLowerCase()}; accelerometer relative tilt was used instead.`
+            : ""
+        )
+      );
   const imuSignedDeltaRom = currentRom !== null && previousSessionRom !== null
     ? Number((Number(currentRom) - Number(previousSessionRom)).toFixed(1))
     : null;
@@ -1519,11 +1534,11 @@ export default function App() {
       patient: patientId.trim().length > 0,
       koos: Boolean(koosResult?.koos_total !== undefined),
       kl: Boolean(klResult?.kl_grade !== undefined),
-      imu: Boolean(imuResult?.session_summary?.rom_deg !== undefined),
+      imu: Boolean(imuResult && imuRomValid),
       report: Boolean(reportResult?.session_id),
       videos: Boolean(reportResult?.session_id),
     }),
-    [patientId, koosResult, klResult, imuResult, reportResult]
+    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult]
   );
   const activeStepComplete =
     (activeStep === "patient" && readyState.patient) ||
@@ -1603,9 +1618,8 @@ export default function App() {
 
     return subscaleCards;
   }, [koosResult, t]);
-  const imuSummary = imuResult?.session_summary || {};
   const imuRomDetail = useMemo(() => {
-    if (!imuResult || !Number.isFinite(Number(currentRom))) return null;
+    if (!imuResult || !imuRomValid || !Number.isFinite(Number(currentRom))) return null;
     const gyroStd = Number(imuSummary.gyro_std_dps);
     const smoothnessScore = Number.isFinite(gyroStd) ? roundCalc(Math.max(0, Math.min(100, 100 * (1 - gyroStd / 80))), 1) : null;
     const signedDelta = imuSignedDeltaRom;
@@ -1640,7 +1654,7 @@ export default function App() {
         ? `Signed delta shows direction, absolute delta shows difference size. Smoothness score = clip(100 × (1 - gyro_std / 80), 0, 100). Current gyro_std = ${formatCalcNumber(gyroStd, 2)} °/s, smoothness = ${formatCalcNumber(smoothnessScore, 1)}%.`
         : "Smoothness status is based on movement analysis output from the backend.",
     };
-  }, [currentMaxAngle, currentMinAngle, currentRom, imuAbsoluteDeltaRom, imuResult, imuSignedDeltaRom, imuSummary.gyro_std_dps, previousSessionRom]);
+  }, [currentMaxAngle, currentMinAngle, currentRom, imuAbsoluteDeltaRom, imuResult, imuRomValid, imuSignedDeltaRom, imuSummary.gyro_std_dps, previousSessionRom]);
   const imuSensorFormat = imuSummary.sensor_format || "-";
   const imuRealChannelsCount = Number.isFinite(Number(imuSummary.n_real_channels)) ? Number(imuSummary.n_real_channels) : null;
   const imuEmgDetected = imuSummary.emg_detected ? "Yes" : "No";
@@ -1989,6 +2003,7 @@ export default function App() {
   }
 
   function continueToReport() {
+    if (!imuRomValid) return;
     markComplete("imu");
     setActiveStep("report");
   }
@@ -2489,10 +2504,14 @@ export default function App() {
                         <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
                         <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
+                        <div className="metric"><small>ROM method used</small><strong style={{ fontSize: 16 }}>{imuRomMethodUsed}</strong></div>
                         <div className="metric"><small>Real channels</small><strong>{imuRealChannelsCount ?? "-"}</strong></div>
                         <div className="metric"><small>EMG detected</small><strong>{imuEmgDetected}</strong></div>
                       </div>
                       <div className="formulaBox">{imuSensorSetupNote}</div>
+                      {imuFallbackWarning ? (
+                        <div className={imuRomValid ? "empty" : "error"}>{imuFallbackWarning}</div>
+                      ) : null}
                       {imuRomDetail ? (
                         <div className="calcCardGrid">
                           <FormulaBreakdown
@@ -2517,7 +2536,7 @@ export default function App() {
                         </div>
                       ) : null}
                       <div className="resultActions">
-                        <button className="btn primary" onClick={continueToReport}>{t.buttons.continueToReport}</button>
+                        <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
                         <button className="btn" onClick={analyzeImu} disabled={!imuFile || imuLoading}>{t.buttons.rerunImu}</button>
                         <button className="btn" onClick={clearImuFile}>{t.buttons.editImuData}</button>
                       </div>

@@ -62,9 +62,18 @@ describe("clinical wizard patient and KOOS flow", () => {
         if (url.includes("/api/imu/analyze")) {
           return jsonResponse({
             overall_score: 0.78,
+            rom_deg: 94,
             session_summary: {
               rom_deg: 94,
               sensor_format: "hugadb_6imu_2emg",
+              rom_method_used: "accelerometer_relative_tilt",
+              rom_valid: true,
+              rom_warning: "Raw gyro ROM was rejected because ROM exceeded physiological range; accelerometer relative tilt was used instead.",
+              rom_candidate_diagnostics: [
+                { name: "pitch_detrended", rom_deg: null, min_angle_deg: null, max_angle_deg: null, valid: false, reason: "Required columns are missing." },
+                { name: "gyro_integrated_detrended", rom_deg: 251776, min_angle_deg: -125888, max_angle_deg: 125888, valid: false, reason: "ROM exceeded physiological range." },
+                { name: "accelerometer_relative_tilt", rom_deg: 94, min_angle_deg: -12, max_angle_deg: 82, valid: true, reason: "accelerometer_relative_tilt accepted." },
+              ],
               n_real_channels: 14,
               emg_detected: true,
               sensor_setup_note: "HuGaDB-style multi-sensor CSV detected. RF/RS/RT/LF/LS/LT are mapped to right/left foot, shin, and thigh.",
@@ -190,9 +199,11 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/range of motion/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
     expect(screen.getByText("hugadb_6imu_2emg")).toBeInTheDocument();
+    expect(screen.getByText("accelerometer_relative_tilt")).toBeInTheDocument();
     expect(screen.getByText(/^14$/)).toBeInTheDocument();
     expect(screen.getByText(/^Yes$/)).toBeInTheDocument();
     expect(screen.getByText(/HuGaDB-style multi-sensor CSV detected/i)).toBeInTheDocument();
+    expect(screen.getByText(/Raw gyro ROM was rejected because ROM exceeded physiological range/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Rehab score$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/IMU rehab score/i)).not.toBeInTheDocument();
 
