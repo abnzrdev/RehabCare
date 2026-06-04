@@ -305,6 +305,117 @@ describe("clinical wizard patient and KOOS flow", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders first-session baseline report details without blocking the final report", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/koos/calculate")) {
+          return jsonResponse({
+            koos_total: 72.4,
+            subscales: { pain: 70, symptoms: 71, adl: 74, sport_rec: 73, qol: 74 },
+          });
+        }
+        if (url.includes("/api/predict-kl")) {
+          return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
+        }
+        if (url.includes("/api/imu/analyze")) {
+          return jsonResponse({
+            overall_score: 0.78,
+            rom_deg: 94,
+            session_summary: { rom_deg: 94, min_angle_deg: -12, max_angle_deg: 82, rom_valid: true },
+          });
+        }
+        if (url.includes("/api/rehab/report")) {
+          return jsonResponse({
+            session_id: "session-baseline",
+            raw_score: 64.688,
+            predicted_delta_KOOS: 64.688,
+            final_rehab_score: 63.24,
+            rehab_level_label: "Level 4",
+            rehab_level_meaning: "strong / lower rehab gap / harder exercise plan",
+            KOOS_pre: 72.4,
+            current_ROM: 94,
+            previous_ROM: null,
+            previous_rom_deg: null,
+            delta_ROM: 0,
+            delta_rom_signed_deg: 0,
+            delta_rom_abs_deg: 0,
+            delta_rom_used_in_score_deg: 0,
+            rehab_score: 0.78,
+            KL_grade: 2,
+            interpretation: "stable",
+            score_meaning: "This first-session estimate uses KOOS, current ROM, KL grade, and a baseline Delta ROM of 0.00°.",
+            delta_note: "First session baseline: no previous ROM found; Delta ROM set to 0 for baseline estimate.",
+            is_first_rom_session: true,
+            recommendations: [],
+            beta0: 139.95,
+            beta1: -0.93,
+            beta2: -0.785,
+            beta3_KL: -7.93,
+            raw_score_mapping_low: 20.6,
+            raw_score_mapping_high: 140.55,
+            created_at: "2026-06-04T10:00:00Z",
+            recommended_exercises: [],
+          });
+        }
+
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
+    await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
+    await screen.findByText(/panel 1 of 14/i);
+
+    for (let panelIndex = 0; panelIndex < 14; panelIndex += 1) {
+      const visibleRadios = screen.getAllByRole("radio");
+      const firstRadioPerQuestion = visibleRadios.filter((radio, index, radios) => {
+        return radios.findIndex((candidate) => candidate.name === radio.name) === index;
+      });
+
+      for (const radio of firstRadioPerQuestion) {
+        await user.click(radio);
+      }
+
+      if (panelIndex === 13) {
+        await user.click(screen.getByRole("button", { name: /calculate KOOS/i }));
+      } else {
+        await user.click(screen.getByRole("button", { name: /next questions/i }));
+      }
+    }
+
+    await user.click(await screen.findByRole("button", { name: /continue to KL image grading/i }));
+    const imageInput = container.querySelector('input[type="file"][accept*="image/png"]');
+    expect(imageInput).not.toBeNull();
+    await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to IMU/i }));
+
+    const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
+    expect(imuInput).not.toBeNull();
+    await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+    await user.click(await screen.findByRole("button", { name: /continue to final rehab report/i }));
+    await user.click(screen.getByRole("button", { name: /generate report/i }));
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByText(/^First ROM session$/i)).toBeInTheDocument();
+    expect(screen.getByText(/delta rom is set to 0 as a baseline estimate/i)).toBeInTheDocument();
+    expect(screen.getByText("First session")).toBeInTheDocument();
+    expect(screen.getAllByText("0.0° baseline").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("0.0° baseline estimate")).toBeInTheDocument();
+    expect(screen.getAllByText("64.7").length).toBeGreaterThan(0);
+    expect(screen.getByText(/^63.2$/)).toBeInTheDocument();
+    expect(screen.getByText(/no previous rom was found, so this first report uses 0.00 as baseline/i)).toBeInTheDocument();
+  });
+
   it("shows three advanced videos when the final rehab score maps to level 5", async () => {
     rehabReportScore = 88;
     const user = userEvent.setup();

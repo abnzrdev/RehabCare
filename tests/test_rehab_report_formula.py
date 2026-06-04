@@ -5,6 +5,34 @@ from api.main import RehabReportInput, _build_rehab_report
 
 
 class RehabReportFormulaTests(unittest.TestCase):
+    def test_first_session_uses_baseline_delta_when_previous_rom_is_missing(self):
+        payload = {
+            "patient_id": "P_BASELINE",
+            "exercise": "knee_extension",
+            "koos_pre": 62.5,
+            "kl_grade": 2,
+            "current_rom": 108.2,
+            "imu_result": {"overall_score": 80.0},
+        }
+        expected_raw = 139.95 + (-0.93 * 62.5) + (-0.785 * 0.0) + (-7.93)
+        expected_mapped = round(100 * (140.55 - expected_raw) / (140.55 - 20.60), 2)
+
+        with patch("api.main.get_last_session", return_value=None), patch(
+            "api.main.save_session",
+            return_value={"session_id": "sess_baseline", "created_at": "2026-06-04T00:00:00+00:00"},
+        ):
+            result = _build_rehab_report(RehabReportInput(**payload))
+
+        self.assertTrue(result["is_first_rom_session"])
+        self.assertIsNone(result["previous_ROM"])
+        self.assertEqual(result["delta_ROM"], 0.0)
+        self.assertEqual(result["delta_rom_signed_deg"], 0.0)
+        self.assertEqual(result["delta_rom_abs_deg"], 0.0)
+        self.assertEqual(result["delta_rom_used_in_score_deg"], 0.0)
+        self.assertAlmostEqual(result["raw_score"], expected_raw, places=3)
+        self.assertAlmostEqual(result["final_rehab_score"], expected_mapped, places=2)
+        self.assertIn("Delta ROM set to 0 for baseline estimate", result["delta_note"])
+
     def test_supervisor_formula_is_returned_by_rehab_report_endpoint(self):
         payload = {
             "patient_id": "P_FORMULA",
@@ -35,8 +63,9 @@ class RehabReportFormulaTests(unittest.TestCase):
         self.assertAlmostEqual(result["predicted_delta_KOOS"], expected_raw, places=3)
         self.assertAlmostEqual(result["final_rehab_score"], expected_mapped, places=2)
         self.assertEqual(result["rehab_level_label"], "Level 4")
+        self.assertFalse(result["is_first_rom_session"])
         self.assertIn("raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL", result["formula_text"])
-        self.assertIn("This patient is improving", result["score_meaning"])
+        self.assertIn("This patient is stable", result["score_meaning"])
 
 
 if __name__ == "__main__":

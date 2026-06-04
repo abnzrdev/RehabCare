@@ -514,6 +514,7 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
     current_rom = _extract_current_rom(payload.imu_result, payload.current_rom)
     current_metrics = _extract_imu_angle_metrics(payload.imu_result)
     previous_row = get_last_session(payload.patient_id, payload.exercise)
+    is_first_rom_session = False
 
     if payload.previous_rom is not None:
         previous_rom = float(payload.previous_rom)
@@ -525,9 +526,16 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
         previous_rom = None
         delta_note = "No previous session ROM for this patient/exercise"
 
-    delta_rom_signed = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
-    delta_rom_abs = None if delta_rom_signed is None else round(abs(delta_rom_signed), 2)
-    delta_rom_used_in_score = delta_rom_signed
+    if previous_rom is None and current_rom is not None:
+        delta_rom_signed = 0.0
+        delta_rom_abs = 0.0
+        delta_rom_used_in_score = 0.0
+        delta_note = "First session baseline: no previous ROM found; Delta ROM set to 0 for baseline estimate."
+        is_first_rom_session = True
+    else:
+        delta_rom_signed = None if (previous_rom is None or current_rom is None) else round(current_rom - previous_rom, 2)
+        delta_rom_abs = None if delta_rom_signed is None else round(abs(delta_rom_signed), 2)
+        delta_rom_used_in_score = delta_rom_signed
     imu_rehab_score = payload.rehab_score
     if imu_rehab_score is None and isinstance(payload.imu_result, dict):
         imu_rehab_score = payload.imu_result.get("overall_score")
@@ -626,6 +634,11 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
                 "Delta ROM = current ROM - previous ROM",
                 "Absolute Delta ROM = abs(current ROM - previous ROM)",
             ],
+            "note": (
+                "Delta ROM is normally current ROM minus previous ROM. No previous ROM was found, so this first report uses 0.00 as baseline."
+                if is_first_rom_session
+                else None
+            ),
         },
         "rehab_score": imu_rehab_score,
         "rehab_level": rehab_level_payload["rehab_level"],
@@ -651,6 +664,7 @@ def _build_rehab_report(payload: RehabReportInput) -> dict[str, Any]:
         "recommendations": recommendations,
         "recommended_exercises": rehab_level_payload["recommended_exercises"],
         "delta_note": delta_note,
+        "is_first_rom_session": is_first_rom_session,
         "session_id": session_info["session_id"],
         "created_at": session_info["created_at"],
     }

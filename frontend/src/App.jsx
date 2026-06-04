@@ -1189,6 +1189,9 @@ button,input,select{font:inherit}
 .detailCard{border:1px solid var(--border);background:#f8f3e8;padding:12px}
 .detailCard strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#0c746b;margin-bottom:6px}
 .detailCard p{margin:0;color:var(--text);font-size:13px;line-height:1.45}
+.infoCard{margin-top:14px;border:1px solid rgba(12,116,107,.24);background:linear-gradient(180deg,#fff7e8,#f8f3e8);padding:14px 16px;display:grid;gap:8px}
+.infoCard strong{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#0c746b}
+.infoCard p{margin:0;color:var(--text);line-height:1.5}
 .microNote{margin-top:10px;font-size:12px;line-height:1.45;color:var(--muted)}
 .exerciseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:12px}
 .exerciseCard{border:1px solid var(--border);background:#fffaf0;padding:12px;display:grid;gap:12px;grid-template-rows:auto auto 1fr auto;min-height:100%}
@@ -1555,6 +1558,9 @@ export default function App() {
   const rawFormulaScore = reportResult?.raw_score ?? reportResult?.predicted_delta_KOOS;
   const finalRehabScore = reportResult?.final_rehab_score ?? mapRawRehabScoreTo100(Number(rawFormulaScore));
   const rehabLevel = rehabLevelFromScore(finalRehabScore);
+  const isFirstRomSession = Boolean(reportResult?.is_first_rom_session);
+  const firstRomSessionTitle = "First ROM session";
+  const firstRomSessionMessage = "This is the patient's first ROM session. Delta ROM needs both previous ROM and current ROM. For this first report, Delta ROM is set to 0 as a baseline estimate. After the next session, the system will calculate real Delta ROM.";
   const exerciseVideos = useMemo(() => getExerciseVideosForScore(finalRehabScore), [finalRehabScore]);
   const selectedVideo = getSelectedVideo(exerciseVideos, selectedVideoId);
   const localizedKoosPanelTag =
@@ -1702,6 +1708,8 @@ export default function App() {
     const rawHigh = Number(reportResult.raw_score_mapping_high ?? RAW_SCORE_MAPPING_HIGH);
     const rawFormulaText =
       "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL";
+    const firstSessionNote = reportResult.delta_rom_formula_explanation?.note
+      || "Delta ROM is normally current ROM minus previous ROM. No previous ROM was found, so this first report uses 0.00 as baseline.";
     if (!Number.isFinite(koosPre) || !Number.isFinite(deltaRom) || !Number.isFinite(beta3) || !Number.isFinite(rawScore)) {
       return {
         title: t.reportSections.finalRehabilitationScore,
@@ -1743,11 +1751,12 @@ export default function App() {
         { label: "Final mapped score", value: `final_rehab_score = ${formatCalcNumber(mappedScore, 2)} / 100` },
         { label: "Selected level", value: `Level ${mappedLevel}` },
         { label: "Simple meaning", value: `${t.explanations.lowerScoreMeaning} ${t.explanations.higherScoreMeaning}` },
+        ...(reportResult.is_first_rom_session ? [{ label: "First-session note", value: firstSessionNote }] : []),
       ],
       finalAnswer: `Raw score ${formatCalcNumber(rawScore, 3)} -> Final rehab score ${formatCalcNumber(mappedScore, 2)}/100 -> Level ${mappedLevel}`,
       meaningText: `The raw formula stays visible for transparency. The mapped 0-100 score drives Level ${mappedLevel}: ${mappedMeaning}.`,
     };
-  }, [reportResult, reportStatusKey, t.reportSections.finalRehabilitationScore]);
+  }, [reportResult, reportStatusKey, t.explanations.higherScoreMeaning, t.explanations.lowerScoreMeaning, t.reportSections.finalRehabilitationScore]);
   const exerciseLevelBreakdown = useMemo(() => {
     if (!Number.isFinite(Number(finalRehabScore))) {
       return {
@@ -2610,15 +2619,21 @@ export default function App() {
 
                   <div className="reportBlock">
                     <h4>{t.reportSections.inputSummary}</h4>
+                    {isFirstRomSession ? (
+                      <div className="infoCard" role="status" aria-live="polite">
+                        <strong>{firstRomSessionTitle}</strong>
+                        <p>{firstRomSessionMessage}</p>
+                      </div>
+                    ) : null}
                     <div className="metrics wideMetrics">
                       <div className="metric"><small>{t.labels.koosPre}</small><strong>{f(reportResult.KOOS_pre)}</strong></div>
                       <div className="metric"><small>Min angle</small><strong>{f(reportResult.min_angle_deg, "°")}</strong></div>
                       <div className="metric"><small>Max angle</small><strong>{f(reportResult.max_angle_deg, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.currentRom}</small><strong>{f(reportResult.rom_deg, "°")}</strong></div>
-                      <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(reportResult.previous_rom_deg, "°")}</strong></div>
-                      <div className="metric"><small>Signed Delta ROM</small><strong>{f(reportResult.delta_rom_signed_deg, "°")}</strong></div>
-                      <div className="metric"><small>Absolute Delta ROM</small><strong>{f(reportResult.delta_rom_abs_deg, "°")}</strong></div>
-                      <div className="metric"><small>Delta ROM used in score</small><strong>{f(reportResult.delta_rom_used_in_score_deg, "°")}</strong></div>
+                      <div className="metric"><small>{t.labels.previousRom}</small><strong>{isFirstRomSession ? "First session" : f(reportResult.previous_rom_deg, "°")}</strong></div>
+                      <div className="metric"><small>Signed Delta ROM</small><strong>{isFirstRomSession ? "0.0° baseline" : f(reportResult.delta_rom_signed_deg, "°")}</strong></div>
+                      <div className="metric"><small>Absolute Delta ROM</small><strong>{isFirstRomSession ? "0.0° baseline" : f(reportResult.delta_rom_abs_deg, "°")}</strong></div>
+                      <div className="metric"><small>Delta ROM used in score</small><strong>{isFirstRomSession ? "0.0° baseline estimate" : f(reportResult.delta_rom_used_in_score_deg, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.klGrade}</small><strong>{reportResult.KL_grade ?? "-"}</strong></div>
                       <div className="metric"><small>{t.labels.imuRehabScore}</small><strong>{f(reportResult.rehab_score)}</strong></div>
                       <div className="metric"><small>Raw rehab score</small><strong>{f(rawFormulaScore)}</strong></div>
@@ -2632,6 +2647,9 @@ export default function App() {
                     <p>{reportResult.interpretation || t.report.noInterpretation}</p>
                     {reportResult.score_meaning ? <p style={{ marginTop: 8 }}>{reportResult.score_meaning}</p> : null}
                     {reportResult.delta_note ? <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_note}</p> : null}
+                    {isFirstRomSession && reportResult.delta_rom_formula_explanation?.note ? (
+                      <p style={{ marginTop: 8, color: "var(--muted)" }}>{reportResult.delta_rom_formula_explanation.note}</p>
+                    ) : null}
                     {reportResult.delta_rom_formula_explanation?.steps ? (
                       <div className="microNote">
                         {reportResult.delta_rom_formula_explanation.steps.join(" | ")}
