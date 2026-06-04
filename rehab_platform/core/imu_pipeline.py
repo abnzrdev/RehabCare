@@ -113,6 +113,31 @@ _EMG_ALIASES: dict[str, int] = {
     "emg_signal": 36, "emg_raw": 36,
 }
 
+_HUGADB_SEGMENT_MAP: dict[str, str] = {
+    "rf": "right_foot",
+    "rs": "right_shin",
+    "rt": "right_thigh",
+    "lf": "left_foot",
+    "ls": "left_shin",
+    "lt": "left_thigh",
+}
+
+_IMU_SENSOR_SETUP_NOTES: dict[str, str] = {
+    "simple_single_sensor": (
+        "Single-sensor IMU CSV detected. Rehab scoring uses the available gyroscope "
+        "channels plus pitch or accelerometer tilt from one sensor."
+    ),
+    "hugadb_6imu_2emg": (
+        "HuGaDB-style multi-sensor CSV detected. RF/RS/RT/LF/LS/LT are mapped to "
+        "right/left foot, shin, and thigh. Knee ROM uses right thigh and right shin "
+        "when available, or right thigh only as fallback."
+    ),
+    "orthoscan_38ch": (
+        "Full 38-channel OrthoScan CSV detected. Knee ROM uses right thigh and right "
+        "shin IMUs when available, or right thigh only as fallback."
+    ),
+}
+
 SENSOR_LOCATION_LABELS: dict[str, str] = {
     "Right Thigh  (best for knee rehab)": "right_thigh",
     "Right Shin":   "right_shin",
@@ -197,6 +222,185 @@ def _score_tier(score: float) -> str:
     if score >= 65: return "good"
     if score >= 45: return "fair"
     return "poor"
+
+
+def _note_with_emg(base_note: str, emg_detected: bool) -> str:
+    if not emg_detected:
+        return base_note
+    return (
+        f"{base_note} EMG channels detected and stored for movement-quality / future "
+        "ML analysis. Current rehab score formula uses KOOS_pre, Delta ROM, and KL grade."
+    )
+
+
+def _get_matching_series(
+    df: pd.DataFrame,
+    cols_lc: dict[str, str],
+    aliases: list[str],
+) -> tuple[Optional[np.ndarray], Optional[str]]:
+    for alias in aliases:
+        orig = cols_lc.get(alias)
+        if orig is not None:
+            return df[orig].to_numpy(dtype=np.float64), orig
+    return None, None
+
+
+def _emg_channel_summary(source_column: Optional[str], values: Optional[np.ndarray]) -> Optional[dict]:
+    if source_column is None or values is None:
+        return None
+    abs_vals = np.abs(values.astype(np.float64))
+    rms = float(np.sqrt(np.mean(np.square(values.astype(np.float64))))) if len(values) else 0.0
+    return {
+        "source_column": source_column,
+        "mean_abs": round(float(np.mean(abs_vals)) if len(abs_vals) else 0.0, 4),
+        "rms": round(rms, 4),
+    }
+
+
+def _resolve_uploaded_sensor_columns(df: pd.DataFrame) -> dict:
+    cols_lc = {c.strip().lower(): c for c in df.columns}
+
+    # Prefer exact/full schema matches first.
+    orthoscan_channels: dict[str, np.ndarray] = {}
+    orthoscan_real_names: list[str] = []
+    orthoscan_emg_names: list[str] = []
+    orthoscan_emg_sources: dict[str, Optional[str]] = {"EMG_right": None, "EMG_left": None}
+    for feature in FEATURE_COLS:
+        orig = cols_lc.get(feature.lower())
+        if orig is None:
+            continue
+        orthoscan_channels[feature] = df[orig].to_numpy(dtype=np.float64)
+        orthoscan_real_names.append(orig)
+        if feature in {"EMG_right", "EMG_left"}:
+            orthoscan_emg_names.append(orig)
+            orthoscan_emg_sources[feature] = orig
+    if orthoscan_channels:
+        emg_detected = bool(orthoscan_emg_names)
+        return {
+            "sensor_format": "orthoscan_38ch",
+            "channels": orthoscan_channels,
+            "real_channel_names": orthoscan_real_names,
+            "emg_detected": emg_detected,
+            "emg_channels": orthoscan_emg_names,
+            "sensor_setup_note": _note_with_emg(_IMU_SENSOR_SETUP_NOTES["orthoscan_38ch"], emg_detected),
+            "emg_summary": {
+                "EMG_right": _emg_channel_summary(
+                    orthoscan_emg_sources["EMG_right"],
+                    orthoscan_channels.get("EMG_right"),
+                ),
+                "EMG_left": _emg_channel_summary(
+                    orthoscan_emg_sources["EMG_left"],
+                    orthoscan_channels.get("EMG_left"),
+                ),
+            },
+        }
+
+    hugadb_channels: dict[str, np.ndarray] = {}
+    hugadb_real_names: list[str] = []
+    for prefix, location in _HUGADB_SEGMENT_MAP.items():
+        for sensor_kind, feature_prefix in (("acc", "accelerometer"), ("gyro", "gyroscope")):
+            for axis in "xyz":
+                alias = f"{prefix}_{sensor_kind}_{axis}"
+                orig = cols_lc.get(alias)
+                if orig is None:
+                    continue
+                canonical_name = f"{feature_prefix}_{location}_{axis}"
+                hugadb_channels[canonical_name] = df[orig].to_numpy(dtype=np.float64)
+                hugadb_real_names.append(orig)
+    emg_right, emg_right_name = _get_matching_series(df, cols_lc, ["r_emg"])
+    emg_left, emg_left_name = _get_matching_series(df, cols_lc, ["l_emg"])
+    hugadb_emg_names = [name for name in [emg_right_name, emg_left_name] if name is not None]
+    if emg_right is not None:
+        hugadb_channels["EMG_right"] = emg_right
+    if emg_left is not None:
+        hugadb_channels["EMG_left"] = emg_left
+    if hugadb_channels:
+        real_names = hugadb_real_names + hugadb_emg_names
+        emg_detected = bool(hugadb_emg_names)
+        return {
+            "sensor_format": "hugadb_6imu_2emg",
+            "channels": hugadb_channels,
+            "real_channel_names": real_names,
+            "emg_detected": emg_detected,
+            "emg_channels": hugadb_emg_names,
+            "sensor_setup_note": _note_with_emg(_IMU_SENSOR_SETUP_NOTES["hugadb_6imu_2emg"], emg_detected),
+            "emg_summary": {
+                "EMG_right": _emg_channel_summary(emg_right_name, emg_right),
+                "EMG_left": _emg_channel_summary(emg_left_name, emg_left),
+            },
+        }
+
+    simple_channels: dict[str, np.ndarray] = {}
+    simple_real_names: list[str] = []
+    for key, aliases in {
+        "gyro_x": ["gyro_x", "gx", "g_x", "omega_x", "wx"],
+        "gyro_y": ["gyro_y", "gy", "g_y", "omega_y", "wy"],
+        "gyro_z": ["gyro_z", "gz", "g_z", "omega_z", "wz"],
+        "pitch": ["pitch"],
+        "acc_x": ["acc_x", "accel_x", "ax", "a_x"],
+        "acc_z": ["acc_z", "accel_z", "az", "a_z"],
+    }.items():
+        values, orig = _get_matching_series(df, cols_lc, aliases)
+        if values is not None and orig is not None:
+            simple_channels[key] = values
+            simple_real_names.append(orig)
+
+    emg_right, emg_right_name = _get_matching_series(df, cols_lc, ["emg_right", "emg", "emg_r", "emg_signal", "emg_raw"])
+    emg_left, emg_left_name = _get_matching_series(df, cols_lc, ["emg_left", "emg_l"])
+    if emg_right is not None:
+        simple_channels["EMG_right"] = emg_right
+    if emg_left is not None:
+        simple_channels["EMG_left"] = emg_left
+    simple_emg_names = [name for name in [emg_right_name, emg_left_name] if name is not None]
+    if simple_channels:
+        real_names = simple_real_names + simple_emg_names
+        emg_detected = bool(simple_emg_names)
+        return {
+            "sensor_format": "simple_single_sensor",
+            "channels": simple_channels,
+            "real_channel_names": real_names,
+            "emg_detected": emg_detected,
+            "emg_channels": simple_emg_names,
+            "sensor_setup_note": _note_with_emg(_IMU_SENSOR_SETUP_NOTES["simple_single_sensor"], emg_detected),
+            "emg_summary": {
+                "EMG_right": _emg_channel_summary(emg_right_name, emg_right),
+                "EMG_left": _emg_channel_summary(emg_left_name, emg_left),
+            },
+        }
+
+    return {
+        "sensor_format": "simple_single_sensor",
+        "channels": {},
+        "real_channel_names": [],
+        "emg_detected": False,
+        "emg_channels": [],
+        "sensor_setup_note": _IMU_SENSOR_SETUP_NOTES["simple_single_sensor"],
+        "emg_summary": {"EMG_right": None, "EMG_left": None},
+    }
+
+
+def _estimate_segment_angles(
+    gyro_x: Optional[np.ndarray],
+    acc_x: Optional[np.ndarray],
+    acc_z: Optional[np.ndarray],
+    n: int,
+) -> np.ndarray:
+    angle = 0.0
+    use_accel = acc_x is not None and acc_z is not None
+    out = np.zeros(n, dtype=np.float64)
+    for i in range(n):
+        gyro_dps = float(gyro_x[i]) * GYRO_PHYS if gyro_x is not None else 0.0
+        if use_accel:
+            angle = complementary_step(
+                angle,
+                gyro_dps,
+                float(acc_x[i]) * ACCEL_PHYS,
+                float(acc_z[i]) * ACCEL_PHYS,
+            )
+        else:
+            angle = angle + (gyro_dps * DT)
+        out[i] = angle
+    return out
 
 
 def generate_clinical_feedback(
@@ -687,12 +891,17 @@ def score_rehab_exercise(
     sensor_location: str = "right_thigh",
 ) -> dict:
     """
-    Biomechanical rehabilitation scoring from a single-sensor CSV.
+    Biomechanical rehabilitation scoring from uploaded IMU CSVs.
+
+    Supports:
+      1. Simple single-sensor CSVs (gyro_x/gyro_y/gyro_z, acc_x/acc_z, pitch)
+      2. Full OrthoScan 38-channel CSVs
+      3. HuGaDB-style 6 IMU + 2 EMG CSVs (RF/RS/RT/LF/LS/LT, r_EMG/l_EMG)
 
     Does NOT use the LSTM model — analyses raw signals directly:
       Shakiness — std of gyro-magnitude signal (°/s)
-      ROM       — detrended pitch range (removes integration drift), or
-                  arctan2(ax, az) tilt angle when pitch column absent
+      ROM       — detrended pitch range for simple CSVs, or
+                  complementary-filter knee angle from thigh/shin IMUs
 
     Returns the same JSON schema as analyze_imu_csv() so the frontend
     renders without any changes.
@@ -701,35 +910,53 @@ def score_rehab_exercise(
 
     df = pd.read_csv(io.BytesIO(csv_bytes), encoding="utf-8-sig")
     df.columns = df.columns.str.strip()
-    cols_lc = {c.strip().lower(): c for c in df.columns}
+    resolved = _resolve_uploaded_sensor_columns(df)
+    channels = resolved["channels"]
+    sensor_format = resolved["sensor_format"]
+    emg_detected = resolved["emg_detected"]
+    emg_channels = resolved["emg_channels"]
+    sensor_setup_note = resolved["sensor_setup_note"]
+    emg_summary = resolved["emg_summary"]
 
     # Fingerprint — proves a fresh file is being processed on every request
     file_hash = hashlib.md5(csv_bytes).hexdigest()[:10]
 
-    def _get(aliases: list) -> Optional[np.ndarray]:
-        for a in aliases:
-            if a in cols_lc:
-                return df[cols_lc[a]].to_numpy(dtype=np.float64)
-        return None
-
-    gx    = _get(["gyro_x", "gx", "g_x", "omega_x", "wx"])
-    gy    = _get(["gyro_y", "gy", "g_y", "omega_y", "wy"])
-    gz    = _get(["gyro_z", "gz", "g_z", "omega_z", "wz"])
-    pitch = _get(["pitch"])
-    ax    = _get(["acc_x", "accel_x", "ax", "a_x"])
-    az    = _get(["acc_z", "accel_z", "az", "a_z"])
-
-    if gx is None and gy is None and gz is None:
-        raise ValueError(
-            "No gyroscope columns found in CSV. "
-            "Expected: gyro_x / gyro_y / gyro_z (or gx / gy / gz)."
-        )
-
     n = len(df)
 
+    if sensor_format == "simple_single_sensor":
+        gx = channels.get("gyro_x")
+        gy = channels.get("gyro_y")
+        gz = channels.get("gyro_z")
+        pitch = channels.get("pitch")
+        ax = channels.get("acc_x")
+        az = channels.get("acc_z")
+        smoothness_components = [c for c in [gx, gy, gz] if c is not None]
+    else:
+        pitch = None
+        ax = None
+        az = None
+        gx = channels.get("gyroscope_right_thigh_x")
+        gy = channels.get("gyroscope_right_thigh_y")
+        gz = channels.get("gyroscope_right_thigh_z")
+        smoothness_components = [
+            channels.get("gyroscope_right_thigh_x"),
+            channels.get("gyroscope_right_thigh_y"),
+            channels.get("gyroscope_right_thigh_z"),
+            channels.get("gyroscope_right_shin_x"),
+            channels.get("gyroscope_right_shin_y"),
+            channels.get("gyroscope_right_shin_z"),
+        ]
+        smoothness_components = [c for c in smoothness_components if c is not None]
+
+    if not smoothness_components:
+        raise ValueError(
+            "No gyroscope columns found in CSV. Expected either simple columns "
+            "gyro_x/gyro_y/gyro_z, full 38-channel OrthoScan columns, or HuGaDB-style "
+            "columns like RT_gyro_x / RS_gyro_x."
+        )
+
     # ── Shakiness: std of gyro-magnitude per sample ───────────────────────────
-    components = [c for c in [gx, gy, gz] if c is not None]
-    gyro_mag   = np.sqrt(sum(c ** 2 for c in components))
+    gyro_mag = np.sqrt(sum(c ** 2 for c in smoothness_components))
     gyro_std   = float(np.std(gyro_mag))
 
     # ── ROM: detrend before computing range to strip integration drift ────────
@@ -744,13 +971,26 @@ def score_rehab_exercise(
         slope, intercept = np.polyfit(t, arr, 1)
         return arr - (slope * t + intercept)
 
-    if pitch is not None:
+    if sensor_format == "simple_single_sensor" and pitch is not None:
         angle_arr = _detrend(pitch)
-    elif ax is not None and az is not None:
+    elif sensor_format == "simple_single_sensor" and ax is not None and az is not None:
         # arctan2 is already bounded (-180 to 180); no detrending needed
         angle_arr = np.degrees(np.arctan2(ax, np.abs(az)))
     else:
-        angle_arr = None
+        thigh_angles = _estimate_segment_angles(
+            channels.get("gyroscope_right_thigh_x"),
+            channels.get("accelerometer_right_thigh_x"),
+            channels.get("accelerometer_right_thigh_z"),
+            n,
+        )
+        shin_gyro_x = channels.get("gyroscope_right_shin_x")
+        shin_acc_x = channels.get("accelerometer_right_shin_x")
+        shin_acc_z = channels.get("accelerometer_right_shin_z")
+        if shin_gyro_x is not None or (shin_acc_x is not None and shin_acc_z is not None):
+            shin_angles = _estimate_segment_angles(shin_gyro_x, shin_acc_x, shin_acc_z, n)
+            angle_arr = thigh_angles - shin_angles
+        else:
+            angle_arr = thigh_angles
 
     min_angle_deg = float(np.min(angle_arr)) if angle_arr is not None else None
     max_angle_deg = float(np.max(angle_arr)) if angle_arr is not None else None
@@ -872,12 +1112,7 @@ def score_rehab_exercise(
             "score": round(rom_score, 1),
         })
 
-    real_channels = [
-        name for name, arr in [
-            ("gyro_x", gx), ("gyro_y", gy), ("gyro_z", gz),
-            ("pitch",  pitch), ("acc_x", ax), ("acc_z", az),
-        ] if arr is not None
-    ]
+    real_channels = resolved["real_channel_names"]
 
     return {
         "session_summary": {
@@ -887,6 +1122,12 @@ def score_rehab_exercise(
             "n_simulated_channels": 0,
             "real_channel_names":   real_channels,
             "sensor_location":      sensor_location,
+            "sensor_format":        sensor_format,
+            "emg_detected":         emg_detected,
+            "emg_channels":         emg_channels,
+            "sensor_setup_note":    sensor_setup_note,
+            "EMG_right":            emg_summary["EMG_right"],
+            "EMG_left":             emg_summary["EMG_left"],
             "scoring_method":       "biomechanical",
             "gyro_std_dps":         round(gyro_std, 2),
             "min_angle_deg":        round(min_angle_deg, 1) if min_angle_deg is not None else None,

@@ -1641,6 +1641,10 @@ export default function App() {
         : "Smoothness status is based on movement analysis output from the backend.",
     };
   }, [currentMaxAngle, currentMinAngle, currentRom, imuAbsoluteDeltaRom, imuResult, imuSignedDeltaRom, imuSummary.gyro_std_dps, previousSessionRom]);
+  const imuSensorFormat = imuSummary.sensor_format || "-";
+  const imuRealChannelsCount = Number.isFinite(Number(imuSummary.n_real_channels)) ? Number(imuSummary.n_real_channels) : null;
+  const imuEmgDetected = imuSummary.emg_detected ? "Yes" : "No";
+  const imuSensorSetupNote = imuSummary.sensor_setup_note || "-";
   const klBreakdown = useMemo(() => {
     if (!klResult) return null;
     const mapping = klResult.report_score_mapping || {};
@@ -2484,7 +2488,11 @@ export default function App() {
                         <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
                         <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
+                        <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
+                        <div className="metric"><small>Real channels</small><strong>{imuRealChannelsCount ?? "-"}</strong></div>
+                        <div className="metric"><small>EMG detected</small><strong>{imuEmgDetected}</strong></div>
                       </div>
+                      <div className="formulaBox">{imuSensorSetupNote}</div>
                       {imuRomDetail ? (
                         <div className="calcCardGrid">
                           <FormulaBreakdown

@@ -62,7 +62,13 @@ describe("clinical wizard patient and KOOS flow", () => {
         if (url.includes("/api/imu/analyze")) {
           return jsonResponse({
             overall_score: 0.78,
-            session_summary: { rom_deg: 94 },
+            session_summary: {
+              rom_deg: 94,
+              sensor_format: "hugadb_6imu_2emg",
+              n_real_channels: 14,
+              emg_detected: true,
+              sensor_setup_note: "HuGaDB-style multi-sensor CSV detected. RF/RS/RT/LF/LS/LT are mapped to right/left foot, shin, and thigh.",
+            },
             dominant_activity_label: "Knee extension",
             feedback: [{ level: "Stable" }],
           });
@@ -183,6 +189,10 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByText(/IMU movement analysis completed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/range of motion/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
+    expect(screen.getByText("hugadb_6imu_2emg")).toBeInTheDocument();
+    expect(screen.getByText(/^14$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Yes$/)).toBeInTheDocument();
+    expect(screen.getByText(/HuGaDB-style multi-sensor CSV detected/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Rehab score$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/IMU rehab score/i)).not.toBeInTheDocument();
 
@@ -194,7 +204,8 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/IMU rehab score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("130.7").length).toBeGreaterThan(0);
     expect(screen.getByText("RAW REHAB SCORE")).toBeInTheDocument();
-    expect(screen.getByText(/Final mapped score: 8.2 \/ 100/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Final mapped score$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/^8.2$/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /continue to exercise videos/i }));
 
