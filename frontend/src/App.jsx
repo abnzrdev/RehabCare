@@ -266,13 +266,15 @@ const EXERCISES = [
   { value: "going_down", label: "Going down stairs" },
 ];
 
-const SENSOR_LOCATIONS = [
-  { value: "right_thigh", label: "Right thigh" },
-  { value: "right_shin", label: "Right shin" },
-  { value: "right_foot", label: "Right foot" },
-  { value: "left_thigh", label: "Left thigh" },
-  { value: "left_shin", label: "Left shin" },
-  { value: "left_foot", label: "Left foot" },
+const SENSOR_SETUPS = [
+  { value: "right_thigh", label: "Single sensor - Right thigh" },
+  { value: "right_shin", label: "Single sensor - Right shin" },
+  { value: "right_foot", label: "Single sensor - Right foot" },
+  { value: "left_thigh", label: "Single sensor - Left thigh" },
+  { value: "left_shin", label: "Single sensor - Left shin" },
+  { value: "left_foot", label: "Single sensor - Left foot" },
+  { value: "both_legs_6imu_2emg", label: "Both legs - 6 IMU + 2 EMG" },
+  { value: "auto", label: "Auto-detect from CSV" },
 ];
 
 const STRINGS = {
@@ -330,7 +332,7 @@ const STRINGS = {
       patientId: "Patient ID",
       patientName: "Patient name (optional)",
       exercise: "Exercise",
-      sensorPlacement: "Sensor placement",
+      sensorSetup: "Sensor setup",
       patientHistory: "Patient history",
       noSessions: "No sessions yet for this patient.",
       loading: "Loading...",
@@ -386,13 +388,15 @@ const STRINGS = {
       going_up: "Going up stairs",
       going_down: "Going down stairs",
     },
-    sensorLocations: {
-      right_thigh: "Right thigh",
-      right_shin: "Right shin",
-      right_foot: "Right foot",
-      left_thigh: "Left thigh",
-      left_shin: "Left shin",
-      left_foot: "Left foot",
+    sensorSetups: {
+      right_thigh: "Single sensor - Right thigh",
+      right_shin: "Single sensor - Right shin",
+      right_foot: "Single sensor - Right foot",
+      left_thigh: "Single sensor - Left thigh",
+      left_shin: "Single sensor - Left shin",
+      left_foot: "Single sensor - Left foot",
+      both_legs_6imu_2emg: "Both legs - 6 IMU + 2 EMG",
+      auto: "Auto-detect from CSV",
     },
     koosSections: {
       pain: "Pain",
@@ -422,7 +426,7 @@ const STRINGS = {
       imageTypes: "X-ray / radiograph / CT image",
       formats: "PNG, JPG, JPEG, BMP, TIFF",
       uploadImu: "Upload IMU CSV",
-      imuTypes: "Single-sensor CSV",
+      imuTypes: "Single-sensor or multi-sensor CSV",
       selectedImu: "Selected IMU CSV",
     },
     report: {
@@ -593,7 +597,7 @@ const STRINGS = {
       patientId: "ID пациента",
       patientName: "Имя пациента (необязательно)",
       exercise: "Упражнение",
-      sensorPlacement: "Расположение датчика",
+      sensorSetup: "Схема датчиков",
       patientHistory: "История пациента",
       noSessions: "Сессий для пациента пока нет.",
       loading: "Загрузка...",
@@ -649,13 +653,15 @@ const STRINGS = {
       going_up: "Подъем по лестнице",
       going_down: "Спуск по лестнице",
     },
-    sensorLocations: {
-      right_thigh: "Правое бедро",
-      right_shin: "Правая голень",
-      right_foot: "Правая стопа",
-      left_thigh: "Левое бедро",
-      left_shin: "Левая голень",
-      left_foot: "Левая стопа",
+    sensorSetups: {
+      right_thigh: "Один датчик - правое бедро",
+      right_shin: "Один датчик - правая голень",
+      right_foot: "Один датчик - правая стопа",
+      left_thigh: "Один датчик - левое бедро",
+      left_shin: "Один датчик - левая голень",
+      left_foot: "Один датчик - левая стопа",
+      both_legs_6imu_2emg: "Обе ноги - 6 IMU + 2 EMG",
+      auto: "Автоопределение по CSV",
     },
     koosSections: {
       pain: "Боль",
@@ -685,7 +691,7 @@ const STRINGS = {
       imageTypes: "Рентген / радиография / КТ",
       formats: "PNG, JPG, JPEG, BMP, TIFF",
       uploadImu: "Загрузить CSV ИМУ",
-      imuTypes: "CSV одного датчика",
+      imuTypes: "CSV одного датчика или мультисенсорный CSV",
       selectedImu: "Выбран CSV ИМУ",
     },
     report: {
@@ -856,7 +862,7 @@ const STRINGS = {
       patientId: "Пациент ID",
       patientName: "Пациент аты (міндетті емес)",
       exercise: "Жаттығу",
-      sensorPlacement: "Датчик орны",
+      sensorSetup: "Датчик жинағы",
       patientHistory: "Пациент тарихы",
       noSessions: "Бұл пациент үшін сессия жоқ.",
       loading: "Жүктелуде...",
@@ -912,13 +918,15 @@ const STRINGS = {
       going_up: "Баспалдақпен көтерілу",
       going_down: "Баспалдақпен түсу",
     },
-    sensorLocations: {
-      right_thigh: "Оң сан",
-      right_shin: "Оң сирақ",
-      right_foot: "Оң аяқ",
-      left_thigh: "Сол сан",
-      left_shin: "Сол сирақ",
-      left_foot: "Сол аяқ",
+    sensorSetups: {
+      right_thigh: "Бір датчик - оң сан",
+      right_shin: "Бір датчик - оң сирақ",
+      right_foot: "Бір датчик - оң аяқ",
+      left_thigh: "Бір датчик - сол сан",
+      left_shin: "Бір датчик - сол сирақ",
+      left_foot: "Бір датчик - сол аяқ",
+      both_legs_6imu_2emg: "Екі аяқ - 6 IMU + 2 EMG",
+      auto: "CSV бойынша автоанықтау",
     },
     koosSections: {
       pain: "Ауырсыну",
@@ -948,7 +956,7 @@ const STRINGS = {
       imageTypes: "Рентген / радиография / КТ",
       formats: "PNG, JPG, JPEG, BMP, TIFF",
       uploadImu: "ИМУ CSV жүктеу",
-      imuTypes: "Бір датчик CSV",
+      imuTypes: "Бір датчик CSV немесе көп датчикті CSV",
       selectedImu: "ИМУ CSV таңдалды",
     },
     report: {
@@ -1464,7 +1472,7 @@ export default function App() {
   const [patientId, setPatientId] = useState(() => storedPatientId);
   const [patientName, setPatientName] = useState(() => storedState.patient_name || "");
   const [exercise, setExercise] = useState(() => storedState.exercise || "knee_extension");
-  const [sensorLocation, setSensorLocation] = useState(() => storedState.sensor_location || "right_thigh");
+  const [sensorLocation, setSensorLocation] = useState(() => storedState.sensor_location || "auto");
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
@@ -2167,23 +2175,23 @@ export default function App() {
             <section className="panel" id="patient-context">
               <div className="grid2 sectionBody">
                 <div className="field">
-                  <label>{t.labels.patientId}</label>
-                  <input value={patientId} onChange={(e) => setPatientId(e.target.value)} placeholder="P001" />
+                  <label htmlFor="patient-id">{t.labels.patientId}</label>
+                  <input id="patient-id" value={patientId} onChange={(e) => setPatientId(e.target.value)} placeholder="P001" />
                 </div>
                 <div className="field">
-                  <label>{t.labels.patientName}</label>
-                  <input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+                  <label htmlFor="patient-name">{t.labels.patientName}</label>
+                  <input id="patient-name" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
                 </div>
                 <div className="field">
-                  <label>{t.labels.exercise}</label>
-                  <select value={exercise} onChange={(e) => setExercise(e.target.value)}>
+                  <label htmlFor="exercise">{t.labels.exercise}</label>
+                  <select id="exercise" value={exercise} onChange={(e) => setExercise(e.target.value)}>
                     {EXERCISES.map((x) => <option key={x.value} value={x.value}>{t.exercises[x.value]}</option>)}
                   </select>
                 </div>
                 <div className="field">
-                  <label>{t.labels.sensorPlacement}</label>
-                  <select value={sensorLocation} onChange={(e) => setSensorLocation(e.target.value)}>
-                    {SENSOR_LOCATIONS.map((x) => <option key={x.value} value={x.value}>{t.sensorLocations[x.value]}</option>)}
+                  <label htmlFor="sensor-setup">{t.labels.sensorSetup}</label>
+                  <select id="sensor-setup" value={sensorLocation} onChange={(e) => setSensorLocation(e.target.value)}>
+                    {SENSOR_SETUPS.map((x) => <option key={x.value} value={x.value}>{t.sensorSetups[x.value]}</option>)}
                   </select>
                 </div>
               </div>
@@ -2214,7 +2222,7 @@ export default function App() {
                   <div className="metrics">
                     <div className="metric"><small>{t.labels.patientName}</small><strong style={{ fontSize: 18 }}>{patientName.trim() || "-"}</strong></div>
                     <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || exercise}</strong></div>
-                    <div className="metric"><small>{t.labels.sensorPlacement}</small><strong style={{ fontSize: 18 }}>{t.sensorLocations[sensorLocation] || sensorLocation}</strong></div>
+                    <div className="metric"><small>{t.labels.sensorSetup}</small><strong style={{ fontSize: 18 }}>{t.sensorSetups[sensorLocation] || sensorLocation}</strong></div>
                   </div>
                   <div className="resultActions">
                     <button className="btn primary" onClick={continueToKoos}>{t.buttons.continueToKoos}</button>
@@ -2505,7 +2513,7 @@ export default function App() {
                         <div className="metric"><small>Max angle</small><strong>{f(currentMaxAngle, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
                         <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
-                        <div className="metric"><small>{t.labels.sensorPlacement}</small><strong style={{ fontSize: 18 }}>{t.sensorLocations[sensorLocation] || sensorLocation}</strong></div>
+                        <div className="metric"><small>{t.labels.sensorSetup}</small><strong style={{ fontSize: 18 }}>{t.sensorSetups[sensorLocation] || sensorLocation}</strong></div>
                         <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
                         <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
                         <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>

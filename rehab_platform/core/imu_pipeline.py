@@ -88,6 +88,7 @@ _SENSOR_LOC: dict[str, dict[str, list[int]]] = {
     "left_shin":   {"accel": [24, 25, 26], "gyro": [27, 28, 29]},
     "left_thigh":  {"accel": [30, 31, 32], "gyro": [33, 34, 35]},
 }
+_AUTO_SENSOR_SETUPS = {"auto", "both_legs_6imu_2emg"}
 
 # ── Short column-name aliases (case-insensitive) ──────────────────────────────
 _ACCEL_ALIASES: dict[str, int] = {
@@ -222,6 +223,17 @@ def _score_tier(score: float) -> str:
     if score >= 65: return "good"
     if score >= 45: return "fair"
     return "poor"
+
+
+def _resolve_effective_single_sensor_location(sensor_location: str) -> str:
+    if sensor_location in _SENSOR_LOC:
+        return sensor_location
+    if sensor_location in _AUTO_SENSOR_SETUPS:
+        return "right_thigh"
+    raise ValueError(
+        f"Unknown sensor_location '{sensor_location}'. "
+        f"Valid: {sorted([*_SENSOR_LOC, *_AUTO_SENSOR_SETUPS])}"
+    )
 
 
 def _note_with_emg(base_note: str, emg_detected: bool) -> str:
@@ -658,11 +670,7 @@ def expand_to_38ch(
     Auto-detection: if any real accel channel has |value| > 100, the data is
     treated as raw 16-bit integers and divided by SCALE_RAW (32768).
     """
-    if sensor_location not in _SENSOR_LOC:
-        raise ValueError(
-            f"Unknown sensor_location '{sensor_location}'. "
-            f"Valid: {sorted(_SENSOR_LOC)}"
-        )
+    effective_sensor_location = _resolve_effective_single_sensor_location(sensor_location)
 
     n       = len(df)
     cols_lc = {c.strip().lower(): c for c in df.columns}
@@ -683,8 +691,8 @@ def expand_to_38ch(
             real_idx.add(i)
 
     # 2. Short alias mapping to the selected sensor location
-    loc_accel = _SENSOR_LOC[sensor_location]["accel"]
-    loc_gyro  = _SENSOR_LOC[sensor_location]["gyro"]
+    loc_accel = _SENSOR_LOC[effective_sensor_location]["accel"]
+    loc_gyro  = _SENSOR_LOC[effective_sensor_location]["gyro"]
 
     for alias, axis in _ACCEL_ALIASES.items():
         orig = cols_lc.get(alias)
@@ -999,6 +1007,11 @@ def score_rehab_exercise(
     emg_channels = resolved["emg_channels"]
     sensor_setup_note = resolved["sensor_setup_note"]
     emg_summary = resolved["emg_summary"]
+    effective_sensor_location = (
+        _resolve_effective_single_sensor_location(sensor_location)
+        if sensor_format == "simple_single_sensor"
+        else sensor_location
+    )
 
     # Fingerprint — proves a fresh file is being processed on every request
     file_hash = hashlib.md5(csv_bytes).hexdigest()[:10]
@@ -1270,7 +1283,8 @@ def score_rehab_exercise(
             "n_real_channels":      len(real_channels),
             "n_simulated_channels": 0,
             "real_channel_names":   real_channels,
-            "sensor_location":      sensor_location,
+            "sensor_location":      effective_sensor_location,
+            "requested_sensor_location": sensor_location,
             "sensor_format":        sensor_format,
             "emg_detected":         emg_detected,
             "emg_channels":         emg_channels,

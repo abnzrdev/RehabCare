@@ -31,6 +31,19 @@ class RehabImuPipelineScoreTests(unittest.TestCase):
         self.assertLessEqual(summary["rom_deg"], 180)
         self.assertGreater(summary["rom_deg"], 0)
 
+    def test_simple_csv_auto_defaults_to_right_thigh(self):
+        csv_bytes = _csv_bytes(
+            ["gyro_x", "gyro_y", "gyro_z"],
+            [[6, 0, 0], [10, 0, 0], [14, 0, 0], [10, 0, 0], [6, 0, 0]],
+        )
+
+        result = score_rehab_exercise(csv_bytes, sensor_location="auto")
+
+        summary = result["session_summary"]
+        self.assertEqual(summary["sensor_format"], "simple_single_sensor")
+        self.assertEqual(summary["sensor_location"], "right_thigh")
+        self.assertEqual(summary["requested_sensor_location"], "auto")
+
     def test_simple_gyro_csv_with_realistic_values_works(self):
         rows = _sin_rows(
             120,
@@ -72,6 +85,27 @@ class RehabImuPipelineScoreTests(unittest.TestCase):
             or "unrealistic jumps" in diagnostics["gyro_integrated_detrended"]["reason"].lower()
         )
         self.assertLessEqual(summary["rom_deg"], 180)
+
+    def test_hugadb_both_legs_setup_is_accepted(self):
+        rows = _sin_rows(
+            90,
+            lambda i: [
+                0.25 * math.sin(i / 10), 0.95, 8000 if i % 2 == 0 else -8000,
+                0.12 * math.sin(i / 10 + 0.4), 0.98, 7000 if i % 2 == 0 else -7000,
+            ],
+        )
+        csv_bytes = _csv_bytes(
+            ["RT_acc_x", "RT_acc_z", "RT_gyro_x", "RS_acc_x", "RS_acc_z", "RS_gyro_x"],
+            rows,
+        )
+
+        result = score_rehab_exercise(csv_bytes, sensor_location="both_legs_6imu_2emg")
+
+        summary = result["session_summary"]
+        self.assertEqual(summary["sensor_format"], "hugadb_6imu_2emg")
+        self.assertEqual(summary["sensor_location"], "both_legs_6imu_2emg")
+        self.assertEqual(summary["requested_sensor_location"], "both_legs_6imu_2emg")
+        self.assertTrue(summary["rom_valid"])
 
     def test_hugadb_good_and_poor_files_return_rom_within_physiological_range(self):
         good_rows = _sin_rows(

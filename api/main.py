@@ -829,10 +829,10 @@ async def health():
 async def imu_analyze(
     file: UploadFile = File(...),
     lang: str            = Query("en"),
-    sensor_location: str = Query("right_thigh"),
+    sensor_location: str = Query("auto"),
 ):
     """
-    Accepts a single-sensor IMU CSV and returns biomechanical rehab scores.
+    Accepts single-sensor or multi-sensor IMU CSV data and returns biomechanical rehab scores.
 
     Scoring is done via direct signal analysis (no LSTM required):
       - Shakiness  — gyro-magnitude std detects tremor / instability
@@ -852,6 +852,7 @@ async def imu_analyze(
     valid_locations = {
         "right_thigh", "right_shin", "right_foot",
         "left_thigh",  "left_shin",  "left_foot",
+        "auto", "both_legs_6imu_2emg",
     }
     if sensor_location not in valid_locations:
         raise HTTPException(

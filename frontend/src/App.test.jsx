@@ -126,6 +126,20 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByText(/latest date/i)).toBeInTheDocument();
   });
 
+  it("renders Sensor setup with auto-detect default and both-legs option", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const sensorSetupSelect = screen.getByLabelText(/sensor setup/i);
+    expect(sensorSetupSelect).toHaveValue("auto");
+    expect(screen.getByRole("option", { name: /auto-detect from csv/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /both legs .*6 imu \+ 2 emg/i })).toBeInTheDocument();
+
+    await user.selectOptions(sensorSetupSelect, "right_thigh");
+    expect(sensorSetupSelect).toHaveValue("right_thigh");
+    expect(screen.getAllByText(/single sensor . right thigh/i).length).toBeGreaterThan(0);
+  });
+
   it("shows KOOS in 14 panels with category tags", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -202,6 +216,8 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByText("accelerometer_relative_tilt")).toBeInTheDocument();
     expect(screen.getByText(/^14$/)).toBeInTheDocument();
     expect(screen.getByText(/^Yes$/)).toBeInTheDocument();
+    expect(screen.getByText(/sensor setup/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/auto-detect from csv/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/HuGaDB-style multi-sensor CSV detected/i)).toBeInTheDocument();
     expect(screen.getByText(/Raw gyro ROM was rejected because ROM exceeded physiological range/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Rehab score$/i)).not.toBeInTheDocument();
