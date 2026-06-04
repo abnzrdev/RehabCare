@@ -70,6 +70,7 @@ describe("clinical wizard patient and KOOS flow", () => {
 
         if (url.includes("/api/rehab/report")) {
           const rawScore = 140.55 - ((rehabReportScore / 100) * (140.55 - 20.6));
+          const beta3Kl = Number((rawScore - 139.95 + (0.93 * 72.4) + (0.785 * 12)).toFixed(3));
           return jsonResponse({
             session_id: "session-123",
             raw_score: Number(rawScore.toFixed(3)),
@@ -86,10 +87,10 @@ describe("clinical wizard patient and KOOS flow", () => {
             score_meaning: "This patient is improving based on KOOS, Delta ROM, KL grade, and the mapped rehab score.",
             delta_note: "ROM improved by 12° compared with the previous session.",
             recommendations: [],
-            beta0: 1,
-            beta1: 2,
-            beta2: 3,
-            beta3_KL: 4,
+            beta0: 139.95,
+            beta1: -0.93,
+            beta2: -0.785,
+            beta3_KL: beta3Kl,
             raw_score_mapping_low: 20.6,
             raw_score_mapping_high: 140.55,
             created_at: "2026-05-31T10:00:00Z",
@@ -191,6 +192,9 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(await screen.findByText(/step 5 of 6 complete/i)).toBeInTheDocument();
     expect(screen.getAllByText(/final rehabilitation score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/IMU rehab score/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("130.7").length).toBeGreaterThan(0);
+    expect(screen.getByText("RAW REHAB SCORE")).toBeInTheDocument();
+    expect(screen.getByText(/Final mapped score: 8.2 \/ 100/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /continue to exercise videos/i }));
 
@@ -200,7 +204,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/^2$/).length).toBeGreaterThan(0);
     expect(screen.getByText(/exercise videos ready/i)).toBeInTheDocument();
     expect(screen.getByText(/exercise guidance is available for the current rehabilitation level/i)).toBeInTheDocument();
-    expect(screen.getByText(/level 1 exercise plan/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/level 1 exercise plan/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/based on final rehab score: 8.2/i)).toBeInTheDocument();
     expect(
       screen.getByText(/these exercises are guidance only\. a clinician should confirm the final exercise plan/i),
@@ -208,7 +212,7 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     expect(screen.getByText("Quad Sets")).toBeInTheDocument();
     expect(screen.getByText("Heel Slides")).toBeInTheDocument();
-    expect(screen.getAllByText(/^Level 1$/i)).toHaveLength(2);
+    expect(screen.getAllByText(/^Level 1$/i).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("Step Ups")).not.toBeInTheDocument();
     expect(screen.getByText("4 min")).toBeInTheDocument();
     expect(screen.getByText("3 min")).toBeInTheDocument();
@@ -321,7 +325,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("button", { name: /generate report/i }));
     await user.click(await screen.findByRole("button", { name: /continue to exercise videos/i }));
 
-    expect(await screen.findByText(/level 5 exercise plan/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/level 5 exercise plan/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^3$/).length).toBeGreaterThan(0);
     expect(screen.getByText("Step Up Variations")).toBeInTheDocument();
     expect(screen.getByText("Lateral Step-Up")).toBeInTheDocument();

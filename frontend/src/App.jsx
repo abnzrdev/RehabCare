@@ -353,7 +353,7 @@ const STRINGS = {
       displayGrade: "Display grade",
       confidence: "Confidence",
       koosPre: "KOOS_pre",
-      koosTotal: "KOOS total",
+      koosTotal: "KOOS_pre",
       predictedKoosDelta: "Predicted KOOS change",
       deltaRom: "Delta ROM",
       movementResult: "Movement result",
@@ -463,8 +463,8 @@ const STRINGS = {
     completion: {
       patientTitle: "Patient context completed",
       patientText: "Session details are ready for clinical scoring.",
-      koosTitle: "KOOS completed",
-      koosText: "Questionnaire scoring is ready for image grading.",
+      koosTitle: "KOOS_pre completed",
+      koosText: "Pre-rehabilitation questionnaire scoring is ready for image grading.",
       klTitle: "KL grading completed",
       klText: "Image grading is ready for movement analysis.",
       imuTitle: "IMU movement analysis completed",
@@ -487,7 +487,7 @@ const STRINGS = {
       romExplanation: "ROM = knee movement range in degrees.",
       deltaRomExplanation: "Delta ROM = current ROM minus previous ROM.",
       rehabScoreExplanation: "Rehab score = current movement compared with healthy baseline.",
-      koosFormula: "KOOS subscale = 100 - (mean answer / 4) × 100. Total KOOS = average of available subscales.",
+      koosFormula: "KOOS_pre subscale = 100 - (mean answer / 4) × 100. KOOS_pre = average of available KOOS_pre subscales.",
       koosScoring: "Each KOOS question is scored from 0 to 4, where higher symptom burden lowers the KOOS score.",
       klHow: "KL grading is produced from the uploaded knee image by an AI classifier that estimates the most likely Kellgren-Lawrence grade.",
       klSafety: "This is an AI-assisted estimate and should always be reviewed with clinical judgement.",
@@ -495,8 +495,8 @@ const STRINGS = {
       imuSmoothness: "Smoothness reflects gyroscope stability: steadier motion suggests better movement control and less shakiness.",
       imuScoreFormula: "IMU rehab score combines movement range and control, then maps that score into a rehab level for exercise progression.",
       finalPredictionExplanation: "This score combines KOOS_pre, ROM change, and KL grade to estimate rehabilitation progress.",
-      higherScoreMeaning: "Higher score means better expected rehabilitation progress.",
-      lowerScoreMeaning: "Lower score means closer monitoring may be needed.",
+      higherScoreMeaning: "High mapped score = better rehab condition.",
+      lowerScoreMeaning: "Low mapped score = higher rehab need.",
       reportCombination: "KOOS_pre and KL grade affect the report formula, while IMU ROM and rehab score drive change tracking, rehab level, and exercise suggestions.",
       formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
@@ -616,7 +616,7 @@ const STRINGS = {
       displayGrade: "Отображаемая степень",
       confidence: "Уверенность",
       koosPre: "KOOS_pre",
-      koosTotal: "Итог KOOS",
+      koosTotal: "KOOS_pre",
       predictedKoosDelta: "Прогноз изменения KOOS",
       deltaRom: "Изменение ROM",
       movementResult: "Результат движения",
@@ -726,8 +726,8 @@ const STRINGS = {
     completion: {
       patientTitle: "Контекст пациента завершен",
       patientText: "Данные сессии готовы для клинической оценки.",
-      koosTitle: "KOOS завершен",
-      koosText: "Оценка опросника готова для анализа снимка.",
+      koosTitle: "KOOS_pre завершен",
+      koosText: "До-реабилитационная оценка опросника готова для анализа снимка.",
       klTitle: "KL-оценка завершена",
       klText: "Оценка снимка готова для анализа движения.",
       imuTitle: "Анализ движения ИМУ завершен",
@@ -750,7 +750,7 @@ const STRINGS = {
       romExplanation: "ROM = диапазон движения колена в градусах.",
       deltaRomExplanation: "Delta ROM = текущий ROM минус предыдущий ROM.",
       rehabScoreExplanation: "Балл реабилитации = текущее движение в сравнении со здоровым базовым уровнем.",
-      koosFormula: "Подшкала KOOS = 100 - (средний ответ / 4) × 100. Итоговый KOOS = среднее по доступным подшкалам.",
+      koosFormula: "Подшкала KOOS_pre = 100 - (средний ответ / 4) × 100. KOOS_pre = среднее по доступным подшкалам KOOS_pre.",
       koosScoring: "Каждый вопрос KOOS оценивается от 0 до 4; более выраженные симптомы снижают итоговый балл KOOS.",
       klHow: "KL-оценка формируется по загруженному снимку колена с помощью AI-классификатора, который оценивает наиболее вероятную степень Kellgren-Lawrence.",
       klSafety: "Это AI-оценка с поддержкой врача и она должна проверяться клиническим решением.",
@@ -758,8 +758,8 @@ const STRINGS = {
       imuSmoothness: "Плавность отражает стабильность гироскопа: более ровное движение обычно означает лучший контроль и меньше дрожания.",
       imuScoreFormula: "Балл ИМУ-реабилитации объединяет диапазон движения и контроль движения, затем переводится в уровень реабилитации для подбора упражнений.",
       finalPredictionExplanation: "Этот балл объединяет KOOS_pre, изменение ROM и степень KL для оценки прогресса реабилитации.",
-      higherScoreMeaning: "Более высокий балл означает лучший ожидаемый прогресс реабилитации.",
-      lowerScoreMeaning: "Более низкий балл означает, что может потребоваться более тщательное наблюдение.",
+      higherScoreMeaning: "Высокий mapped score = лучшее состояние реабилитации.",
+      lowerScoreMeaning: "Низкий mapped score = более высокая потребность в реабилитации.",
       reportCombination: "KOOS_pre и степень KL влияют на формулу отчета, а ROM и балл ИМУ влияют на отслеживание изменений, уровень реабилитации и подбор упражнений.",
       formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
@@ -879,7 +879,7 @@ const STRINGS = {
       displayGrade: "Көрсетілетін дәреже",
       confidence: "Сенімділік",
       koosPre: "KOOS_pre",
-      koosTotal: "KOOS жалпы",
+      koosTotal: "KOOS_pre",
       predictedKoosDelta: "KOOS өзгеріс болжамы",
       deltaRom: "ROM өзгерісі",
       movementResult: "Қозғалыс нәтижесі",
@@ -989,8 +989,8 @@ const STRINGS = {
     completion: {
       patientTitle: "Пациент контексті аяқталды",
       patientText: "Сессия деректері клиникалық бағалауға дайын.",
-      koosTitle: "KOOS аяқталды",
-      koosText: "Сауалнама бағасы суретті талдауға дайын.",
+      koosTitle: "KOOS_pre аяқталды",
+      koosText: "Оңалтуға дейінгі сауалнама бағасы суретті талдауға дайын.",
       klTitle: "KL бағасы аяқталды",
       klText: "Сурет бағасы қозғалыс талдауына дайын.",
       imuTitle: "ИМУ қозғалыс талдауы аяқталды",
@@ -1013,7 +1013,7 @@ const STRINGS = {
       romExplanation: "ROM = тізе қозғалысының градуспен өлшенетін диапазоны.",
       deltaRomExplanation: "Delta ROM = ағымдағы ROM минус алдыңғы ROM.",
       rehabScoreExplanation: "Оңалту балы = ағымдағы қозғалысты сау базалық деңгеймен салыстыру.",
-      koosFormula: "KOOS ішкі шкаласы = 100 - (орташа жауап / 4) × 100. Жалпы KOOS = қолжетімді ішкі шкалалардың орташа мәні.",
+      koosFormula: "KOOS_pre ішкі шкаласы = 100 - (орташа жауап / 4) × 100. KOOS_pre = қолжетімді KOOS_pre ішкі шкалаларының орташа мәні.",
       koosScoring: "KOOS сұрақтарының әрқайсысы 0-ден 4-ке дейін бағаланады; симптом жоғарылаған сайын KOOS балы төмендейді.",
       klHow: "KL бағасы жүктелген тізе суреті бойынша Kellgren-Lawrence дәрежесін болжайтын AI классификаторы арқылы алынады.",
       klSafety: "Бұл AI көмегімен алынған баға, оны міндетті түрде клиникалық бағалаумен тексеру керек.",
@@ -1021,8 +1021,8 @@ const STRINGS = {
       imuSmoothness: "Тегістік гироскоп тұрақтылығынан бағаланады: қозғалыс тұрақты болса, бақылау жақсырақ және діріл аздау болады.",
       imuScoreFormula: "ИМУ оңалту балы қозғалыс ауқымы мен бақылауын біріктіреді, содан кейін жаттығу деңгейін таңдау үшін оңалту деңгейіне ауыстырылады.",
       finalPredictionExplanation: "Бұл балл KOOS_pre, ROM өзгерісі және KL дәрежесін біріктіріп, оңалту прогресін бағалайды.",
-      higherScoreMeaning: "Жоғары балл күтілетін оңалту прогресі жақсырақ екенін білдіреді.",
-      lowerScoreMeaning: "Төмен балл мұқият бақылау қажет болуы мүмкін екенін білдіреді.",
+      higherScoreMeaning: "Жоғары mapped score = оңалту жағдайы жақсырақ.",
+      lowerScoreMeaning: "Төмен mapped score = оңалту қажеттілігі жоғарырақ.",
       reportCombination: "KOOS_pre мен KL дәрежесі есеп формуласына әсер етеді, ал ИМУ ROM және балы өзгеріс трегіне, оңалту деңгейіне және жаттығу ұсынымдарына әсер етеді.",
       formulaReadable: "predicted_delta_KOOS = β0 + β1×KOOS_pre + β2×signed_delta_ROM + β3_KL",
     },
@@ -1563,13 +1563,13 @@ export default function App() {
 
       return {
         title: label,
-        formula: detail.formula || "KOOS subscale = 100 - (mean answer / 4) * 100",
+        formula: detail.formula || "KOOS_pre subscale = 100 - (mean answer / 4) × 100",
         inputs: [
           { label: "Answered values", value: answeredValues.length ? answeredValues.join(", ") : "-" },
           { label: "Mean answer", value: formatCalcNumber(meanAnswer, 4) },
         ],
         steps: [
-          { label: "Substitute patient values", value: `${label} = 100 - (${formatCalcNumber(meanAnswer, 4)} / 4) × 100` },
+          { label: "Substitute patient values", value: `${label} KOOS_pre = 100 - (${formatCalcNumber(meanAnswer, 4)} / 4) × 100` },
           { label: "Divide", value: `${label} = 100 - ${formatCalcNumber(divideResult, 4)} × 100` },
           { label: "Multiply", value: `${label} = 100 - ${formatCalcNumber(multiplyResult, 2)}` },
         ],
@@ -1585,19 +1585,19 @@ export default function App() {
     const totalCount = Number(totalDetails.count);
     if (totalValues.length > 0 && totalCount > 0) {
       subscaleCards.push({
-        title: t.labels.koosTotal,
-        formula: totalDetails.formula || "Total KOOS = average of available KOOS subscales",
+        title: t.labels.koosPre,
+        formula: totalDetails.formula || "KOOS_pre = average of available KOOS_pre subscales",
         inputs: totalLabels.map((label, index) => ({
           label,
           value: formatCalcNumber(totalValues[index], 2),
         })),
         steps: [
-          { label: "Substitute values", value: `Total KOOS = (${totalLabels.join(" + ")}) / ${totalCount}` },
-          { label: "Use patient values", value: `Total KOOS = (${totalValues.map((value) => formatCalcNumber(value, 2)).join(" + ")}) / ${totalCount}` },
-          { label: "Add", value: `Total KOOS = ${formatCalcNumber(totalSum, 2)} / ${totalCount}` },
+          { label: "Substitute values", value: `KOOS_pre = (${totalLabels.join(" + ")}) / ${totalCount}` },
+          { label: "Use patient values", value: `KOOS_pre = (${totalValues.map((value) => formatCalcNumber(value, 2)).join(" + ")}) / ${totalCount}` },
+          { label: "Add", value: `KOOS_pre = ${formatCalcNumber(totalSum, 2)} / ${totalCount}` },
         ],
-        finalAnswer: `Total KOOS = ${formatCalcNumber(koosResult.koos_total, 2)}`,
-        meaningText: "This total is the average of the available KOOS subscales.",
+        finalAnswer: `KOOS_pre = ${formatCalcNumber(koosResult.koos_total, 2)}`,
+        meaningText: "This pre-rehabilitation score is the average of the available KOOS_pre subscales.",
       });
     }
 
@@ -1671,11 +1671,8 @@ export default function App() {
   }, [klGradeLabel, klResult]);
   const reportBreakdown = useMemo(() => {
     if (!reportResult) return null;
-    const beta0 = Number(reportResult.beta0);
     const koosPre = Number(reportResult.KOOS_pre);
-    const beta1Term = roundCalc(Number(reportResult.beta1) * koosPre, 3);
     const deltaRom = Number(reportResult.delta_rom_used_in_score_deg ?? reportResult.delta_ROM);
-    const beta2Term = roundCalc(Number(reportResult.beta2) * deltaRom, 3);
     const beta3 = Number(reportResult.beta3_KL);
     const rawScore = Number(reportResult.raw_score ?? reportResult.predicted_delta_KOOS);
     const mappedScore =
@@ -1685,13 +1682,15 @@ export default function App() {
       reportResult.rehab_level_meaning || rehabMeaningFromScore(mappedScore);
     const rawLow = Number(reportResult.raw_score_mapping_low ?? RAW_SCORE_MAPPING_LOW);
     const rawHigh = Number(reportResult.raw_score_mapping_high ?? RAW_SCORE_MAPPING_HIGH);
+    const rawFormulaText =
+      "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL";
     if (!Number.isFinite(koosPre) || !Number.isFinite(deltaRom) || !Number.isFinite(beta3) || !Number.isFinite(rawScore)) {
       return {
         title: t.reportSections.finalRehabilitationScore,
-        formula: reportResult.formula_text || "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL",
+        formula: reportResult.formula_text || rawFormulaText,
         inputs: [
           { label: "KOOS_pre", value: f(reportResult.KOOS_pre) },
-          { label: "Signed delta ROM used in score", value: f(reportResult.delta_rom_used_in_score_deg, "°") },
+          { label: "Delta_ROM", value: f(reportResult.delta_rom_used_in_score_deg, "°") },
           { label: "KL grade", value: String(reportResult.KL_grade ?? "-") },
         ],
         steps: [],
@@ -1699,9 +1698,6 @@ export default function App() {
         meaningText: "The backend only calculates the raw formula output and mapped rehab score when KOOS_pre, Delta ROM, and the KL coefficient are all available.",
       };
     }
-    const additionText = [beta0, beta1Term, beta2Term, beta3]
-      .map((value) => (Number.isFinite(Number(value)) ? formatMaybeSigned(value, 3) : "-"))
-      .join(" + ");
     const mappedNumerator = roundCalc(rawHigh - rawScore, 3);
     const mappedDenominator = roundCalc(rawHigh - rawLow, 2);
     const unclampedMapped = roundCalc(
@@ -1711,24 +1707,24 @@ export default function App() {
 
     return {
       title: t.reportSections.finalRehabilitationScore,
-      formula: reportResult.formula_text || "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL",
+      formula: reportResult.formula_text || rawFormulaText,
       inputs: [
         { label: "KOOS_pre", value: formatCalcNumber(koosPre, 2) },
-        { label: "Signed delta ROM used in score", value: `${formatCalcNumber(deltaRom, 2)}°` },
+        { label: "Delta_ROM", value: `${formatCalcNumber(deltaRom, 2)}°` },
         { label: "Absolute delta ROM", value: `${formatCalcNumber(reportResult.delta_rom_abs_deg, 2)}°` },
         { label: "KL grade", value: String(reportResult.KL_grade ?? "-") },
         { label: "β3_KL", value: formatMaybeSigned(beta3, 3) },
         { label: "Mapped final rehab score", value: `${formatCalcNumber(mappedScore, 2)} / 100` },
       ],
       steps: [
-        { label: "Original raw formula", value: "raw_score = 139.95 - 0.93*KOOS_pre - 0.785*Delta_ROM + beta3_KL" },
-        { label: "Substitute patient values", value: `raw_score = ${formatCalcNumber(beta0, 2)} + (${formatCalcNumber(reportResult.beta1, 3)} × ${formatCalcNumber(koosPre, 2)}) + (${formatCalcNumber(reportResult.beta2, 3)} × ${formatCalcNumber(deltaRom, 2)}) + ${formatMaybeSigned(beta3, 3)}` },
-        { label: "Raw score result", value: `raw_score = ${additionText} = ${formatCalcNumber(rawScore, 3)}` },
-        { label: "0-100 mapping formula", value: `final_rehab_score = 100 × (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawScore, 3)}) / (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawLow, 2)})` },
-        { label: "Map and clamp", value: `final_rehab_score = clamp(100 × ${formatCalcNumber(mappedNumerator, 3)} / ${formatCalcNumber(mappedDenominator, 2)}, 0, 100) = clamp(${formatCalcNumber(unclampedMapped, 3)}, 0, 100)` },
+        { label: "Original raw formula", value: rawFormulaText },
+        { label: "Substitute patient values", value: `raw_score = 139.95 - 0.93*${formatCalcNumber(koosPre, 2)} - 0.785*${formatCalcNumber(deltaRom, 2)} + ${formatCalcNumber(beta3, 3)}` },
+        { label: "Raw score result", value: `raw_score = ${formatCalcNumber(rawScore, 3)}` },
+        { label: "Mapping formula", value: "final_rehab_score = 100 * (raw_high - raw_score) / (raw_high - raw_low)" },
+        { label: "Map and clamp", value: `final_rehab_score = clamp(100 * (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawScore, 3)}) / (${formatCalcNumber(rawHigh, 2)} - ${formatCalcNumber(rawLow, 2)}), 0, 100) = clamp(100 * ${formatCalcNumber(mappedNumerator, 3)} / ${formatCalcNumber(mappedDenominator, 2)}, 0, 100) = ${formatCalcNumber(mappedScore, 2)} / 100` },
         { label: "Final mapped score", value: `final_rehab_score = ${formatCalcNumber(mappedScore, 2)} / 100` },
         { label: "Selected level", value: `Level ${mappedLevel}` },
-        { label: "Simple meaning", value: reportResult.score_meaning || `This patient is ${reportStatusKey.replace("_", " ")} based on KOOS, Delta ROM, KL grade, and the mapped rehab score.` },
+        { label: "Simple meaning", value: `${t.explanations.lowerScoreMeaning} ${t.explanations.higherScoreMeaning}` },
       ],
       finalAnswer: `Raw score ${formatCalcNumber(rawScore, 3)} -> Final rehab score ${formatCalcNumber(mappedScore, 2)}/100 -> Level ${mappedLevel}`,
       meaningText: `The raw formula stays visible for transparency. The mapped 0-100 score drives Level ${mappedLevel}: ${mappedMeaning}.`,
@@ -2281,7 +2277,7 @@ export default function App() {
                       <h4>{t.completion.koosTitle}</h4>
                       <p>{t.completion.koosText}</p>
                     </div>
-                    <div className="resultValue">{f(koosResult.koos_total)}<span>{t.labels.koosTotal}</span></div>
+                    <div className="resultValue">{f(koosResult.koos_total)}<span>{t.labels.koosPre}</span></div>
                   </div>
                   <div className="resultBars subscaleBars">
                     {Object.entries(koosResult.subscales || {}).map(([k, v]) => (
@@ -2557,7 +2553,10 @@ export default function App() {
                           {reportResult.rehab_level_meaning ? <span className="chip">{reportResult.rehab_level_meaning}</span> : null}
                         </div>
                       </div>
-                      <div className="resultValue">{f(finalRehabScore)}<span>{t.labels.finalRehabilitationScore} / 100</span></div>
+                      <div className="resultValue">
+                        {f(rawFormulaScore)}
+                        <span>RAW REHAB SCORE</span>
+                      </div>
                     </div>
                     <div className="resultActions">
                       <span className="chip teal">{t.completion.sessionSaved}</span>
@@ -2595,8 +2594,8 @@ export default function App() {
                       <div className="metric"><small>Delta ROM used in score</small><strong>{f(reportResult.delta_rom_used_in_score_deg, "°")}</strong></div>
                       <div className="metric"><small>{t.labels.klGrade}</small><strong>{reportResult.KL_grade ?? "-"}</strong></div>
                       <div className="metric"><small>{t.labels.imuRehabScore}</small><strong>{f(reportResult.rehab_score)}</strong></div>
-                      <div className="metric"><small>Raw formula output</small><strong>{f(rawFormulaScore)}</strong></div>
-                      <div className="metric"><small>{t.labels.finalRehabilitationScore}</small><strong>{f(finalRehabScore)}</strong></div>
+                      <div className="metric"><small>Raw rehab score</small><strong>{f(rawFormulaScore)}</strong></div>
+                      <div className="metric"><small>Final mapped score</small><strong>{f(finalRehabScore)}</strong></div>
                       <div className="metric"><small>{t.labels.rehabLevel}</small><strong style={{ fontSize: 18 }}>{reportResult.rehab_level_label || "-"}</strong></div>
                     </div>
                   </div>
