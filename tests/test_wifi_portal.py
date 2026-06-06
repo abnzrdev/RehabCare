@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from raspberry import wifi_portal
 
@@ -75,6 +76,39 @@ class WifiPortalTests(unittest.TestCase):
                 "secret123",
                 "ifname",
                 "wlan0",
+            ],
+        )
+
+    def test_connect_wifi_deletes_stale_profile_before_wpa_connect(self):
+        calls = []
+
+        def fake_run_command(args):
+            calls.append(args)
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        with (
+            mock.patch.object(wifi_portal, "enable_ssh", return_value=True),
+            mock.patch.object(wifi_portal, "get_wifi_device", return_value="wlan0"),
+            mock.patch.object(wifi_portal, "run_command", side_effect=fake_run_command),
+        ):
+            result = wifi_portal.connect_wifi("Clinic", "wpa", "secret123", "")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            calls,
+            [
+                ["nmcli", "connection", "delete", "Clinic"],
+                [
+                    "nmcli",
+                    "device",
+                    "wifi",
+                    "connect",
+                    "Clinic",
+                    "password",
+                    "secret123",
+                    "ifname",
+                    "wlan0",
+                ],
             ],
         )
 

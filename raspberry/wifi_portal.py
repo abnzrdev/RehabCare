@@ -210,6 +210,8 @@ def connect_wifi(ssid, mode, password, identity):
             return create_result
         return run_command(["nmcli", "connection", "up", connection_name])
 
+    # Clear a stale same-name saved connection before using the simple connect flow.
+    run_command(["nmcli", "connection", "delete", ssid])
     return run_command(command)
 
 
