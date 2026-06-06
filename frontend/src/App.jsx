@@ -294,15 +294,24 @@ const REALTIME_IMU_COPY = {
   en: {
     title: "Real IMU sensor feed",
     latestSensor: "Real IMU Sensor",
+    cardTitle: "Sensor cards",
+    hipSensor: "Hip sensor",
+    kneeSensor: "Knee / thigh sensor",
+    ankleSensor: "Ankle / shin sensor",
     recentTable: "Recent IMU data",
     refreshNote: "Auto-refresh every 1.5 seconds",
     noSensor: "Waiting for live sensor data.",
+    waitingForSensor: "Waiting for sensor",
     noRows: "No IMU samples received yet.",
     source: "Source",
     timestamp: "Timestamp",
     deviceId: "Device ID",
     leg: "Leg",
     bodyPart: "Body part",
+    liveStatus: "Live status",
+    online: "Online",
+    waitingForData: "Waiting for data",
+    lastUpdated: "Last updated",
     pitch: "Pitch",
     roll: "Roll",
     accX: "Acc X",
@@ -312,15 +321,24 @@ const REALTIME_IMU_COPY = {
   ru: {
     title: "Поток реального IMU",
     latestSensor: "Реальный IMU датчик",
+    cardTitle: "Карточки датчиков",
+    hipSensor: "Датчик бедра",
+    kneeSensor: "Датчик колена / бедра",
+    ankleSensor: "Датчик лодыжки / голени",
     recentTable: "Последние данные IMU",
     refreshNote: "Автообновление каждые 1.5 секунды",
     noSensor: "Ожидание данных от реального датчика.",
+    waitingForSensor: "Ожидание датчика",
     noRows: "Пока нет полученных IMU сэмплов.",
     source: "Источник",
     timestamp: "Время",
     deviceId: "ID устройства",
     leg: "Нога",
     bodyPart: "Часть тела",
+    liveStatus: "Статус",
+    online: "Онлайн",
+    waitingForData: "Ожидание данных",
+    lastUpdated: "Последнее обновление",
     pitch: "Pitch",
     roll: "Roll",
     accX: "Acc X",
@@ -330,15 +348,24 @@ const REALTIME_IMU_COPY = {
   kz: {
     title: "Нақты IMU ағыны",
     latestSensor: "Нақты IMU сенсоры",
+    cardTitle: "Сенсор карталары",
+    hipSensor: "Жамбас сенсоры",
+    kneeSensor: "Тізе / сан сенсоры",
+    ankleSensor: "Тобық / жіліншік сенсоры",
     recentTable: "Соңғы IMU деректері",
     refreshNote: "Әр 1.5 секунд сайын жаңарады",
     noSensor: "Нақты сенсор дерегі күтілуде.",
+    waitingForSensor: "Сенсор күтілуде",
     noRows: "Әзірге IMU үлгілері түскен жоқ.",
     source: "Дереккөзі",
     timestamp: "Уақыты",
     deviceId: "Құрылғы ID",
     leg: "Аяқ",
     bodyPart: "Дене бөлігі",
+    liveStatus: "Күйі",
+    online: "Онлайн",
+    waitingForData: "Дерек күтілуде",
+    lastUpdated: "Соңғы жаңарту",
     pitch: "Pitch",
     roll: "Roll",
     accX: "Acc X",
@@ -1249,6 +1276,14 @@ button,input,select{font:inherit}
 .summaryCard{background:#fffaf0;border:1px solid var(--border);padding:14px 16px;display:grid;gap:6px}
 .summaryCard small{color:var(--muted);font-size:12px;font-weight:700}
 .summaryCard strong{display:block;font-size:30px;line-height:1.05;letter-spacing:-.04em}
+.sensorCard{grid-template-rows:auto auto 1fr}
+.sensorCardHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.sensorCardHeader strong{font-size:22px;line-height:1.15;letter-spacing:-.03em}
+.sensorCardPlaceholder{display:grid;place-items:center;min-height:140px;border:1px dashed var(--border);background:#f8f3e8;color:var(--muted);font-weight:700}
+.sensorMeta{display:grid;gap:8px}
+.sensorMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sensorMetric{border:1px solid var(--border);background:#f8f3e8;padding:10px}
+.sensorMetric strong{margin-top:4px;font-size:15px;line-height:1.25;letter-spacing:0}
 .summaryDate{font-size:16px !important;line-height:1.35 !important;letter-spacing:0 !important}
 .metric{background:#f8f3e8;border:1px solid var(--border);padding:11px}
 .metric small{color:var(--muted);font-size:12px;font-weight:700}
@@ -1559,6 +1594,56 @@ function formatSensorSource(row) {
   return parts.length ? parts.join(" / ") : "-";
 }
 
+const IMU_SENSOR_CARD_DEFS = [
+  { key: "hip", titleKey: "hipSensor", matches: ["hip"] },
+  { key: "knee", titleKey: "kneeSensor", matches: ["knee", "thigh"] },
+  { key: "ankle", titleKey: "ankleSensor", matches: ["ankle", "shin"] },
+];
+
+const LIVE_IMU_RECENT_MS = 2 * 60 * 1000;
+
+function normalizeSensorBodyPart(value) {
+  const bodyPart = String(value || "").trim().toLowerCase();
+  if (bodyPart === "thigh") return "knee";
+  if (bodyPart === "shin") return "ankle";
+  return bodyPart;
+}
+
+function toTimestampMs(value) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isLiveSensorRecent(row) {
+  const timestamp = toTimestampMs(row?.timestamp);
+  if (timestamp === null) return false;
+  return Date.now() - timestamp <= LIVE_IMU_RECENT_MS;
+}
+
+function buildLiveImuSensorCards(rows, copy) {
+  const latestByPart = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const normalizedPart = normalizeSensorBodyPart(row?.body_part);
+    if (!normalizedPart) continue;
+    const existing = latestByPart.get(normalizedPart);
+    const rowTime = toTimestampMs(row?.timestamp) ?? -1;
+    const existingTime = toTimestampMs(existing?.timestamp) ?? -1;
+    if (!existing || rowTime > existingTime) latestByPart.set(normalizedPart, row);
+  }
+
+  return IMU_SENSOR_CARD_DEFS.map((card) => {
+    const sensor = card.matches.map((match) => latestByPart.get(match)).find(Boolean) || null;
+    return {
+      key: card.key,
+      title: copy[card.titleKey] || card.key,
+      sensor,
+      source: formatSensorSource(sensor),
+      isOnline: Boolean(sensor && isLiveSensorRecent(sensor)),
+    };
+  });
+}
+
 export default function App() {
   const storedState = readStoredAppState();
   const storedPatientId = storedState.patient_id || "";
@@ -1610,7 +1695,6 @@ export default function App() {
 
   const latestSession = sessions[0] || null;
   const latestLiveImu = liveImuLatest[0] || null;
-  const latestLiveImuSource = formatSensorSource(latestLiveImu);
   const previousSessionRom = latestSession?.current_rom ?? null;
   const currentMinAngle = imuResult?.min_angle_deg ?? imuResult?.session_summary?.min_angle_deg ?? imuResult?.rom_scores?.[0]?.min_angle_deg ?? null;
   const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
@@ -1685,6 +1769,10 @@ export default function App() {
     currentKoosPanel.note === "Includes next section"
       ? t.messages.includesNextSection
       : currentKoosPanel.note || "";
+  const liveImuCards = useMemo(
+    () => buildLiveImuSensorCards(liveImuLatest, liveImuText),
+    [liveImuLatest, liveImuText]
+  );
   const koosBreakdowns = useMemo(() => {
     if (!koosResult) return [];
 
@@ -3046,21 +3134,71 @@ export default function App() {
                   <h4>{liveImuText.title}</h4>
                   <span className="microNote">{liveImuText.refreshNote}</span>
                 </div>
-                <div className="summaryCards sectionBody">
-                  <article className="summaryCard">
-                    <small>{liveImuText.latestSensor}</small>
-                    <strong className="summaryDate">{latestLiveImuSource}</strong>
-                  </article>
-                </div>
                 {liveImuLoading && liveImuRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
                 {!liveImuLoading && !latestLiveImu ? <div className="empty">{liveImuText.noSensor}</div> : null}
-                {latestLiveImu ? (
-                  <div className="metrics">
-                    <div className="metric"><small>{liveImuText.latestSensor}</small><strong style={{ fontSize: 18 }}>{latestLiveImuSource}</strong></div>
-                    <div className="metric"><small>{liveImuText.pitch}</small><strong>{f(latestLiveImu.pitch, "°")}</strong></div>
-                    <div className="metric"><small>{liveImuText.roll}</small><strong>{f(latestLiveImu.roll, "°")}</strong></div>
-                  </div>
-                ) : null}
+                <div className="summaryCards sectionBody" aria-label={liveImuText.cardTitle}>
+                  {liveImuCards.map((card) => (
+                    <article key={card.key} className="summaryCard sensorCard">
+                      <div className="sensorCardHeader">
+                        <div>
+                          <small>{liveImuText.latestSensor}</small>
+                          <strong className="summaryDate">{card.title}</strong>
+                        </div>
+                        <span className={`chip ${card.isOnline ? "teal" : ""}`}>
+                          {card.isOnline ? liveImuText.online : liveImuText.waitingForData}
+                        </span>
+                      </div>
+                      {card.sensor ? (
+                        <div className="sensorMeta">
+                          <div className="sensorMetrics">
+                            <div className="sensorMetric">
+                              <small>{liveImuText.deviceId}</small>
+                              <strong>{card.sensor.device_id || "-"}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.leg}</small>
+                              <strong>{card.sensor.leg || "-"}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.bodyPart}</small>
+                              <strong>{card.sensor.body_part || "-"}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.liveStatus}</small>
+                              <strong>{card.isOnline ? liveImuText.online : liveImuText.waitingForData}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.pitch}</small>
+                              <strong>{f(card.sensor.pitch, "°")}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.roll}</small>
+                              <strong>{f(card.sensor.roll, "°")}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.accX}</small>
+                              <strong>{f(card.sensor.acc_x)}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.accY}</small>
+                              <strong>{f(card.sensor.acc_y)}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.accZ}</small>
+                              <strong>{f(card.sensor.acc_z)}</strong>
+                            </div>
+                            <div className="sensorMetric">
+                              <small>{liveImuText.lastUpdated}</small>
+                              <strong>{formatDate(card.sensor.timestamp)}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
+                      )}
+                    </article>
+                  ))}
+                </div>
                 <div className="dataTableWrap">
                   <div className="tableTitle">{liveImuText.recentTable}</div>
                   {liveImuRows.length === 0 ? (

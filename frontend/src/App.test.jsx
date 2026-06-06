@@ -25,6 +25,8 @@ describe("clinical wizard patient and KOOS flow", () => {
       createObjectURL: vi.fn(() => "blob:mock-image"),
       revokeObjectURL: vi.fn(),
     });
+    const latestImuTimestamp = new Date(Date.now() - 30 * 1000).toISOString();
+    const previousImuTimestamp = new Date(Date.now() - 90 * 1000).toISOString();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input) => {
@@ -43,7 +45,7 @@ describe("clinical wizard patient and KOOS flow", () => {
             count: 1,
             items: [
               {
-                timestamp: "2026-06-05T17:20:00",
+                timestamp: latestImuTimestamp,
                 device_id: "pi1",
                 leg: "left",
                 body_part: "hip",
@@ -66,7 +68,7 @@ describe("clinical wizard patient and KOOS flow", () => {
             count: 2,
             items: [
               {
-                timestamp: "2026-06-05T17:21:00",
+                timestamp: latestImuTimestamp,
                 device_id: "pi1",
                 leg: "left",
                 body_part: "hip",
@@ -81,7 +83,7 @@ describe("clinical wizard patient and KOOS flow", () => {
                 temperature: 35.9,
               },
               {
-                timestamp: "2026-06-05T17:20:00",
+                timestamp: previousImuTimestamp,
                 device_id: "pi1",
                 leg: "left",
                 body_part: "hip",
@@ -341,7 +343,15 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     expect(screen.getByRole("heading", { level: 2, name: /real imu sensor/i })).toBeInTheDocument();
     expect(await screen.findByText(/real imu sensor feed/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/pi1 \/ left hip/i).length).toBeGreaterThan(0);
+    const sensorCards = screen.getByLabelText(/sensor cards/i);
+    expect(within(sensorCards).getByText(/hip sensor/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/knee \/ thigh sensor/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/ankle \/ shin sensor/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi1$/)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^left$/)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^hip$/i)).toBeInTheDocument();
+    expect(within(sensorCards).getAllByText(/^online$/i).length).toBeGreaterThan(0);
+    expect(within(sensorCards).getAllByText(/waiting for sensor/i)).toHaveLength(2);
     expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
     expect(screen.getByText(/auto-refresh every 1.5 seconds/i)).toBeInTheDocument();
   });
