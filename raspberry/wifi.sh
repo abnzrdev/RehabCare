@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 HOTSPOT_SSID="pi1"
 HOTSPOT_PASS="12344321"
