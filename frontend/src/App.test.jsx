@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -36,6 +36,67 @@ describe("clinical wizard patient and KOOS flow", () => {
 
         if (url.includes("/api/sessions/")) {
           return jsonResponse({ sessions: [] });
+        }
+
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 1,
+            items: [
+              {
+                timestamp: "2026-06-05T17:20:00",
+                device_id: "pi1",
+                leg: "left",
+                body_part: "hip",
+                acc_x: 0.12,
+                acc_y: 0.03,
+                acc_z: 0.98,
+                gyro_x: 1.2,
+                gyro_y: 0.5,
+                gyro_z: -0.1,
+                pitch: 10.4,
+                roll: 3.2,
+                temperature: 35.8,
+              },
+            ],
+          });
+        }
+
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              {
+                timestamp: "2026-06-05T17:21:00",
+                device_id: "pi1",
+                leg: "left",
+                body_part: "hip",
+                acc_x: 0.13,
+                acc_y: 0.04,
+                acc_z: 0.99,
+                gyro_x: 1.25,
+                gyro_y: 0.55,
+                gyro_z: -0.08,
+                pitch: 11.2,
+                roll: 3.6,
+                temperature: 35.9,
+              },
+              {
+                timestamp: "2026-06-05T17:20:00",
+                device_id: "pi1",
+                leg: "left",
+                body_part: "hip",
+                acc_x: 0.12,
+                acc_y: 0.03,
+                acc_z: 0.98,
+                gyro_x: 1.2,
+                gyro_y: 0.5,
+                gyro_z: -0.1,
+                pitch: 10.4,
+                roll: 3.2,
+                temperature: 35.8,
+              },
+            ],
+          });
         }
 
         if (url.includes("/api/koos/calculate")) {
@@ -118,12 +179,18 @@ describe("clinical wizard patient and KOOS flow", () => {
     );
   });
 
-  it("shows the redesigned patient context summary cards", () => {
+  it("keeps patient context free of live IMU widgets", async () => {
     render(<App />);
+    const patientPanel = document.getElementById("patient-context");
 
     expect(screen.getByText(/saved sessions/i)).toBeInTheDocument();
     expect(screen.getByText(/latest rom/i)).toBeInTheDocument();
     expect(screen.getByText(/latest date/i)).toBeInTheDocument();
+    expect(patientPanel).not.toBeNull();
+    expect(within(patientPanel).queryByText(/real imu sensor/i)).not.toBeInTheDocument();
+    expect(within(patientPanel).queryByText(/real imu sensor feed/i)).not.toBeInTheDocument();
+    expect(within(patientPanel).queryByText(/recent imu data/i)).not.toBeInTheDocument();
+    expect(within(patientPanel).queryByText(/pi1 \/ left hip/i)).not.toBeInTheDocument();
   });
 
   it("renders Sensor setup with auto-detect default and both-legs option", async () => {
@@ -162,12 +229,13 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/^Pain$/)).not.toBeInTheDocument();
   });
 
-  it("shows a six-step workflow with a ROM-focused Step 4 and a separate Step 6 video page", async () => {
+  it("shows a seven-step workflow with a separate real IMU page after exercise videos", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
     expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /exercise videos/i })[0]).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /real imu sensor/i })[0]).toBeInTheDocument();
 
     await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
     await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
@@ -208,7 +276,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(await screen.findByText(/step 4 of 6 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 4 of 7 complete/i)).toBeInTheDocument();
     expect(screen.getByText(/IMU movement analysis completed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/range of motion/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
@@ -226,7 +294,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("button", { name: /continue to final rehab report/i }));
     await user.click(screen.getByRole("button", { name: /generate report/i }));
 
-    expect(await screen.findByText(/step 5 of 6 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 5 of 7 complete/i)).toBeInTheDocument();
     expect(screen.getAllByText(/final rehabilitation score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/IMU rehab score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("130.7").length).toBeGreaterThan(0);
@@ -236,7 +304,7 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     await user.click(screen.getByRole("button", { name: /continue to exercise videos/i }));
 
-    expect(await screen.findByText(/step 6 of 6 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 6 of 7 complete/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /exercise videos/i })).toBeInTheDocument();
     expect(screen.getByText(/review the prescribed exercise video library after the final rehabilitation report/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^2$/).length).toBeGreaterThan(0);
@@ -268,6 +336,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /open on youtube/i }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(2);
+
+    await user.click(screen.getAllByRole("button", { name: /real imu sensor/i })[0]);
+
+    expect(screen.getByRole("heading", { level: 2, name: /real imu sensor/i })).toBeInTheDocument();
+    expect(await screen.findByText(/real imu sensor feed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/pi1 \/ left hip/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
+    expect(screen.getByText(/auto-refresh every 1.5 seconds/i)).toBeInTheDocument();
   });
 
   it("renders backend interpretation and delta note in the final report", async () => {

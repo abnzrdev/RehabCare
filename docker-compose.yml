@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.backend
     environment:
       REHAB_DB_PATH: /data/rehab.db
+      REHAB_IMU_CSV_PATH: /data/imu_data.csv
       PYTHONUNBUFFERED: "1"
     ports:
       - "8000:8000"

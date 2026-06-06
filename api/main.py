@@ -21,7 +21,9 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,10 +32,29 @@ from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 log = logging.getLogger("orthoscan")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+
+
+def _parse_frontend_origins() -> list[str]:
+    default_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://89.218.178.215:18190",
+    ]
+    raw = os.getenv("FRONTEND_ORIGINS", "")
+    configured = [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
+    origins: list[str] = []
+    for item in [*default_origins, *configured]:
+        if item and item not in origins:
+            origins.append(item)
+    return origins
 
 # ── IMU pipeline import (rehab_platform/core/imu_pipeline.py) ─────────────────
 # Add rehab_platform/ to sys.path so we can import core.imu_pipeline directly.
@@ -59,6 +80,10 @@ from core.rehab_levels import (  # noqa: E402
 )
 from core.storage import (
     SessionRecord,
+    append_imu_row,
+    get_latest_imu_rows_by_device,
+    now_iso,
+    read_imu_rows,
     get_last_session,
     get_patient_sessions,
     init_db,
@@ -726,13 +751,91 @@ def _build_response(pil_image: Image.Image, lang: str) -> dict:
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
 app = FastAPI(title="OrthoScan AI", version="3.0.0")
+FRONTEND_ORIGINS = _parse_frontend_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Frontend may be deployed on Vercel later, but the backend stays the
+    # source of truth for IMU data. Set FRONTEND_ORIGINS to the allowed UI origins.
+    allow_origins=FRONTEND_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+IMU_NUMERIC_FIELDS = (
+    "acc_x",
+    "acc_y",
+    "acc_z",
+    "gyro_x",
+    "gyro_y",
+    "gyro_z",
+    "pitch",
+    "roll",
+    "temperature",
+)
+
+
+class ImuIngestPayload(BaseModel):
+    device_id: str = Field(..., min_length=1)
+    leg: str = Field(..., min_length=1)
+    body_part: str = Field(..., min_length=1)
+    acc_x: float
+    acc_y: float
+    acc_z: float
+    gyro_x: float
+    gyro_y: float
+    gyro_z: float
+    pitch: float
+    roll: float
+    temperature: float
+    timestamp: str | None = None
+
+
+def _model_dump(instance: BaseModel) -> dict[str, Any]:
+    if hasattr(instance, "model_dump"):
+        return instance.model_dump()
+    return instance.dict()
+
+
+def _parse_imu_payload(payload: dict[str, Any]) -> ImuIngestPayload:
+    try:
+        if hasattr(ImuIngestPayload, "model_validate"):
+            data = ImuIngestPayload.model_validate(payload)
+        else:
+            data = ImuIngestPayload.parse_obj(payload)
+    except ValidationError as exc:
+        details = []
+        for item in exc.errors():
+            loc = ".".join(str(part) for part in item.get("loc", []) if part != "body") or "body"
+            details.append(f"{loc}: {item.get('msg', 'invalid value')}")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid IMU payload.", "details": details},
+        ) from exc
+
+    timestamp = data.timestamp
+    if timestamp:
+        try:
+            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Invalid IMU payload.",
+                    "details": ["timestamp: must be a valid ISO-8601 datetime string"],
+                },
+            ) from exc
+    return data
+
+
+def _serialize_imu_row(row: dict[str, Any]) -> dict[str, Any]:
+    serialized = dict(row)
+    for field in IMU_NUMERIC_FIELDS:
+        try:
+            serialized[field] = float(serialized[field])
+        except (KeyError, TypeError, ValueError):
+            serialized[field] = None
+    return serialized
 
 
 def _load_imu_model() -> bool:
@@ -823,6 +926,38 @@ async def health():
     if _kl_fail_reason:
         resp["kl_error"] = _kl_fail_reason
     return resp
+
+
+@app.post("/imu")
+@app.post("/api/imu")
+async def ingest_imu(payload: dict[str, Any] = Body(...)):
+    try:
+        data = _parse_imu_payload(payload)
+    except HTTPException as exc:
+        content = exc.detail if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
+        return JSONResponse(status_code=exc.status_code, content=content)
+    row = _model_dump(data)
+    row["timestamp"] = row.get("timestamp") or now_iso()
+    saved = append_imu_row(row)
+    return {
+        "status": "ok",
+        "message": "IMU sample stored.",
+        "row": _serialize_imu_row(saved),
+    }
+
+
+@app.get("/imu/latest")
+@app.get("/api/imu/latest")
+async def imu_latest():
+    items = [_serialize_imu_row(row) for row in get_latest_imu_rows_by_device()]
+    return {"count": len(items), "items": items}
+
+
+@app.get("/imu/data")
+@app.get("/api/imu/data")
+async def imu_data(limit: int = Query(100, ge=1, le=1000)):
+    items = [_serialize_imu_row(row) for row in read_imu_rows(limit=limit)]
+    return {"count": len(items), "limit": limit, "items": items}
 
 
 @app.post("/imu/analyze")

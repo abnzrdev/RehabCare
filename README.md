@@ -2,6 +2,26 @@
 
 Clinical knee rehabilitation workflow with a FastAPI backend, React frontend, KL grading, IMU ROM analysis, and a final rehab report wizard.
 
+## Frontend / Backend Architecture
+
+- Vercel should host the frontend only.
+- The FastAPI server remains the source of truth for IMU data and session APIs.
+- Do not move IMU storage to Vercel. Raspberry Pi devices should keep sending to your own backend API.
+- Set the frontend env var `VITE_API_BASE_URL=http://89.218.178.215:18190` when deploying the UI outside the backend host.
+
+### IMU Data Flow
+
+- Raspberry Pi sender posts JSON samples to `http://89.218.178.215:18190/api/imu`
+- The frontend reads live IMU data from:
+  - `http://89.218.178.215:18190/api/imu/latest`
+  - `http://89.218.178.215:18190/api/imu/data?limit=100`
+
+### Raspberry Pi Hotspot Setup
+
+- Start hotspot mode with `sudo bash raspberry/wifi.sh --hotspot`
+- Connect to hotspot `pi1`
+- Open `http://10.42.0.1:8080` to enter Wi-Fi credentials
+
 ## Local Deploy And Preview
 
 Run the local container deployment:

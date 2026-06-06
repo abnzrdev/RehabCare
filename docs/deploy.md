@@ -1,5 +1,23 @@
 # Deployment
 
+## Vercel Frontend + External Backend
+
+Vercel should host the frontend only. The external FastAPI server remains the source of truth for IMU data, patient sessions, and analysis endpoints.
+
+Set this frontend environment variable in Vercel:
+
+```bash
+VITE_API_BASE_URL=http://89.218.178.215:18190
+```
+
+This keeps the browser pointed at your own server API for:
+
+- `POST /api/imu`
+- `GET /api/imu/latest`
+- `GET /api/imu/data?limit=100`
+
+Do not create a Vercel database for IMU data, and do not move IMU storage off the backend server.
+
 ## Docker Compose
 
 Run the app with:
@@ -39,7 +57,7 @@ cloudflared tunnel --url http://localhost:5173
 
 The browser should reach the frontend origin, and the frontend nginx proxy will forward `/api` requests to the backend service.
 
-If you expose frontend and backend on different domains, update the proxy setup so the frontend still sends API calls to the correct backend origin.
+If you expose frontend and backend on different domains, set `VITE_API_BASE_URL` so the frontend sends API calls to the correct backend origin.
 
 ## Database Path
 

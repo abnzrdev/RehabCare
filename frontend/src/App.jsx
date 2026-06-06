@@ -12,7 +12,15 @@ import {
 } from "./clinicalWizardConfig";
 import FormulaBreakdown from "./components/FormulaBreakdown";
 
-const API = "/api";
+function normalizeApiBaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  return trimmed ? trimmed.replace(/\/+$/, "") : "";
+}
+
+// Vercel should host the frontend only. All API state, including IMU data,
+// remains on the external backend defined by VITE_API_BASE_URL.
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+const API = API_BASE_URL ? `${API_BASE_URL}/api` : "/api";
 const KL_ACCEPT = "image/png,image/jpeg,image/jpg,image/bmp,image/tiff";
 const IMU_ACCEPT = ".csv,text/csv";
 const KL_FILE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "bmp", "tiff"]);
@@ -58,6 +66,7 @@ const STEPS = [
   { id: "imu" },
   { id: "report" },
   { id: "videos" },
+  { id: "realImu" },
 ];
 
 const STEP_HEADINGS = {
@@ -91,6 +100,10 @@ const STEP_HEADINGS = {
   videos: [
     { id: "videos-overview", key: "overview" },
     { id: "videos-library", key: "exerciseVideos" },
+  ],
+  realImu: [
+    { id: "real-imu-overview", key: "overview" },
+    { id: "real-imu-live", key: "liveSensorFeed" },
   ],
 };
 
@@ -277,6 +290,63 @@ const SENSOR_SETUPS = [
   { value: "auto", label: "Auto-detect from CSV" },
 ];
 
+const REALTIME_IMU_COPY = {
+  en: {
+    title: "Real IMU sensor feed",
+    latestSensor: "Real IMU Sensor",
+    recentTable: "Recent IMU data",
+    refreshNote: "Auto-refresh every 1.5 seconds",
+    noSensor: "Waiting for live sensor data.",
+    noRows: "No IMU samples received yet.",
+    source: "Source",
+    timestamp: "Timestamp",
+    deviceId: "Device ID",
+    leg: "Leg",
+    bodyPart: "Body part",
+    pitch: "Pitch",
+    roll: "Roll",
+    accX: "Acc X",
+    accY: "Acc Y",
+    accZ: "Acc Z",
+  },
+  ru: {
+    title: "Поток реального IMU",
+    latestSensor: "Реальный IMU датчик",
+    recentTable: "Последние данные IMU",
+    refreshNote: "Автообновление каждые 1.5 секунды",
+    noSensor: "Ожидание данных от реального датчика.",
+    noRows: "Пока нет полученных IMU сэмплов.",
+    source: "Источник",
+    timestamp: "Время",
+    deviceId: "ID устройства",
+    leg: "Нога",
+    bodyPart: "Часть тела",
+    pitch: "Pitch",
+    roll: "Roll",
+    accX: "Acc X",
+    accY: "Acc Y",
+    accZ: "Acc Z",
+  },
+  kz: {
+    title: "Нақты IMU ағыны",
+    latestSensor: "Нақты IMU сенсоры",
+    recentTable: "Соңғы IMU деректері",
+    refreshNote: "Әр 1.5 секунд сайын жаңарады",
+    noSensor: "Нақты сенсор дерегі күтілуде.",
+    noRows: "Әзірге IMU үлгілері түскен жоқ.",
+    source: "Дереккөзі",
+    timestamp: "Уақыты",
+    deviceId: "Құрылғы ID",
+    leg: "Аяқ",
+    bodyPart: "Дене бөлігі",
+    pitch: "Pitch",
+    roll: "Roll",
+    accX: "Acc X",
+    accY: "Acc Y",
+    accZ: "Acc Z",
+  },
+};
+
 const STRINGS = {
   en: {
     app: "OrthoScan AI",
@@ -289,6 +359,7 @@ const STRINGS = {
       imu: "IMU movement analysis",
       report: "Final rehab report",
       videos: "Exercise videos",
+      realImu: "Real IMU Sensor",
     },
     descriptions: {
       patient: "Set patient and session context before clinical inputs.",
@@ -297,6 +368,7 @@ const STRINGS = {
       imu: "Capture or upload IMU movement data to calculate knee ROM.",
       report: "Generate a final rehab report from patient, KOOS, KL, and IMU data.",
       videos: "Review the prescribed exercise video library after the final rehabilitation report.",
+      realImu: "Monitor the live IMU sensor stream and recent samples after reviewing exercise videos.",
     },
     buttons: {
       back: "Back",
@@ -337,7 +409,7 @@ const STRINGS = {
       noSessions: "No sessions yet for this patient.",
       loading: "Loading...",
       savedSessions: "Saved sessions",
-      stepComplete: "Step {step} of 6 complete",
+      stepComplete: `Step {step} of ${STEPS.length} complete`,
       latestRom: "Latest ROM",
       latestDate: "Latest date",
       patientReady: "Patient context ready",
@@ -539,6 +611,7 @@ const STRINGS = {
       recommendations: "Recommendations",
       sessionDetails: "Session details",
       exerciseVideos: "Exercise videos",
+      liveSensorFeed: "Live sensor feed",
     },
   },
   ru: {
@@ -552,6 +625,7 @@ const STRINGS = {
       imu: "Анализ движения ИМУ",
       report: "Итоговый отчет",
       videos: "Видеоупражнения",
+      realImu: "Реальный IMU датчик",
     },
     descriptions: {
       patient: "Укажите пациента и параметры сессии перед клиническими данными.",
@@ -560,6 +634,7 @@ const STRINGS = {
       imu: "Загрузите или запишите данные ИМУ, чтобы рассчитать ROM колена.",
       report: "Сформируйте итоговый отчет из данных пациента, KOOS, KL и ИМУ.",
       videos: "Просмотрите библиотеку упражнений после итогового отчета.",
+      realImu: "Просматривайте поток реального IMU и последние поступившие сэмплы после видеоупражнений.",
     },
     buttons: {
       back: "Назад",
@@ -602,7 +677,7 @@ const STRINGS = {
       noSessions: "Сессий для пациента пока нет.",
       loading: "Загрузка...",
       savedSessions: "Сохраненные сессии",
-      stepComplete: "Шаг {step} из 6 завершен",
+      stepComplete: `Шаг {step} из ${STEPS.length} завершен`,
       latestRom: "Последний ROM",
       latestDate: "Последняя дата",
       patientReady: "Контекст пациента готов",
@@ -804,6 +879,7 @@ const STRINGS = {
       recommendations: "Рекомендации",
       sessionDetails: "Детали сессии",
       exerciseVideos: "Видеоупражнения",
+      liveSensorFeed: "Поток живого датчика",
     },
   },
   kz: {
@@ -817,6 +893,7 @@ const STRINGS = {
       imu: "ИМУ қозғалыс талдауы",
       report: "Қорытынды есеп",
       videos: "Жаттығу бейнелері",
+      realImu: "Нақты IMU сенсоры",
     },
     descriptions: {
       patient: "Клиникалық деректер алдында пациент пен сессия параметрлерін көрсетіңіз.",
@@ -825,6 +902,7 @@ const STRINGS = {
       imu: "Тізе ROM-ын есептеу үшін ИМУ қозғалыс дерегін жүктеңіз немесе жазыңыз.",
       report: "Пациент, KOOS, KL және ИМУ деректерінен қорытынды есеп жасаңыз.",
       videos: "Қорытынды есептен кейін жаттығу бейнелерін қарап шығыңыз.",
+      realImu: "Жаттығу бейнелерінен кейін нақты IMU ағынын және соңғы үлгілерді қадағалаңыз.",
     },
     buttons: {
       back: "Артқа",
@@ -867,7 +945,7 @@ const STRINGS = {
       noSessions: "Бұл пациент үшін сессия жоқ.",
       loading: "Жүктелуде...",
       savedSessions: "Сақталған сессиялар",
-      stepComplete: "6 қадамның {step}-қадамы аяқталды",
+      stepComplete: `${STEPS.length} қадамның {step}-қадамы аяқталды`,
       latestRom: "Соңғы ROM",
       latestDate: "Соңғы күн",
       patientReady: "Пациент контексті дайын",
@@ -1045,6 +1123,7 @@ const STRINGS = {
       recommendations: "Ұсынымдар",
       sessionDetails: "Сессия деректері",
       exerciseVideos: "Жаттығу бейнелері",
+      liveSensorFeed: "Тікелей сенсор ағыны",
     },
     recommendationText: {
       continueProtocol: "Ағымдағы оңалту протоколын жалғастырыңыз.",
@@ -1069,6 +1148,7 @@ const STRINGS = {
       recommendations: "Ұсынымдар",
       sessionDetails: "Сессия деректері",
       exerciseVideos: "Жаттығу бейнелері",
+      liveSensorFeed: "Тікелей сенсор ағыны",
     },
   },
 };
@@ -1319,8 +1399,15 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
 .reportBlock:first-child{border-top:0}
 .reportBlock h4{margin:0 0 8px;font-size:16px}
 .reportBlock p{margin:0;color:var(--text)}
+.reportBlockHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .reportList{margin:0;padding-left:18px;color:var(--text)}
 .reportList li{margin:6px 0}
+.tableTitle{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:10px 12px 0}
+.dataTableWrap{margin-top:14px;overflow:auto;border:1px solid var(--border);background:#f8f3e8}
+.dataTable{width:100%;border-collapse:collapse;font-size:12px}
+.dataTable th,.dataTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+.dataTable th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:#f3ede0}
+.dataTable tr:last-child td{border-bottom:0}
 .betaTable{width:100%;border-collapse:collapse;margin-top:10px;background:#f8f3e8;border:1px solid var(--border);font-family:"IBM Plex Mono",monospace;font-size:12px}
 .betaTable th,.betaTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left}
 .betaTable tr:last-child th,.betaTable tr:last-child td{border-bottom:0}
@@ -1459,6 +1546,19 @@ function statusLabel(active, ready, complete, t) {
   return t.status.pending;
 }
 
+function realtimeImuCopy(lang) {
+  return REALTIME_IMU_COPY[lang] || REALTIME_IMU_COPY.en;
+}
+
+function formatSensorSource(row) {
+  if (!row) return "-";
+  const deviceId = String(row.device_id || "").trim();
+  const leg = String(row.leg || "").trim();
+  const bodyPart = String(row.body_part || "").trim();
+  const parts = [deviceId, [leg, bodyPart].filter(Boolean).join(" ")].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "-";
+}
+
 export default function App() {
   const storedState = readStoredAppState();
   const storedPatientId = storedState.patient_id || "";
@@ -1475,6 +1575,9 @@ export default function App() {
   const [sensorLocation, setSensorLocation] = useState(() => storedState.sensor_location || "auto");
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [liveImuLatest, setLiveImuLatest] = useState([]);
+  const [liveImuRows, setLiveImuRows] = useState([]);
+  const [liveImuLoading, setLiveImuLoading] = useState(false);
 
   const [koosAnswers, setKoosAnswers] = useState({});
   const [koosPageIndex, setKoosPageIndex] = useState(0);
@@ -1503,8 +1606,11 @@ export default function App() {
   const imageInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const t = STRINGS[lang];
+  const liveImuText = realtimeImuCopy(lang);
 
   const latestSession = sessions[0] || null;
+  const latestLiveImu = liveImuLatest[0] || null;
+  const latestLiveImuSource = formatSensorSource(latestLiveImu);
   const previousSessionRom = latestSession?.current_rom ?? null;
   const currentMinAngle = imuResult?.min_angle_deg ?? imuResult?.session_summary?.min_angle_deg ?? imuResult?.rom_scores?.[0]?.min_angle_deg ?? null;
   const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
@@ -1548,8 +1654,9 @@ export default function App() {
       imu: Boolean(imuResult && imuRomValid),
       report: Boolean(reportResult?.session_id),
       videos: Boolean(reportResult?.session_id),
+      realImu: Boolean(latestLiveImu || liveImuRows.length > 0),
     }),
-    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult]
+    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult, latestLiveImu, liveImuRows.length]
   );
   const activeStepComplete =
     (activeStep === "patient" && readyState.patient) ||
@@ -1557,8 +1664,9 @@ export default function App() {
     (activeStep === "kl" && readyState.kl) ||
     (activeStep === "imu" && readyState.imu) ||
     (activeStep === "report" && readyState.report) ||
-    (activeStep === "videos" && readyState.videos);
-  const showGlobalWizardNav = !["koos", "videos"].includes(activeStep) && !activeStepComplete;
+    (activeStep === "videos" && readyState.videos) ||
+    (activeStep === "realImu" && readyState.realImu);
+  const showGlobalWizardNav = !["koos", "videos", "realImu"].includes(activeStep) && !activeStepComplete;
   const klModelStatus = klResult?.kl_model || health?.kl_model;
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
   const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
@@ -1811,6 +1919,48 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    let timerId;
+
+    async function loadLiveImu() {
+      if (!active) return;
+      setLiveImuLoading(true);
+      try {
+        const [latestRes, dataRes] = await Promise.all([
+          fetch(`${API}/imu/latest`),
+          fetch(`${API}/imu/data?limit=100`),
+        ]);
+        const latestPayload = await readResponsePayload(latestRes);
+        const dataPayload = await readResponsePayload(dataRes);
+        if (!active) return;
+        setLiveImuLatest(latestRes.ok && Array.isArray(latestPayload.items) ? latestPayload.items : []);
+        setLiveImuRows(dataRes.ok && Array.isArray(dataPayload.items) ? dataPayload.items : []);
+      } catch {
+        if (!active) return;
+        setLiveImuLatest([]);
+        setLiveImuRows([]);
+      } finally {
+        if (active) setLiveImuLoading(false);
+      }
+    }
+
+    if (activeStep !== "realImu") {
+      setLiveImuLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    loadLiveImu();
+    timerId = window.setInterval(loadLiveImu, 1500);
+
+    return () => {
+      active = false;
+      window.clearInterval(timerId);
+    };
+  }, [activeStep]);
+
+  useEffect(() => {
     setHealthError("");
     setKoosError("");
     setKlError("");
@@ -2040,6 +2190,7 @@ export default function App() {
     if (stepId === "kl") return readyState.kl;
     if (stepId === "imu") return readyState.imu;
     if (stepId === "report") return readyState.report;
+    if (stepId === "videos") return readyState.videos;
     return false;
   }
 
@@ -2886,6 +3037,71 @@ export default function App() {
                 </div>
               </div>
             </div>
+          ) : null}
+
+          {activeStep === "realImu" ? (
+            <section className="panel" id="real-imu-live">
+              <div className="reportBlock">
+                <div className="reportBlockHead">
+                  <h4>{liveImuText.title}</h4>
+                  <span className="microNote">{liveImuText.refreshNote}</span>
+                </div>
+                <div className="summaryCards sectionBody">
+                  <article className="summaryCard">
+                    <small>{liveImuText.latestSensor}</small>
+                    <strong className="summaryDate">{latestLiveImuSource}</strong>
+                  </article>
+                </div>
+                {liveImuLoading && liveImuRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
+                {!liveImuLoading && !latestLiveImu ? <div className="empty">{liveImuText.noSensor}</div> : null}
+                {latestLiveImu ? (
+                  <div className="metrics">
+                    <div className="metric"><small>{liveImuText.latestSensor}</small><strong style={{ fontSize: 18 }}>{latestLiveImuSource}</strong></div>
+                    <div className="metric"><small>{liveImuText.pitch}</small><strong>{f(latestLiveImu.pitch, "°")}</strong></div>
+                    <div className="metric"><small>{liveImuText.roll}</small><strong>{f(latestLiveImu.roll, "°")}</strong></div>
+                  </div>
+                ) : null}
+                <div className="dataTableWrap">
+                  <div className="tableTitle">{liveImuText.recentTable}</div>
+                  {liveImuRows.length === 0 ? (
+                    <div className="microNote">{liveImuText.noRows}</div>
+                  ) : (
+                    <table className="dataTable">
+                      <thead>
+                        <tr>
+                          <th>{liveImuText.timestamp}</th>
+                          <th>{liveImuText.deviceId}</th>
+                          <th>{liveImuText.leg}</th>
+                          <th>{liveImuText.bodyPart}</th>
+                          <th>{liveImuText.pitch}</th>
+                          <th>{liveImuText.roll}</th>
+                          <th>{liveImuText.latestSensor}</th>
+                          <th>{liveImuText.accX}</th>
+                          <th>{liveImuText.accY}</th>
+                          <th>{liveImuText.accZ}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {liveImuRows.map((row, index) => (
+                          <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
+                            <td>{formatDate(row.timestamp)}</td>
+                            <td>{row.device_id || "-"}</td>
+                            <td>{row.leg || "-"}</td>
+                            <td>{row.body_part || "-"}</td>
+                            <td>{f(row.pitch, "°")}</td>
+                            <td>{f(row.roll, "°")}</td>
+                            <td>{formatSensorSource(row)}</td>
+                            <td>{f(row.acc_x)}</td>
+                            <td>{f(row.acc_y)}</td>
+                            <td>{f(row.acc_z)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </section>
           ) : null}
 
           {showGlobalWizardNav ? (
