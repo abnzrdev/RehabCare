@@ -209,6 +209,57 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/single sensor . right thigh/i).length).toBeGreaterThan(0);
   });
 
+  it("keeps Step 4 CSV mode available and analyzes uploaded CSV data", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+
+    expect(screen.getByLabelText(/data source/i)).toHaveValue("csv");
+    expect(screen.getByText(/choose csv upload if you already recorded data/i)).toBeInTheDocument();
+    expect(screen.getByText(/selected leg/i)).toBeInTheDocument();
+
+    const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
+    expect(imuInput).not.toBeNull();
+    await user.upload(imuInput, new File(["col1,col2", "imu.csv"], "imu.csv", { type: "text/csv" }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    expect(await screen.findByText(/IMU movement analysis completed/i)).toBeInTheDocument();
+    expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
+  });
+
+  it("renders live Step 4 controls for leg selection, mapping, and calibration", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.selectOptions(screen.getByLabelText(/data source/i), "live");
+
+    expect(screen.getByText(/choose live sensors if raspberry pi sensors are connected/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/selected leg/i)).toHaveValue("left");
+    expect(screen.getByText(/physical sensor mapping/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/hip sensor/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/thigh\/knee sensor/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ankle\/shin sensor/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/pi1/)).toBeInTheDocument();
+    expect(screen.getByText(/pi2/)).toBeInTheDocument();
+    expect(screen.getByText(/pi3/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /set current position as neutral baseline/i })).toBeInTheDocument();
+    expect(screen.getAllByDisplayValue("pitch").length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
+  });
+
+  it("shows a missing sensor warning in Step 4 live mode when required sensors are not streaming", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.selectOptions(screen.getByLabelText(/data source/i), "live");
+
+    expect(await screen.findByText(/missing or stale live sensor data/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/waiting/i).length).toBeGreaterThan(0);
+  });
+
   it("shows KOOS in 14 panels with category tags", async () => {
     const user = userEvent.setup();
     render(<App />);
