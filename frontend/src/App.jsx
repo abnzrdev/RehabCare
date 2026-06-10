@@ -66,7 +66,6 @@ const STEPS = [
   { id: "imu" },
   { id: "report" },
   { id: "videos" },
-  { id: "realImu" },
 ];
 
 const STEP_HEADINGS = {
@@ -100,10 +99,6 @@ const STEP_HEADINGS = {
   videos: [
     { id: "videos-overview", key: "overview" },
     { id: "videos-library", key: "exerciseVideos" },
-  ],
-  realImu: [
-    { id: "real-imu-overview", key: "overview" },
-    { id: "real-imu-live", key: "liveSensorFeed" },
   ],
 };
 
@@ -293,7 +288,7 @@ const SENSOR_SETUPS = [
 const REALTIME_IMU_COPY = {
   en: {
     title: "Real IMU sensor feed",
-    latestSensor: "Real IMU Sensor",
+    latestSensor: "Live IMU sensor",
     cardTitle: "Sensor cards",
     hipSensor: "Hip sensor",
     kneeSensor: "Knee / thigh sensor",
@@ -386,44 +381,22 @@ const STEP4_IMU_COPY = {
   leftSide: "Left",
   rightSide: "Right",
   legHint: "The same three physical sensors can be attached to either leg. Live analysis uses this UI choice as analysis_leg.",
-  mappingTitle: "Physical sensor mapping",
-  mappingHint: "These are the three physical sensors. They can stay attached to the selected left or right leg while keeping the same device IDs.",
-  positionsTitle: "6 sensor positions",
-  positionsHint: "All six clinical positions are shown below. The selected leg receives the three physical Raspberry Pi sensors, while the opposite leg stays in waiting/demo preview until real sensors are mapped there.",
-  demoSeedButton: "Seed demo IMU data",
-  demoClearButton: "Clear demo data",
-  demoInfoNote: "Demo IMU data is active for Step 4 preview. Real Raspberry Pi data will replace it when available.",
-  demoSampleTitle: "Demo IMU sample data",
   liveSampleTitle: "Live IMU sample data",
   sampleTableHint: "Analyze ROM uses the same rows shown in this table.",
   axisTitle: "Axis and sign configuration",
   calibrationTitle: "Calibration baseline",
   calibrationButton: "Set current position as neutral baseline",
   calibrationHint: "Baseline values are captured from the latest live readings and subtracted before ROM is calculated.",
-  legSideColumn: "Leg side",
-  positionColumn: "Position",
-  roleColumn: "Sensor role",
-  deviceColumn: "Physical device mapped",
   axisColumn: "Angle axis",
   signColumn: "Sign",
-  baselineColumn: "Baseline status",
-  onlineColumn: "Sensor status",
-  statusColumn: "Status",
-  waitingDevice: "Waiting",
-  demoStatus: "Demo",
-  demoPreviewLabel: "Demo preview",
   waitingStatus: "Waiting",
-  demoNote: "Demo / waiting for real sensor",
-  demoLastUpdated: "Demo preview",
   baselineWaiting: "Waiting for baseline",
   baselineReady: "Baseline set",
   hipSensor: "Hip sensor",
   kneeSensor: "Thigh/knee sensor",
   ankleSensor: "Ankle/shin sensor",
   liveResultTitle: "Live-derived IMU samples",
-  demoResultTitle: "Demo ROM preview",
   liveResultFormula: "Live ROM = max relative angle - min relative angle using calibrated ankle/shin minus thigh/knee values.",
-  liveResultWarning: "Missing or stale live sensor data",
   liveResultEmpty: "Run live analysis after enough sensor samples have been received.",
   liveResultUnavailable: "Not enough calibrated live data is available to calculate ROM yet.",
   liveTableAnalysisLeg: "Analysis leg",
@@ -443,7 +416,6 @@ const STRINGS = {
       imu: "IMU movement analysis",
       report: "Final rehab report",
       videos: "Exercise videos",
-      realImu: "Real IMU Sensor",
     },
     descriptions: {
       patient: "Set patient and session context before clinical inputs.",
@@ -452,7 +424,6 @@ const STRINGS = {
       imu: "Capture or upload IMU movement data to calculate knee ROM.",
       report: "Generate a final rehab report from patient, KOOS, KL, and IMU data.",
       videos: "Review the prescribed exercise video library after the final rehabilitation report.",
-      realImu: "Monitor the live IMU sensor stream and recent samples after reviewing exercise videos.",
     },
     buttons: {
       back: "Back",
@@ -709,7 +680,6 @@ const STRINGS = {
       imu: "Анализ движения ИМУ",
       report: "Итоговый отчет",
       videos: "Видеоупражнения",
-      realImu: "Реальный IMU датчик",
     },
     descriptions: {
       patient: "Укажите пациента и параметры сессии перед клиническими данными.",
@@ -718,7 +688,6 @@ const STRINGS = {
       imu: "Загрузите или запишите данные ИМУ, чтобы рассчитать ROM колена.",
       report: "Сформируйте итоговый отчет из данных пациента, KOOS, KL и ИМУ.",
       videos: "Просмотрите библиотеку упражнений после итогового отчета.",
-      realImu: "Просматривайте поток реального IMU и последние поступившие сэмплы после видеоупражнений.",
     },
     buttons: {
       back: "Назад",
@@ -977,7 +946,6 @@ const STRINGS = {
       imu: "ИМУ қозғалыс талдауы",
       report: "Қорытынды есеп",
       videos: "Жаттығу бейнелері",
-      realImu: "Нақты IMU сенсоры",
     },
     descriptions: {
       patient: "Клиникалық деректер алдында пациент пен сессия параметрлерін көрсетіңіз.",
@@ -986,7 +954,6 @@ const STRINGS = {
       imu: "Тізе ROM-ын есептеу үшін ИМУ қозғалыс дерегін жүктеңіз немесе жазыңыз.",
       report: "Пациент, KOOS, KL және ИМУ деректерінен қорытынды есеп жасаңыз.",
       videos: "Қорытынды есептен кейін жаттығу бейнелерін қарап шығыңыз.",
-      realImu: "Жаттығу бейнелерінен кейін нақты IMU ағынын және соңғы үлгілерді қадағалаңыз.",
     },
     buttons: {
       back: "Артқа",
@@ -1642,21 +1609,6 @@ function realtimeImuCopy(lang) {
   return REALTIME_IMU_COPY[lang] || REALTIME_IMU_COPY.en;
 }
 
-function formatSensorSource(row) {
-  if (!row) return "-";
-  const deviceId = String(row.device_id || "").trim();
-  const leg = String(row.leg || "").trim();
-  const bodyPart = String(row.body_part || "").trim();
-  const parts = [deviceId, [leg, bodyPart].filter(Boolean).join(" ")].filter(Boolean);
-  return parts.length ? parts.join(" / ") : "-";
-}
-
-const IMU_SENSOR_CARD_DEFS = [
-  { key: "hip", titleKey: "hipSensor", matches: ["hip"] },
-  { key: "knee", titleKey: "kneeSensor", matches: ["knee", "thigh"] },
-  { key: "ankle", titleKey: "ankleSensor", matches: ["ankle", "shin"] },
-];
-
 const LIVE_IMU_RECENT_MS = 2 * 60 * 1000;
 const LIVE_IMU_FETCH_LIMIT = 300;
 const LIVE_IMU_ROLE_ORDER = [
@@ -1665,35 +1617,12 @@ const LIVE_IMU_ROLE_ORDER = [
   { key: "ankle", titleKey: "ankleSensor", deviceId: "pi3" },
 ];
 
-const STEP4_DEMO_SENSOR_VALUES = {
-  left: {
-    hip: { pitch: 8.4, roll: 1.3, acc_x: 0.11, acc_y: 0.02, acc_z: 0.98 },
-    knee: { pitch: 16.9, roll: 2.4, acc_x: 0.18, acc_y: 0.04, acc_z: 0.95 },
-    ankle: { pitch: 32.8, roll: 3.6, acc_x: 0.24, acc_y: 0.06, acc_z: 0.92 },
-  },
-  right: {
-    hip: { pitch: 7.8, roll: -1.1, acc_x: 0.1, acc_y: -0.02, acc_z: 0.99 },
-    knee: { pitch: 15.4, roll: -2.2, acc_x: 0.17, acc_y: -0.03, acc_z: 0.95 },
-    ankle: { pitch: 31.1, roll: -3.1, acc_x: 0.23, acc_y: -0.05, acc_z: 0.91 },
-  },
-};
-
-const STEP4_DEMO_SAMPLE_COUNT = 45;
-const STEP4_DEMO_SAMPLE_INTERVAL_MS = 1000;
-
 function createDefaultLiveSensorConfig() {
   return {
     hip: { deviceId: "pi1", axis: "pitch", sign: 1 },
     knee: { deviceId: "pi2", axis: "pitch", sign: 1 },
     ankle: { deviceId: "pi3", axis: "pitch", sign: 1 },
   };
-}
-
-function normalizeSensorBodyPart(value) {
-  const bodyPart = String(value || "").trim().toLowerCase();
-  if (bodyPart === "thigh") return "knee";
-  if (bodyPart === "shin") return "ankle";
-  return bodyPart;
 }
 
 function toTimestampMs(value) {
@@ -1754,139 +1683,30 @@ function formatLegPositionLabel(leg, roleKey, copy) {
   if (roleKey === "ankle") return `${legLabel} ankle/shin`;
   return `${legLabel} hip`;
 }
-
-function createStep4DemoRow({ leg, roleKey }) {
-  const metrics = STEP4_DEMO_SENSOR_VALUES[leg]?.[roleKey] || STEP4_DEMO_SENSOR_VALUES.left.hip;
-  return {
-    timestamp: null,
-    device_id: null,
-    leg,
-    body_part: roleKey,
-    pitch: metrics.pitch,
-    roll: metrics.roll,
-    acc_x: metrics.acc_x,
-    acc_y: metrics.acc_y,
-    acc_z: metrics.acc_z,
-    gyro_x: 0.6,
-    gyro_y: 0.2,
-    gyro_z: -0.1,
-    temperature: 35.6,
-  };
-}
-
-function createStep4SeededDemoRows(analysisLeg) {
-  const roles = [
-    { roleKey: "hip", deviceId: "pi1", bodyPart: "hip" },
-    { roleKey: "knee", deviceId: "pi2", bodyPart: "thigh" },
-    { roleKey: "ankle", deviceId: "pi3", bodyPart: "shin" },
-  ];
-  const startTime = Date.now() - ((STEP4_DEMO_SAMPLE_COUNT - 1) * STEP4_DEMO_SAMPLE_INTERVAL_MS);
-  const rows = [];
-
-  for (let index = 0; index < STEP4_DEMO_SAMPLE_COUNT; index += 1) {
-    const progress = index / Math.max(1, STEP4_DEMO_SAMPLE_COUNT - 1);
-    const phase = progress * Math.PI * 2;
-
-    for (const role of roles) {
-      const base = STEP4_DEMO_SENSOR_VALUES[analysisLeg]?.[role.roleKey] || STEP4_DEMO_SENSOR_VALUES.left[role.roleKey];
-      const swingScale = role.roleKey === "ankle" ? 18 : role.roleKey === "knee" ? 10 : 4;
-      const pitch = roundCalc(base.pitch + (Math.sin(phase) * swingScale), 3);
-      const roll = roundCalc(base.roll + (Math.cos(phase) * (swingScale / 5)), 3);
-      rows.push({
-        timestamp: new Date(startTime + (index * STEP4_DEMO_SAMPLE_INTERVAL_MS)).toISOString(),
-        device_id: role.deviceId,
-        leg: analysisLeg,
-        body_part: role.bodyPart,
-        pitch,
-        roll,
-        acc_x: roundCalc(base.acc_x + (Math.sin(phase) * 0.05), 3),
-        acc_y: roundCalc(base.acc_y + (Math.cos(phase) * 0.04), 3),
-        acc_z: roundCalc(base.acc_z - (Math.sin(phase) * 0.03), 3),
-        gyro_x: roundCalc(Math.cos(phase) * 3.2, 3),
-        gyro_y: roundCalc(Math.sin(phase) * 2.8, 3),
-        gyro_z: roundCalc(Math.cos(phase / 2) * 1.7, 3),
-        temperature: roundCalc(35.6 + (index * 0.004), 2),
-        is_demo_preview: true,
-      });
-    }
-  }
-
-  return rows;
-}
-
-function buildStep4LiveSensorPositions({ latestRows, rows, config, baselines, analysisLeg, liveCopy, step4Copy, demoRows, demoActive }) {
+function buildStep4LiveSensorCards({ latestRows, rows, config, baselines, analysisLeg, liveCopy, step4Copy }) {
   const mergedLatestRows = buildLatestRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
-  const latestDemoRows = buildLatestRowsByDevice(Array.isArray(demoRows) ? demoRows : []);
-  const orderedLegs = ["left", "right"];
-  const positions = [];
-
-  for (const leg of orderedLegs) {
-    for (const role of LIVE_IMU_ROLE_ORDER) {
-      const roleConfig = config?.[role.key] || {};
-      const isSelectedLeg = leg === analysisLeg;
-      const mappedDeviceId = isSelectedLeg ? String(roleConfig.deviceId || role.deviceId || "") : "";
-      const latestRow = mappedDeviceId ? mergedLatestRows.get(mappedDeviceId) || null : null;
-      const latestDemoRow = mappedDeviceId ? latestDemoRows.get(mappedDeviceId) || null : null;
-      const placeholderRow = demoActive ? createStep4DemoRow({ leg, roleKey: role.key }) : null;
-      const hasFreshRealRow = Boolean(latestRow && isLiveSensorRecent(latestRow));
-      const displayRow = (hasFreshRealRow ? latestRow : null) || latestDemoRow || placeholderRow;
-      const hasDemoRow = Boolean(latestDemoRow || (demoActive && placeholderRow));
-      const statusKey = hasFreshRealRow ? "online" : hasDemoRow ? "demo" : "waiting";
-      const baseline = baselines?.[role.key] || null;
-      const calibratedAngle = isSelectedLeg
-        ? calculateCalibratedAngle(displayRow, roleConfig, baseline)
-        : calculateCalibratedAngle(displayRow, roleConfig, null);
-
-      positions.push({
-        key: `${leg}-${role.key}`,
-        leg,
-        legLabel: leg === "right" ? step4Copy.rightSide : step4Copy.leftSide,
-        positionLabel: formatLegPositionLabel(leg, role.key, step4Copy),
-        sensorRole: liveCopy?.[role.titleKey] || step4Copy?.[role.titleKey] || role.key,
-        mappedDeviceId: mappedDeviceId || step4Copy.waitingDevice,
-        statusKey,
-        statusLabel:
-          statusKey === "online"
-            ? liveCopy.online
-            : statusKey === "demo"
-              ? step4Copy.demoStatus
-              : step4Copy.waitingStatus,
-        statusNote: statusKey === "demo" ? step4Copy.demoNote : "",
-        pitch: asFiniteNumber(displayRow?.pitch),
-        roll: asFiniteNumber(displayRow?.roll),
-        acc_x: asFiniteNumber(displayRow?.acc_x),
-        acc_y: asFiniteNumber(displayRow?.acc_y),
-        acc_z: asFiniteNumber(displayRow?.acc_z),
-        calibratedAngle,
-        lastUpdated: latestRow?.timestamp || latestDemoRow?.timestamp || null,
-        lastUpdatedLabel:
-          latestRow?.timestamp
-            ? formatDate(latestRow.timestamp)
-            : statusKey === "demo"
-              ? step4Copy.demoLastUpdated
-              : step4Copy.waitingStatus,
-        baselineReady: Boolean(
-          baseline
-          && String(baseline.deviceId || "") === String(roleConfig.deviceId || "")
-          && baseline.pitch !== null
-          && baseline.pitch !== undefined
-          && baseline.roll !== null
-          && baseline.roll !== undefined
-        ),
-      });
-    }
-  }
-
-  return positions;
+  return LIVE_IMU_ROLE_ORDER.map((role) => {
+    const roleConfig = config?.[role.key] || {};
+    const latestRow = mergedLatestRows.get(String(roleConfig.deviceId || role.deviceId || "")) || null;
+    const baseline = baselines?.[role.key] || null;
+    return {
+      key: role.key,
+      title: liveCopy?.[role.titleKey] || step4Copy?.[role.titleKey] || role.key,
+      deviceId: String(roleConfig.deviceId || role.deviceId || ""),
+      positionLabel: formatLegPositionLabel(analysisLeg, role.key, step4Copy),
+      statusLabel: latestRow ? (isLiveSensorRecent(latestRow) ? liveCopy.online : liveCopy.waitingForData) : liveCopy.waitingForSensor,
+      isOnline: Boolean(latestRow && isLiveSensorRecent(latestRow)),
+      latestRow,
+      calibratedAngle: calculateCalibratedAngle(latestRow, roleConfig, baseline),
+    };
+  });
 }
 
-function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg, copy, fallbackCopy, demoRows, demoActive }) {
+function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg, copy, fallbackCopy }) {
   const mergedLatestRows = buildLatestRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
-  const latestDemoRows = buildLatestRowsByDevice(Array.isArray(demoRows) ? demoRows : []);
   const roleStatuses = LIVE_IMU_ROLE_ORDER.map((role) => {
     const roleConfig = config?.[role.key] || {};
     const latestRow = mergedLatestRows.get(roleConfig.deviceId) || null;
-    const demoRow = latestDemoRows.get(roleConfig.deviceId) || null;
     const baseline = baselines?.[role.key] || null;
     const baselineReady = Boolean(
       baseline
@@ -1902,7 +1722,6 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
       title: fallbackCopy?.[role.titleKey] || copy?.[role.titleKey] || role.key,
       config: roleConfig,
       latestRow,
-      demoRow,
       baseline,
       baselineReady,
       isOnline: Boolean(latestRow && isLiveSensorRecent(latestRow)),
@@ -1910,12 +1729,9 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
   });
 
   const roleByDevice = new Map(roleStatuses.map((status) => [String(status.config?.deviceId || ""), status]));
-  const shouldUseDemo = demoActive && roleStatuses.some((status) => !status.isOnline) && Array.isArray(demoRows) && demoRows.length > 0;
-  const mappedRows = shouldUseDemo
-    ? [...demoRows]
-    : (Array.isArray(rows) ? rows : [])
-      .filter((row) => roleByDevice.has(String(row?.device_id || "")))
-      .sort((a, b) => (toTimestampMs(a?.timestamp) ?? 0) - (toTimestampMs(b?.timestamp) ?? 0));
+  const mappedRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => roleByDevice.has(String(row?.device_id || "")))
+    .sort((a, b) => (toTimestampMs(a?.timestamp) ?? 0) - (toTimestampMs(b?.timestamp) ?? 0));
 
   const liveSamples = [];
   const currentAngles = {};
@@ -1929,8 +1745,8 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
       timestamp: row?.timestamp || null,
       analysis_leg: analysisLeg,
       device_id: row?.device_id || "-",
-      source: shouldUseDemo ? "demo" : "real",
-      source_label: shouldUseDemo ? fallbackCopy.demoPreviewLabel : copy.online,
+      source: "real",
+      source_label: copy.online,
       sensor_role: status.title,
       body_part: row?.body_part || "-",
       pitch: asFiniteNumber(row?.pitch),
@@ -1958,14 +1774,12 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
   }
 
   const warnings = [];
-  const missingOrStale = roleStatuses.filter((status) => !status.isOnline);
-  if (!shouldUseDemo && missingOrStale.length > 0) {
-    warnings.push(`${fallbackCopy.liveResultWarning}: ${missingOrStale.map((status) => status.title).join(", ")}.`);
-  }
-  if (liveSamples.length === 0) {
-    warnings.push("No live IMU samples are available for the selected sensor mapping.");
-  }
-  if (motionSeries.length === 0) {
+  const kneeRows = liveSamples.filter((row) => row.device_id === roleStatuses.find((status) => status.key === "knee")?.config?.deviceId);
+  const ankleRows = liveSamples.filter((row) => row.device_id === roleStatuses.find((status) => status.key === "ankle")?.config?.deviceId);
+  const hasSensorGaps = roleStatuses.some((status) => !status.isOnline);
+  if (kneeRows.length === 0 || ankleRows.length === 0) {
+    warnings.push("Need thigh/knee and ankle/shin sensor data to calculate ROM.");
+  } else if (motionSeries.length === 0) {
     warnings.push(fallbackCopy.liveResultUnavailable);
   }
 
@@ -1987,12 +1801,12 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
     warnings,
     result: {
       analysis_source: "live",
-      dominant_activity_label: shouldUseDemo ? fallbackCopy.demoResultTitle : "Live sensor ROM",
+      dominant_activity_label: "Live sensor ROM",
       overall_score: null,
       rom_deg: romDeg,
       min_angle_deg: roundCalc(minAngle, 1),
       max_angle_deg: roundCalc(maxAngle, 1),
-      feedback: [{ level: missingOrStale.length > 0 ? "Needs sensor check" : "Calibrated live stream" }],
+      feedback: [{ level: hasSensorGaps ? "Needs sensor check" : "Calibrated live stream" }],
       warning: warnings[0] || "",
       live_samples: liveSamples,
       live_motion_series: motionSeries,
@@ -2003,42 +1817,17 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
         min_angle_deg: roundCalc(minAngle, 1),
         max_angle_deg: roundCalc(maxAngle, 1),
         rom_valid: true,
-        rom_method_used: shouldUseDemo ? "frontend_demo_preview" : "live_relative_angle",
+        rom_method_used: "live_relative_angle",
         rom_warning: warnings[0] || "",
-        sensor_format: shouldUseDemo ? "frontend_demo_preview" : "live_3sensor_stream",
-        n_real_channels: shouldUseDemo ? 0 : roleStatuses.filter((status) => status.latestRow).length,
+        sensor_format: "live_3sensor_stream",
+        n_real_channels: roleStatuses.filter((status) => status.latestRow).length,
         emg_detected: false,
         repetitions: motionSeries.length,
         analysis_leg: analysisLeg,
-        sensor_setup_note: shouldUseDemo
-          ? `Frontend demo preview for the ${analysisLeg} leg uses seeded Raspberry Pi mapping rows and is not sent to the backend.`
-          : `Live analysis for the ${analysisLeg} leg uses calibrated ankle/shin minus thigh/knee angles from the selected Raspberry Pi sensors.`,
+        sensor_setup_note: `Live analysis for the ${analysisLeg} leg uses calibrated ankle/shin minus thigh/knee angles from recent Raspberry Pi database rows.`,
       },
     },
   };
-}
-
-function buildLiveImuSensorCards(rows, copy) {
-  const latestByPart = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const normalizedPart = normalizeSensorBodyPart(row?.body_part);
-    if (!normalizedPart) continue;
-    const existing = latestByPart.get(normalizedPart);
-    const rowTime = toTimestampMs(row?.timestamp) ?? -1;
-    const existingTime = toTimestampMs(existing?.timestamp) ?? -1;
-    if (!existing || rowTime > existingTime) latestByPart.set(normalizedPart, row);
-  }
-
-  return IMU_SENSOR_CARD_DEFS.map((card) => {
-    const sensor = card.matches.map((match) => latestByPart.get(match)).find(Boolean) || null;
-    return {
-      key: card.key,
-      title: copy[card.titleKey] || card.key,
-      sensor,
-      source: formatSensorSource(sensor),
-      isOnline: Boolean(sensor && isLiveSensorRecent(sensor)),
-    };
-  });
 }
 
 function Step4ImuSampleTable({ title, hint, rows, liveCopy }) {
@@ -2138,8 +1927,6 @@ export default function App() {
     knee: null,
     ankle: null,
   });
-  const [step4DemoRows, setStep4DemoRows] = useState([]);
-  const [step4DemoResultActive, setStep4DemoResultActive] = useState(false);
 
   const [reportResult, setReportResult] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -2155,7 +1942,6 @@ export default function App() {
   const step4ImuText = STEP4_IMU_COPY;
 
   const latestSession = sessions[0] || null;
-  const latestLiveImu = liveImuLatest[0] || null;
   const previousSessionRom = latestSession?.current_rom ?? null;
   const currentMinAngle = imuResult?.min_angle_deg ?? imuResult?.session_summary?.min_angle_deg ?? imuResult?.rom_scores?.[0]?.min_angle_deg ?? null;
   const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
@@ -2199,9 +1985,8 @@ export default function App() {
       imu: Boolean(imuResult && imuRomValid),
       report: Boolean(reportResult?.session_id),
       videos: Boolean(reportResult?.session_id),
-      realImu: Boolean(latestLiveImu || liveImuRows.length > 0),
     }),
-    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult, latestLiveImu, liveImuRows.length]
+    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult]
   );
   const activeStepComplete =
     (activeStep === "patient" && readyState.patient) ||
@@ -2209,9 +1994,8 @@ export default function App() {
     (activeStep === "kl" && readyState.kl) ||
     (activeStep === "imu" && readyState.imu) ||
     (activeStep === "report" && readyState.report) ||
-    (activeStep === "videos" && readyState.videos) ||
-    (activeStep === "realImu" && readyState.realImu);
-  const showGlobalWizardNav = !["koos", "videos", "realImu"].includes(activeStep) && !activeStepComplete;
+    (activeStep === "videos" && readyState.videos);
+  const showGlobalWizardNav = !["koos", "videos"].includes(activeStep) && !activeStepComplete;
   const klModelStatus = klResult?.kl_model || health?.kl_model;
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
   const movementResult = imuResult?.dominant_activity_label || imuResult?.dominant_activity || imuResult?.source || "-";
@@ -2230,11 +2014,18 @@ export default function App() {
     currentKoosPanel.note === "Includes next section"
       ? t.messages.includesNextSection
       : currentKoosPanel.note || "";
-  const liveImuCards = useMemo(
-    () => buildLiveImuSensorCards(liveImuLatest, liveImuText),
-    [liveImuLatest, liveImuText]
+  const step4LiveSensorCards = useMemo(
+    () => buildStep4LiveSensorCards({
+      latestRows: liveImuLatest,
+      rows: liveImuRows,
+      config: liveSensorConfig,
+      baselines: liveSensorBaselines,
+      analysisLeg: imuAnalysisLeg,
+      liveCopy: liveImuText,
+      step4Copy: step4ImuText,
+    }),
+    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4ImuText]
   );
-  const step4DemoActive = step4DemoRows.length > 0;
   const step4LiveAnalysis = useMemo(
     () => buildLiveImuAnalysis({
       latestRows: liveImuLatest,
@@ -2244,29 +2035,16 @@ export default function App() {
       analysisLeg: imuAnalysisLeg,
       copy: liveImuText,
       fallbackCopy: step4ImuText,
-      demoRows: step4DemoRows,
-      demoActive: step4DemoActive,
     }),
-    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4DemoActive, step4DemoRows, step4ImuText]
+    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4ImuText]
   );
-  const step4LivePositions = useMemo(
-    () => buildStep4LiveSensorPositions({
-      latestRows: liveImuLatest,
-      rows: liveImuRows,
-      config: liveSensorConfig,
-      baselines: liveSensorBaselines,
-      analysisLeg: imuAnalysisLeg,
-      liveCopy: liveImuText,
-      step4Copy: step4ImuText,
-      demoRows: step4DemoRows,
-      demoActive: step4DemoActive,
-    }),
-    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4DemoActive, step4DemoRows, step4ImuText]
+  const step4RecentLiveRows = useMemo(
+    () => (Array.isArray(liveImuRows) ? liveImuRows : [])
+      .filter((row) => LIVE_IMU_ROLE_ORDER.some((role) => String(row?.device_id || "") === String(liveSensorConfig?.[role.key]?.deviceId || role.deviceId)))
+      .sort((a, b) => (toTimestampMs(b?.timestamp) ?? 0) - (toTimestampMs(a?.timestamp) ?? 0)),
+    [liveImuRows, liveSensorConfig]
   );
   const step4VisibleSampleRows = Array.isArray(step4LiveAnalysis.liveSamples) ? step4LiveAnalysis.liveSamples : [];
-  const step4VisibleSampleTitle = step4VisibleSampleRows.some((row) => row?.source === "demo")
-    ? step4ImuText.demoSampleTitle
-    : step4ImuText.liveSampleTitle;
   const koosBreakdowns = useMemo(() => {
     if (!koosResult) return [];
 
@@ -2526,7 +2304,7 @@ export default function App() {
       }
     }
 
-    if (activeStep !== "realImu" && !(activeStep === "imu" && imuDataSource === "live")) {
+    if (!(activeStep === "imu" && imuDataSource === "live")) {
       setLiveImuLoading(false);
       return () => {
         active = false;
@@ -2668,17 +2446,14 @@ export default function App() {
     if (imuDataSource === "live") {
       setImuLoading(true);
       setImuError("");
-      setStep4DemoResultActive(step4DemoRows.length > 0);
       try {
         const liveAnalysis = step4LiveAnalysis;
         if (!liveAnalysis.result) {
           setImuResult(null);
-          setStep4DemoResultActive(false);
           setImuError(liveAnalysis.warnings[0] || step4ImuText.liveResultUnavailable);
           return;
         }
         setImuResult(liveAnalysis.result);
-        setStep4DemoResultActive(liveAnalysis.result?.session_summary?.sensor_format === "frontend_demo_preview");
         setImuError("");
         return;
       } finally {
@@ -2700,7 +2475,6 @@ export default function App() {
       const data = await readResponsePayload(res);
       if (!res.ok) throw { ...data, status: res.status };
       setImuResult(data);
-      setStep4DemoResultActive(false);
       setImuError("");
     } catch (error) {
       setImuError(friendlyError(error, t, "imuInvalid"));
@@ -2868,32 +2642,13 @@ export default function App() {
   function handleImuDataSourceChange(value) {
     setImuDataSource(value);
     setImuResult(null);
-    setStep4DemoResultActive(false);
     setImuError("");
     setReportResult(null);
   }
 
   function handleImuAnalysisLegChange(value) {
     setImuAnalysisLeg(value);
-    setStep4DemoRows((current) => (current.length > 0 ? createStep4SeededDemoRows(value) : current));
     setImuResult(null);
-    setStep4DemoResultActive(false);
-    setImuError("");
-    setReportResult(null);
-  }
-
-  function seedStep4DemoData() {
-    setStep4DemoRows(createStep4SeededDemoRows(imuAnalysisLeg));
-    setImuResult(null);
-    setStep4DemoResultActive(false);
-    setImuError("");
-    setReportResult(null);
-  }
-
-  function clearStep4DemoData() {
-    setStep4DemoRows([]);
-    setImuResult(null);
-    setStep4DemoResultActive(false);
     setImuError("");
     setReportResult(null);
   }
@@ -2907,7 +2662,6 @@ export default function App() {
       },
     }));
     setImuResult(null);
-    setStep4DemoResultActive(false);
     setImuError("");
     setReportResult(null);
   }
@@ -2933,7 +2687,6 @@ export default function App() {
 
     setLiveSensorBaselines((current) => ({ ...current, ...nextBaselines }));
     setImuResult(null);
-    setStep4DemoResultActive(false);
     setImuError("");
     setReportResult(null);
   }
@@ -3359,76 +3112,102 @@ export default function App() {
                   ) : (
                     <div className="reportBlock sectionBody">
                       <div className="reportBlockHead">
-                        <h4>{step4ImuText.mappingTitle}</h4>
-                        <span className="microNote">{step4ImuText.mappingHint}</span>
+                        <h4>{liveImuText.title}</h4>
+                        <span className="microNote">{liveImuText.refreshNote}</span>
                       </div>
-                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-                        <button className="btn" type="button" onClick={seedStep4DemoData}>{step4ImuText.demoSeedButton}</button>
-                        <button className="btn" type="button" onClick={clearStep4DemoData}>{step4ImuText.demoClearButton}</button>
-                      </div>
-                      {step4DemoActive ? (
-                        <div className="empty" style={{ background: "#f8f3e8", borderStyle: "solid" }}>{step4ImuText.demoInfoNote}</div>
-                      ) : null}
+                      <p className="microNote">{step4ImuText.legHint}</p>
+                      {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
                       <div className="reportBlock">
-                        <h4>{step4ImuText.positionsTitle}</h4>
-                        <p className="microNote">{step4ImuText.positionsHint}</p>
-                        <div className="dataTableWrap">
+                        <div className="summaryCards sectionBody" aria-label={liveImuText.cardTitle}>
+                          {step4LiveSensorCards.map((card) => (
+                            <article key={card.key} className="summaryCard sensorCard">
+                              <div className="sensorCardHeader">
+                                <div>
+                                  <small>{card.deviceId}</small>
+                                  <strong className="summaryDate">{card.positionLabel}</strong>
+                                </div>
+                                <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.statusLabel}</span>
+                              </div>
+                              {card.latestRow ? (
+                                <div className="sensorMeta">
+                                  <div className="sensorMetrics">
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.pitch}</small>
+                                      <strong>{f(card.latestRow.pitch, "°")}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.roll}</small>
+                                      <strong>{f(card.latestRow.roll, "°")}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accX}</small>
+                                      <strong>{f(card.latestRow.acc_x)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accY}</small>
+                                      <strong>{f(card.latestRow.acc_y)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accZ}</small>
+                                      <strong>{f(card.latestRow.acc_z)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{step4ImuText.liveTableCalibratedAngle}</small>
+                                      <strong>{f(card.calibratedAngle, "°")}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.lastUpdated}</small>
+                                      <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
+                              )}
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="dataTableWrap" id="imu-live">
+                        <div className="tableTitle">{liveImuText.recentTable}</div>
+                        {step4RecentLiveRows.length === 0 ? (
+                          <div className="microNote">{liveImuText.noRows}</div>
+                        ) : (
                           <table className="dataTable">
                             <thead>
                               <tr>
-                                <th>{step4ImuText.legSideColumn}</th>
-                                <th>{step4ImuText.positionColumn}</th>
-                                <th>{step4ImuText.roleColumn}</th>
-                                <th>{step4ImuText.deviceColumn}</th>
-                                <th>{step4ImuText.statusColumn}</th>
+                                <th>{liveImuText.timestamp}</th>
+                                <th>{liveImuText.deviceId}</th>
+                                <th>{liveImuText.leg}</th>
+                                <th>{liveImuText.bodyPart}</th>
                                 <th>{liveImuText.pitch}</th>
                                 <th>{liveImuText.roll}</th>
                                 <th>{liveImuText.accX}</th>
                                 <th>{liveImuText.accY}</th>
                                 <th>{liveImuText.accZ}</th>
-                                <th>{step4ImuText.liveTableCalibratedAngle}</th>
-                                <th>{liveImuText.lastUpdated}</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {step4LivePositions.map((position) => (
-                                <tr key={position.key}>
-                                  <td>{position.legLabel}</td>
-                                  <td>{position.positionLabel}</td>
-                                  <td>{position.sensorRole}</td>
-                                  <td>{position.mappedDeviceId}</td>
-                                  <td>
-                                    <div style={{ display: "grid", gap: 4 }}>
-                                      <span className={`chip ${position.statusKey === "online" ? "teal" : ""}`}>{position.statusLabel}</span>
-                                      {position.statusNote ? <span className="microNote">{position.statusNote}</span> : null}
-                                    </div>
-                                  </td>
-                                  <td>{f(position.pitch, "°")}</td>
-                                  <td>{f(position.roll, "°")}</td>
-                                  <td>{f(position.acc_x)}</td>
-                                  <td>{f(position.acc_y)}</td>
-                                  <td>{f(position.acc_z)}</td>
-                                  <td>{f(position.calibratedAngle, "°")}</td>
-                                  <td>{position.lastUpdatedLabel}</td>
+                              {step4RecentLiveRows.map((row, index) => (
+                                <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
+                                  <td>{formatDate(row.timestamp)}</td>
+                                  <td>{row.device_id || "-"}</td>
+                                  <td>{row.leg || imuAnalysisLeg}</td>
+                                  <td>{row.body_part || "-"}</td>
+                                  <td>{f(row.pitch, "°")}</td>
+                                  <td>{f(row.roll, "°")}</td>
+                                  <td>{f(row.acc_x)}</td>
+                                  <td>{f(row.acc_y)}</td>
+                                  <td>{f(row.acc_z)}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
-                        </div>
+                        )}
                       </div>
 
-                      {step4VisibleSampleRows.length > 0 ? (
-                        <div className="reportBlock">
-                          <Step4ImuSampleTable
-                            title={step4VisibleSampleTitle}
-                            hint={step4ImuText.sampleTableHint}
-                            rows={step4VisibleSampleRows}
-                            liveCopy={liveImuText}
-                          />
-                        </div>
-                      ) : null}
-
-                      <div className="reportBlock">
+                      <div className="reportBlock" id="imu-config">
                         <h4>{step4ImuText.axisTitle}</h4>
                         <div className="grid2 sectionBody">
                           {step4LiveAnalysis.roleStatuses.map((status) => (
@@ -3475,10 +3254,6 @@ export default function App() {
                           ))}
                         </div>
                       </div>
-
-                      {!step4DemoActive && step4LiveAnalysis.warnings.length > 0 ? (
-                        <div className="error">{step4LiveAnalysis.warnings[0]}</div>
-                      ) : null}
                     </div>
                   )}
                 </div>
@@ -3486,20 +3261,14 @@ export default function App() {
                   <button className="btn primary" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>
                     {imuLoading ? t.buttons.analyzing : t.buttons.analyzeImu}
                   </button>
-                  {step4DemoResultActive ? <div className="microNote" style={{ marginTop: 10 }}>{step4ImuText.demoResultTitle}</div> : null}
-                  {imuError && !(imuDataSource === "live" && step4DemoActive) ? <div className="error">{imuError}</div> : null}
+                  {imuError ? <div className="error">{imuError}</div> : null}
                   {!imuResult && !imuError ? <div className="empty">{t.messages.noImuResult}</div> : null}
                   {imuResult ? (
                     <div className="resultHero">
                       <div className="resultHeroTop">
                         <div>
                           <div className="resultKicker">{stepCompleteText(4)}</div>
-                          <h4>{
-                            imuResult?.session_summary?.sensor_format === "frontend_demo_preview"
-                              || imuResult?.dominant_activity_label === step4ImuText.demoResultTitle
-                              ? step4ImuText.demoResultTitle
-                              : t.completion.imuTitle
-                          }</h4>
+                          <h4>{t.completion.imuTitle}</h4>
                           <p>{t.completion.imuText}</p>
                         </div>
                         <div className="resultValue">{f(currentRom, "°")}<span>{t.labels.rangeOfMotion}</span></div>
@@ -3533,13 +3302,11 @@ export default function App() {
                       ) : null}
                       {imuResult?.analysis_source === "live" ? (
                         <div className="dataTableWrap">
-                          <div className="tableTitle">
-                            {imuResult?.session_summary?.sensor_format === "frontend_demo_preview" ? step4ImuText.demoSampleTitle : step4ImuText.liveSampleTitle}
-                          </div>
+                          <div className="tableTitle">{step4ImuText.liveResultTitle}</div>
                           <div className="microNote">{step4ImuText.liveResultFormula}</div>
                           {Array.isArray(imuResult.live_samples) && imuResult.live_samples.length > 0 ? (
                             <Step4ImuSampleTable
-                              title={imuResult?.session_summary?.sensor_format === "frontend_demo_preview" ? step4ImuText.demoSampleTitle : step4ImuText.liveSampleTitle}
+                              title={step4ImuText.liveResultTitle}
                               rows={imuResult.live_samples}
                               liveCopy={liveImuText}
                             />
@@ -3905,121 +3672,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-          ) : null}
-
-          {activeStep === "realImu" ? (
-            <section className="panel" id="real-imu-live">
-              <div className="reportBlock">
-                <div className="reportBlockHead">
-                  <h4>{liveImuText.title}</h4>
-                  <span className="microNote">{liveImuText.refreshNote}</span>
-                </div>
-                {liveImuLoading && liveImuRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
-                {!liveImuLoading && !latestLiveImu ? <div className="empty">{liveImuText.noSensor}</div> : null}
-                <div className="summaryCards sectionBody" aria-label={liveImuText.cardTitle}>
-                  {liveImuCards.map((card) => (
-                    <article key={card.key} className="summaryCard sensorCard">
-                      <div className="sensorCardHeader">
-                        <div>
-                          <small>{liveImuText.latestSensor}</small>
-                          <strong className="summaryDate">{card.title}</strong>
-                        </div>
-                        <span className={`chip ${card.isOnline ? "teal" : ""}`}>
-                          {card.isOnline ? liveImuText.online : liveImuText.waitingForData}
-                        </span>
-                      </div>
-                      {card.sensor ? (
-                        <div className="sensorMeta">
-                          <div className="sensorMetrics">
-                            <div className="sensorMetric">
-                              <small>{liveImuText.deviceId}</small>
-                              <strong>{card.sensor.device_id || "-"}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.leg}</small>
-                              <strong>{card.sensor.leg || "-"}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.bodyPart}</small>
-                              <strong>{card.sensor.body_part || "-"}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.liveStatus}</small>
-                              <strong>{card.isOnline ? liveImuText.online : liveImuText.waitingForData}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.pitch}</small>
-                              <strong>{f(card.sensor.pitch, "°")}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.roll}</small>
-                              <strong>{f(card.sensor.roll, "°")}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.accX}</small>
-                              <strong>{f(card.sensor.acc_x)}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.accY}</small>
-                              <strong>{f(card.sensor.acc_y)}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.accZ}</small>
-                              <strong>{f(card.sensor.acc_z)}</strong>
-                            </div>
-                            <div className="sensorMetric">
-                              <small>{liveImuText.lastUpdated}</small>
-                              <strong>{formatDate(card.sensor.timestamp)}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
-                      )}
-                    </article>
-                  ))}
-                </div>
-                <div className="dataTableWrap">
-                  <div className="tableTitle">{liveImuText.recentTable}</div>
-                  {liveImuRows.length === 0 ? (
-                    <div className="microNote">{liveImuText.noRows}</div>
-                  ) : (
-                    <table className="dataTable">
-                      <thead>
-                        <tr>
-                          <th>{liveImuText.timestamp}</th>
-                          <th>{liveImuText.deviceId}</th>
-                          <th>{liveImuText.leg}</th>
-                          <th>{liveImuText.bodyPart}</th>
-                          <th>{liveImuText.pitch}</th>
-                          <th>{liveImuText.roll}</th>
-                          <th>{liveImuText.latestSensor}</th>
-                          <th>{liveImuText.accX}</th>
-                          <th>{liveImuText.accY}</th>
-                          <th>{liveImuText.accZ}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {liveImuRows.map((row, index) => (
-                          <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
-                            <td>{formatDate(row.timestamp)}</td>
-                            <td>{row.device_id || "-"}</td>
-                            <td>{row.leg || "-"}</td>
-                            <td>{row.body_part || "-"}</td>
-                            <td>{f(row.pitch, "°")}</td>
-                            <td>{f(row.roll, "°")}</td>
-                            <td>{formatSensorSource(row)}</td>
-                            <td>{f(row.acc_x)}</td>
-                            <td>{f(row.acc_y)}</td>
-                            <td>{f(row.acc_z)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            </section>
           ) : null}
 
           {showGlobalWizardNav ? (

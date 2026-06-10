@@ -269,27 +269,26 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
   });
 
-  it("renders six live Step 4 sensor positions with calibration controls", async () => {
+  it("shows three live Step 4 sensor cards with calibration controls", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
     await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
 
-    expect(screen.getByText(/6 sensor positions/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/selected leg/i)).toHaveValue("left");
-    expect(screen.getByText(/left hip/i)).toBeInTheDocument();
-    expect(screen.getByText(/left thigh\/knee/i)).toBeInTheDocument();
-    expect(screen.getByText(/left ankle\/shin/i)).toBeInTheDocument();
-    expect(screen.getByText(/right hip/i)).toBeInTheDocument();
-    expect(screen.getByText(/right thigh\/knee/i)).toBeInTheDocument();
-    expect(screen.getByText(/right ankle\/shin/i)).toBeInTheDocument();
+    const sensorCards = screen.getByLabelText(/sensor cards/i);
+    expect(within(sensorCards).getByText(/left hip/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/left thigh\/knee/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/left ankle\/shin/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi1$/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi2$/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /set current position as neutral baseline/i })).toBeInTheDocument();
     expect(screen.getAllByDisplayValue("pitch").length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
   });
 
-  it("maps pi1, pi2, and pi3 to the right-leg positions when Right leg is selected", async () => {
+  it("maps pi1, pi2, and pi3 to the right-leg sensor cards when Right leg is selected", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -332,129 +331,72 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
     await user.selectOptions(screen.getByLabelText(/selected leg/i), "right");
 
-    const rightHipRow = screen.getByText(/right hip/i).closest("tr");
-    const rightKneeRow = screen.getByText(/right thigh\/knee/i).closest("tr");
-    const rightAnkleRow = screen.getByText(/right ankle\/shin/i).closest("tr");
-
-    expect(within(rightHipRow).getByText(/^pi1$/i)).toBeInTheDocument();
-    expect(within(rightKneeRow).getByText(/^pi2$/i)).toBeInTheDocument();
-    expect(within(rightAnkleRow).getByText(/^pi3$/i)).toBeInTheDocument();
+    const sensorCards = screen.getByLabelText(/sensor cards/i);
+    expect(within(sensorCards).getByText(/right hip/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/right thigh\/knee/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/right ankle\/shin/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi1$/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi2$/i)).toBeInTheDocument();
+    expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
   });
 
-  it("shows the seed demo controls only in Step 4 live mode", async () => {
+  it("shows the recent IMU data table in Step 4 live mode", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+
+    expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
+    expect(screen.getByText(/device id/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
+  });
+
+  it("does not show the removed demo seed controls in Step 4 live mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
 
     expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /clear demo data/i })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-
-    expect(screen.getByRole("button", { name: /seed demo imu data/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /clear demo data/i })).toBeInTheDocument();
+    expect(screen.queryByText(/demo imu sample data/i)).not.toBeInTheDocument();
   });
 
-  it("seeds demo rows in Step 4 live mode only after the button is clicked", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input) => {
-        const url = String(input);
-        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
-        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
-        if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
-        if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
-        if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-        if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
-        if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
-        return jsonResponse({});
-      }),
-    );
-
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-
-    expect(screen.queryByText(/^demo preview$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/missing or stale live sensor data/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-
-    expect(await screen.findAllByText(/^demo preview$/i)).not.toHaveLength(0);
-    expect(screen.getByText(/demo imu data is active for step 4 preview/i)).toBeInTheDocument();
-    expect(screen.queryByText(/missing or stale live sensor data/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/demo imu sample data/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^pi2$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^pi3$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^demo$/i).length).toBeGreaterThan(0);
-  });
-
-  it("replaces seeded demo values with real data when live sensor rows arrive", async () => {
+  it("analyzes live ROM from fetched backend rows without calling the CSV analysis endpoint", async () => {
     const now = new Date().toISOString();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input) => {
-        const url = String(input);
-        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
-        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) {
-          return jsonResponse({
-            count: 3,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-            ],
-          });
-        }
-        if (url.includes("/api/imu/data")) {
-          return jsonResponse({
-            count: 3,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-            ],
-          });
-        }
-        if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
-        if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-        if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
-        if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
-        return jsonResponse({});
-      }),
-    );
-
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-
-    const leftHipRow = await screen.findByText(/left hip/i);
-    const row = leftHipRow.closest("tr");
-    expect(within(row).getByText(/^online$/i)).toBeInTheDocument();
-    expect(within(row).getByText(/^pi1$/i)).toBeInTheDocument();
-    expect(within(row).queryByText(/demo preview/i)).not.toBeInTheDocument();
-  });
-
-  it("analyzes ROM from the same seeded demo rows shown in the Step 4 sample table without sending demo data to the backend", async () => {
     const fetchMock = vi.fn(async (input) => {
       const url = String(input);
       if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
       if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
-      if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu/latest")) {
+        return jsonResponse({
+          count: 3,
+          items: [
+            buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 6, roll: 1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+            buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 10, roll: 2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
+            buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 28, roll: 3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
+          ],
+        });
+      }
+      if (url.includes("/api/imu/data")) {
+        return jsonResponse({
+          count: 6,
+          items: [
+            buildImuRow({ timestamp: "2026-06-10T10:00:00Z", device_id: "pi2", body_part: "thigh", pitch: 5, roll: 1, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:01Z", device_id: "pi3", body_part: "shin", pitch: 12, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:02Z", device_id: "pi2", body_part: "thigh", pitch: 9, roll: 1, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:03Z", device_id: "pi3", body_part: "shin", pitch: 27, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:04Z", device_id: "pi1", body_part: "hip", pitch: 7, roll: 1, acc_x: 0.1, acc_y: 0.01, acc_z: 0.97 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:05Z", device_id: "pi3", body_part: "shin", pitch: 18, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+          ],
+        });
+      }
       if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
       if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-      if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
       if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
+      if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
       return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -464,71 +406,40 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
     await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-    const [sampleTitle] = await screen.findAllByText(/demo imu sample data/i);
-    const sampleTable = sampleTitle.closest(".dataTableWrap");
-    expect(sampleTable).not.toBeNull();
-    const sampleRowsBeforeAnalyze = within(sampleTable).getAllByRole("row").length;
-
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(screen.queryByText(/no imu result yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/not enough calibrated live data is available to calculate rom yet/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/^demo preview$/i).length).toBeGreaterThan(0);
-    expect(within(sampleTable).getByText(/source/i)).toBeInTheDocument();
-    expect(within(sampleTable).getAllByText(/^demo$/i).length).toBeGreaterThan(0);
-    expect(within(sampleTable).getAllByRole("row").length).toBe(sampleRowsBeforeAnalyze);
-    expect(screen.getAllByText(/demo imu sample data/i).length).toBeGreaterThan(0);
-    expect(
-      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/imu/analyze")),
-    ).toBe(false);
+    expect(await screen.findByText(/IMU movement analysis completed/i)).toBeInTheDocument();
+    expect(screen.getAllByText("18.0°").length).toBeGreaterThan(0);
+    expect(screen.getByText(/live_3sensor_stream/i)).toBeInTheDocument();
+    expect(screen.getByText(/live_relative_angle/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^left$/i).length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/imu/analyze"))).toBe(false);
   });
 
-  it("clears prior live warning errors as soon as demo data is seeded", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
-
-    expect((await screen.findAllByText(/missing or stale live sensor data/i)).length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-
-    expect(screen.queryByText(/missing or stale live sensor data/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/not enough calibrated live data is available to calculate rom yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/no live imu samples are available for the selected sensor mapping/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/demo imu data is active for step 4 preview/i)).toBeInTheDocument();
-  });
-
-  it("clears seeded Step 4 demo rows", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-
-    expect(await screen.findAllByText(/^demo preview$/i)).not.toHaveLength(0);
-
-    await user.click(screen.getByRole("button", { name: /clear demo data/i }));
-
-    expect(screen.queryByText(/demo imu data is active for step 4 preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/demo imu sample data/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^demo preview$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/missing or stale live sensor data/i)).toBeInTheDocument();
-  });
-
-  it("does not show seeded Step 4 demo data in Step 7 real IMU monitoring", async () => {
+  it("shows a clear warning when pi2 or pi3 data is missing in live mode", async () => {
+    const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input) => {
         const url = String(input);
         if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
         if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
-        if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 1,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 1,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+            ],
+          });
+        }
         if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
         if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
         if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
@@ -542,15 +453,9 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
     await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
-    await user.click(screen.getByRole("button", { name: /seed demo imu data/i }));
-    expect(await screen.findAllByText(/^demo preview$/i)).not.toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    await user.click(screen.getAllByRole("button", { name: /real imu sensor/i })[0]);
-
-    expect(await screen.findByText(/real imu sensor feed/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^demo preview$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/demo imu data is active for step 4 preview/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/waiting for live sensor data/i)).toBeInTheDocument();
+    expect(await screen.findByText(/need thigh\/knee and ankle\/shin sensor data to calculate rom/i)).toBeInTheDocument();
   });
 
   it("shows KOOS in 14 panels with category tags", async () => {
@@ -575,13 +480,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/^Pain$/)).not.toBeInTheDocument();
   });
 
-  it("shows a seven-step workflow with a separate real IMU page after exercise videos", async () => {
+  it("shows a six-step workflow without a separate real IMU page", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
     expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /exercise videos/i })[0]).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /real imu sensor/i })[0]).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /real imu sensor/i })).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".stepList .stepItem")).toHaveLength(6);
 
     await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
     await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
@@ -622,7 +528,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.upload(imuInput, new File(["col1,col2"], "imu.csv", { type: "text/csv" }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(await screen.findByText(/step 4 of 7 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 4 of 6 complete/i)).toBeInTheDocument();
     expect(screen.getByText(/IMU movement analysis completed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/range of motion/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
@@ -640,7 +546,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("button", { name: /continue to final rehab report/i }));
     await user.click(screen.getByRole("button", { name: /generate report/i }));
 
-    expect(await screen.findByText(/step 5 of 7 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 5 of 6 complete/i)).toBeInTheDocument();
     expect(screen.getAllByText(/final rehabilitation score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/IMU rehab score/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("130.7").length).toBeGreaterThan(0);
@@ -650,7 +556,7 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     await user.click(screen.getByRole("button", { name: /continue to exercise videos/i }));
 
-    expect(await screen.findByText(/step 6 of 7 complete/i)).toBeInTheDocument();
+    expect(await screen.findByText(/step 6 of 6 complete/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /exercise videos/i })).toBeInTheDocument();
     expect(screen.getByText(/review the prescribed exercise video library after the final rehabilitation report/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^2$/).length).toBeGreaterThan(0);
@@ -682,22 +588,6 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /open on youtube/i }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(2);
-
-    await user.click(screen.getAllByRole("button", { name: /real imu sensor/i })[0]);
-
-    expect(screen.getByRole("heading", { level: 2, name: /real imu sensor/i })).toBeInTheDocument();
-    expect(await screen.findByText(/real imu sensor feed/i)).toBeInTheDocument();
-    const sensorCards = screen.getByLabelText(/sensor cards/i);
-    expect(within(sensorCards).getByText(/hip sensor/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/knee \/ thigh sensor/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/ankle \/ shin sensor/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi1$/)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^left$/)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^hip$/i)).toBeInTheDocument();
-    expect(within(sensorCards).getAllByText(/^online$/i).length).toBeGreaterThan(0);
-    expect(within(sensorCards).getAllByText(/waiting for sensor/i)).toHaveLength(2);
-    expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
-    expect(screen.getByText(/auto-refresh every 1.5 seconds/i)).toBeInTheDocument();
   });
 
   it("renders backend interpretation and delta note in the final report", async () => {
