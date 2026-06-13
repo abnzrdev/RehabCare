@@ -288,6 +288,60 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
   });
 
+  it("shows Bluetooth WitMotion cards in Step 4 live mode when ble rows exist", async () => {
+    const now = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 5,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
+              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 5,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
+              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+            ],
+          });
+        }
+        if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
+        if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
+        if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
+        if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+
+    expect(screen.getByText(/raspberry pi knee sensors/i)).toBeInTheDocument();
+    expect(screen.getByText(/bluetooth \/ witmotion imu sensors/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_leg$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^arm$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^leg$/i).length).toBeGreaterThan(0);
+  });
+
   it("maps pi1, pi2, and pi3 to the right-leg sensor cards when Right leg is selected", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
@@ -350,6 +404,47 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
     expect(screen.getByText(/device id/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows Raspberry Pi and Bluetooth source labels in the recent IMU table", async () => {
+    const now = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
+            ],
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+
+    expect(screen.getAllByText(/source/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/raspberry pi/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/bluetooth/i).length).toBeGreaterThan(0);
   });
 
   it("does not show the removed demo seed controls in Step 4 live mode", async () => {
@@ -456,6 +551,46 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
     expect(await screen.findByText(/need thigh\/knee and ankle\/shin sensor data to calculate rom/i)).toBeInTheDocument();
+  });
+
+  it("shows a Bluetooth mapping warning when only BLE live rows exist", async () => {
+    const now = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "ble_left_leg", body_part: "leg", pitch: 16.5, roll: 2.1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.4, roll: 2.8, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "ble_left_leg", body_part: "leg", pitch: 16.5, roll: 2.1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.4, roll: 2.8, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+            ],
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    expect(await screen.findByText(/bluetooth sensors are live, but knee rom needs thigh\/knee and ankle\/shin mapping/i)).toBeInTheDocument();
   });
 
   it("shows KOOS in 14 panels with category tags", async () => {

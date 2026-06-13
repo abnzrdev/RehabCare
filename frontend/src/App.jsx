@@ -290,6 +290,8 @@ const REALTIME_IMU_COPY = {
     title: "Real IMU sensor feed",
     latestSensor: "Live IMU sensor",
     cardTitle: "Sensor cards",
+    raspberryPiSensors: "Raspberry Pi knee sensors",
+    bluetoothSensors: "Bluetooth / WitMotion IMU sensors",
     hipSensor: "Hip sensor",
     kneeSensor: "Knee / thigh sensor",
     ankleSensor: "Ankle / shin sensor",
@@ -299,6 +301,9 @@ const REALTIME_IMU_COPY = {
     waitingForSensor: "Waiting for sensor",
     noRows: "No IMU samples received yet.",
     source: "Source",
+    raspberryPiSource: "Raspberry Pi",
+    bluetoothSource: "Bluetooth",
+    unknownSource: "Unknown",
     timestamp: "Timestamp",
     deviceId: "Device ID",
     leg: "Leg",
@@ -317,6 +322,8 @@ const REALTIME_IMU_COPY = {
     title: "Поток реального IMU",
     latestSensor: "Реальный IMU датчик",
     cardTitle: "Карточки датчиков",
+    raspberryPiSensors: "Raspberry Pi датчики колена",
+    bluetoothSensors: "Bluetooth / WitMotion IMU датчики",
     hipSensor: "Датчик бедра",
     kneeSensor: "Датчик колена / бедра",
     ankleSensor: "Датчик лодыжки / голени",
@@ -326,6 +333,9 @@ const REALTIME_IMU_COPY = {
     waitingForSensor: "Ожидание датчика",
     noRows: "Пока нет полученных IMU сэмплов.",
     source: "Источник",
+    raspberryPiSource: "Raspberry Pi",
+    bluetoothSource: "Bluetooth",
+    unknownSource: "Неизвестно",
     timestamp: "Время",
     deviceId: "ID устройства",
     leg: "Нога",
@@ -344,6 +354,8 @@ const REALTIME_IMU_COPY = {
     title: "Нақты IMU ағыны",
     latestSensor: "Нақты IMU сенсоры",
     cardTitle: "Сенсор карталары",
+    raspberryPiSensors: "Raspberry Pi тізе сенсорлары",
+    bluetoothSensors: "Bluetooth / WitMotion IMU сенсорлары",
     hipSensor: "Жамбас сенсоры",
     kneeSensor: "Тізе / сан сенсоры",
     ankleSensor: "Тобық / жіліншік сенсоры",
@@ -353,6 +365,9 @@ const REALTIME_IMU_COPY = {
     waitingForSensor: "Сенсор күтілуде",
     noRows: "Әзірге IMU үлгілері түскен жоқ.",
     source: "Дереккөзі",
+    raspberryPiSource: "Raspberry Pi",
+    bluetoothSource: "Bluetooth",
+    unknownSource: "Белгісіз",
     timestamp: "Уақыты",
     deviceId: "Құрылғы ID",
     leg: "Аяқ",
@@ -399,6 +414,8 @@ const STEP4_IMU_COPY = {
   liveResultFormula: "Live ROM = max relative angle - min relative angle using calibrated ankle/shin minus thigh/knee values.",
   liveResultEmpty: "Run live analysis after enough sensor samples have been received.",
   liveResultUnavailable: "Not enough calibrated live data is available to calculate ROM yet.",
+  liveResultPiWarning: "Need thigh/knee and ankle/shin sensor data to calculate ROM.",
+  bluetoothMappingWarning: "Bluetooth sensors are live, but knee ROM needs thigh/knee and ankle/shin mapping.",
   liveTableAnalysisLeg: "Analysis leg",
   liveTableSensorRole: "Sensor role",
   liveTableCalibratedAngle: "Calibrated angle",
@@ -1616,6 +1633,12 @@ const LIVE_IMU_ROLE_ORDER = [
   { key: "knee", titleKey: "kneeSensor", deviceId: "pi2" },
   { key: "ankle", titleKey: "ankleSensor", deviceId: "pi3" },
 ];
+const BLE_IMU_DEVICE_CONFIG = [
+  { deviceId: "ble_left_arm", label: "Left_Arm", leg: "left", bodyPart: "arm" },
+  { deviceId: "ble_left_leg", label: "Left_Leg", leg: "left", bodyPart: "leg" },
+  { deviceId: "ble_right_arm", label: "Right_Arm", leg: "right", bodyPart: "arm" },
+  { deviceId: "ble_right_leg", label: "Right_Leg", leg: "right", bodyPart: "leg" },
+];
 
 function createDefaultLiveSensorConfig() {
   return {
@@ -1642,10 +1665,28 @@ function asFiniteNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function getImuDeviceId(row) {
+  return String(row?.device_id || "").trim();
+}
+
+function isBluetoothImuRow(row) {
+  return getImuDeviceId(row).startsWith("ble_");
+}
+
+function isRaspberryPiImuRow(row) {
+  return getImuDeviceId(row).startsWith("pi");
+}
+
+function getImuSourceLabel(row, liveCopy) {
+  if (isRaspberryPiImuRow(row)) return liveCopy.raspberryPiSource;
+  if (isBluetoothImuRow(row)) return liveCopy.bluetoothSource;
+  return liveCopy.unknownSource;
+}
+
 function buildLatestRowsByDevice(rows) {
   const latestByDevice = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
-    const deviceId = String(row?.device_id || "").trim();
+    const deviceId = getImuDeviceId(row);
     if (!deviceId) continue;
     const existing = latestByDevice.get(deviceId);
     const rowTime = toTimestampMs(row?.timestamp) ?? -1;
@@ -1702,7 +1743,24 @@ function buildStep4LiveSensorCards({ latestRows, rows, config, baselines, analys
   });
 }
 
+function buildBluetoothLiveSensorCards({ latestRows, rows, liveCopy }) {
+  const mergedLatestRows = buildLatestRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
+  return BLE_IMU_DEVICE_CONFIG
+    .map((device) => {
+      const latestRow = mergedLatestRows.get(device.deviceId) || null;
+      if (!latestRow) return null;
+      return {
+        ...device,
+        latestRow,
+        isOnline: isLiveSensorRecent(latestRow),
+        statusLabel: isLiveSensorRecent(latestRow) ? liveCopy.online : liveCopy.waitingForData,
+      };
+    })
+    .filter(Boolean);
+}
+
 function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg, copy, fallbackCopy }) {
+  const allRows = [ ...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : []) ];
   const mergedLatestRows = buildLatestRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
   const roleStatuses = LIVE_IMU_ROLE_ORDER.map((role) => {
     const roleConfig = config?.[role.key] || {};
@@ -1777,8 +1835,13 @@ function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg
   const kneeRows = liveSamples.filter((row) => row.device_id === roleStatuses.find((status) => status.key === "knee")?.config?.deviceId);
   const ankleRows = liveSamples.filter((row) => row.device_id === roleStatuses.find((status) => status.key === "ankle")?.config?.deviceId);
   const hasSensorGaps = roleStatuses.some((status) => !status.isOnline);
+  const hasBluetoothRows = allRows.some((row) => isBluetoothImuRow(row));
   if (kneeRows.length === 0 || ankleRows.length === 0) {
-    warnings.push("Need thigh/knee and ankle/shin sensor data to calculate ROM.");
+    warnings.push(
+      hasBluetoothRows
+        ? fallbackCopy.bluetoothMappingWarning
+        : fallbackCopy.liveResultPiWarning,
+    );
   } else if (motionSeries.length === 0) {
     warnings.push(fallbackCopy.liveResultUnavailable);
   }
@@ -2026,6 +2089,14 @@ export default function App() {
     }),
     [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4ImuText]
   );
+  const step4BluetoothSensorCards = useMemo(
+    () => buildBluetoothLiveSensorCards({
+      latestRows: liveImuLatest,
+      rows: liveImuRows,
+      liveCopy: liveImuText,
+    }),
+    [liveImuLatest, liveImuRows, liveImuText]
+  );
   const step4LiveAnalysis = useMemo(
     () => buildLiveImuAnalysis({
       latestRows: liveImuLatest,
@@ -2040,9 +2111,9 @@ export default function App() {
   );
   const step4RecentLiveRows = useMemo(
     () => (Array.isArray(liveImuRows) ? liveImuRows : [])
-      .filter((row) => LIVE_IMU_ROLE_ORDER.some((role) => String(row?.device_id || "") === String(liveSensorConfig?.[role.key]?.deviceId || role.deviceId)))
+      .filter((row) => isRaspberryPiImuRow(row) || isBluetoothImuRow(row))
       .sort((a, b) => (toTimestampMs(b?.timestamp) ?? 0) - (toTimestampMs(a?.timestamp) ?? 0)),
-    [liveImuRows, liveSensorConfig]
+    [liveImuRows]
   );
   const step4VisibleSampleRows = Array.isArray(step4LiveAnalysis.liveSamples) ? step4LiveAnalysis.liveSamples : [];
   const koosBreakdowns = useMemo(() => {
@@ -3118,6 +3189,7 @@ export default function App() {
                       <p className="microNote">{step4ImuText.legHint}</p>
                       {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
                       <div className="reportBlock">
+                        <div className="tableTitle">{liveImuText.raspberryPiSensors}</div>
                         <div className="summaryCards sectionBody" aria-label={liveImuText.cardTitle}>
                           {step4LiveSensorCards.map((card) => (
                             <article key={card.key} className="summaryCard sensorCard">
@@ -3167,6 +3239,60 @@ export default function App() {
                             </article>
                           ))}
                         </div>
+                        <div className="tableTitle" style={{ marginTop: 20 }}>{liveImuText.bluetoothSensors}</div>
+                        {step4BluetoothSensorCards.length === 0 ? (
+                          <div className="microNote">{liveImuText.noRows}</div>
+                        ) : (
+                          <div className="summaryCards sectionBody" aria-label={liveImuText.bluetoothSensors}>
+                            {step4BluetoothSensorCards.map((card) => (
+                              <article key={card.deviceId} className="summaryCard sensorCard">
+                                <div className="sensorCardHeader">
+                                  <div>
+                                    <small>{card.label}</small>
+                                    <strong className="summaryDate">{card.deviceId}</strong>
+                                  </div>
+                                  <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.statusLabel}</span>
+                                </div>
+                                <div className="sensorMeta">
+                                  <div className="sensorMetrics">
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.leg}</small>
+                                      <strong>{card.latestRow.leg || card.leg}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.bodyPart}</small>
+                                      <strong>{card.latestRow.body_part || card.bodyPart}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.pitch}</small>
+                                      <strong>{f(card.latestRow.pitch, "°")}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.roll}</small>
+                                      <strong>{f(card.latestRow.roll, "°")}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accX}</small>
+                                      <strong>{f(card.latestRow.acc_x)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accY}</small>
+                                      <strong>{f(card.latestRow.acc_y)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.accZ}</small>
+                                      <strong>{f(card.latestRow.acc_z)}</strong>
+                                    </div>
+                                    <div className="sensorMetric">
+                                      <small>{liveImuText.lastUpdated}</small>
+                                      <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="dataTableWrap" id="imu-live">
@@ -3178,6 +3304,7 @@ export default function App() {
                             <thead>
                               <tr>
                                 <th>{liveImuText.timestamp}</th>
+                                <th>{liveImuText.source}</th>
                                 <th>{liveImuText.deviceId}</th>
                                 <th>{liveImuText.leg}</th>
                                 <th>{liveImuText.bodyPart}</th>
@@ -3192,6 +3319,7 @@ export default function App() {
                               {step4RecentLiveRows.map((row, index) => (
                                 <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
                                   <td>{formatDate(row.timestamp)}</td>
+                                  <td>{getImuSourceLabel(row, liveImuText)}</td>
                                   <td>{row.device_id || "-"}</td>
                                   <td>{row.leg || imuAnalysisLeg}</td>
                                   <td>{row.body_part || "-"}</td>
