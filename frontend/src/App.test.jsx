@@ -237,16 +237,19 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/single sensor . right thigh/i).length).toBeGreaterThan(0);
   });
 
-  it("renders Step 4 radio buttons for CSV and live mode", async () => {
+  it("renders Step 4 radio buttons for CSV, Raspberry Pi, and WitMotion modes", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
 
     expect(screen.getByRole("radio", { name: /upload imu csv/i })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /use live sensor data/i })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /use raspberry pi sensor data/i })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i })).not.toBeChecked();
     expect(screen.getByText(/use csv if you already recorded data/i)).toBeInTheDocument();
-    expect(screen.getByText(/use live sensors if raspberry pi sensors are connected/i)).toBeInTheDocument();
+    expect(screen.getByText(/use live raspberry pi sensors for knee rom analysis/i)).toBeInTheDocument();
+    expect(screen.getByText(/use witmotion bluetooth sensors for live device identification/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
   });
 
@@ -269,12 +272,12 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
   });
 
-  it("shows three live Step 4 sensor cards with calibration controls", async () => {
+  it("shows only Raspberry Pi cards with calibration controls in Raspberry Pi mode", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
 
     const sensorCards = screen.getByLabelText(/sensor cards/i);
     expect(within(sensorCards).getByText(/left hip/i)).toBeInTheDocument();
@@ -283,12 +286,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(within(sensorCards).getByText(/^pi1$/i)).toBeInTheDocument();
     expect(within(sensorCards).getByText(/^pi2$/i)).toBeInTheDocument();
     expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/bluetooth \/ witmotion imu sensors/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ble_left_arm$/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /set current position as neutral baseline/i })).toBeInTheDocument();
     expect(screen.getAllByDisplayValue("pitch").length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
   });
 
-  it("shows Bluetooth WitMotion cards in Step 4 live mode when ble rows exist", async () => {
+  it("shows only Bluetooth WitMotion cards and mapping note in WitMotion mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -332,14 +337,17 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
 
-    expect(screen.getByText(/raspberry pi knee sensors/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raspberry pi knee sensors/i)).not.toBeInTheDocument();
     expect(screen.getByText(/bluetooth \/ witmotion imu sensors/i)).toBeInTheDocument();
     expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^ble_right_leg$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^arm$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^leg$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and ankle\/shin pair\./i)).toBeInTheDocument();
+    expect(screen.getByText(/move each physical sensor and watch which card changes, then label the device\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
   });
 
   it("maps pi1, pi2, and pi3 to the right-leg sensor cards when Right leg is selected", async () => {
@@ -382,7 +390,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
     await user.selectOptions(screen.getByLabelText(/selected leg/i), "right");
 
     const sensorCards = screen.getByLabelText(/sensor cards/i);
@@ -394,19 +402,20 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
   });
 
-  it("shows the recent IMU data table in Step 4 live mode", async () => {
+  it("shows only Raspberry Pi rows in the recent IMU table for Raspberry Pi mode", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
 
     expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
-    expect(screen.getByText(/device id/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/device id/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^ble_left_arm$/i)).not.toBeInTheDocument();
   });
 
-  it("shows Raspberry Pi and Bluetooth source labels in the recent IMU table", async () => {
+  it("shows only Bluetooth rows in the recent IMU table for WitMotion mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -440,11 +449,12 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
 
     expect(screen.getAllByText(/source/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/raspberry pi/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/bluetooth/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
   });
 
   it("does not show the removed demo seed controls in Step 4 live mode", async () => {
@@ -452,14 +462,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
 
     expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /clear demo data/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/demo imu sample data/i)).not.toBeInTheDocument();
   });
 
-  it("analyzes live ROM from fetched backend rows without calling the CSV analysis endpoint", async () => {
+  it("analyzes Raspberry Pi ROM from fetched backend rows without calling the CSV analysis endpoint", async () => {
     const now = new Date().toISOString();
     const fetchMock = vi.fn(async (input) => {
       const url = String(input);
@@ -500,7 +510,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
     expect(await screen.findByText(/IMU movement analysis completed/i)).toBeInTheDocument();
@@ -511,7 +521,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/imu/analyze"))).toBe(false);
   });
 
-  it("shows a clear warning when pi2 or pi3 data is missing in live mode", async () => {
+  it("shows a clear warning when pi2 or pi3 data is missing in Raspberry Pi mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -547,13 +557,13 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
     expect(await screen.findByText(/need thigh\/knee and ankle\/shin sensor data to calculate rom/i)).toBeInTheDocument();
   });
 
-  it("shows a Bluetooth mapping warning when only BLE live rows exist", async () => {
+  it("shows a Bluetooth mapping warning when analyzing in WitMotion mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -587,10 +597,10 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use live sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(await screen.findByText(/bluetooth sensors are live, but knee rom needs thigh\/knee and ankle\/shin mapping/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and ankle\/shin pair\./i)).length).toBeGreaterThan(0);
   });
 
   it("shows KOOS in 14 panels with category tags", async () => {

@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+"""
+WitMotion BLE -> OrthoScan IMU bridge.
+
+Usage notes:
+- The bridge can run with 2 sensors or 4 sensors.
+- For reliable 4-device usage, set all 4 MAC addresses in DEFAULT_SENSOR_MAP
+  or pass all 4 devices in ORTHO_BLE_SENSORS.
+- If only 2 devices are configured, only those 2 device_ids will connect/post.
+- The terminal dashboard stays visible so you can move each physical sensor and
+  confirm which logical card/device_id is receiving updates.
+"""
+
 import asyncio
 import json
 import os
@@ -19,6 +31,8 @@ NOTIFY_UUID_CANDIDATES = (
 )
 
 # Edit these defaults directly if you want fixed MAC assignments without env vars.
+# To use 4 physical WitMotion sensors, set all 4 MAC addresses here.
+# To use only 2 sensors, leave the unused entries as None.
 DEFAULT_SENSOR_MAP = [
     {"label": "Left_Arm", "device_id": "ble_left_arm", "leg": "left", "body_part": "arm", "mac": "C9:CE:CE:5D:A9:BF"},
     {"label": "Left_Leg", "device_id": "ble_left_leg", "leg": "left", "body_part": "leg", "mac": None},
@@ -168,6 +182,9 @@ def load_sensor_configs() -> list[SensorConfig]:
     override = os.environ.get("ORTHO_BLE_SENSORS")
     items: list[dict[str, Any]]
     if override:
+        # Supported formats:
+        # 1. JSON list of full sensor objects for 2 or 4 devices.
+        # 2. JSON object keyed by device_id, merged over DEFAULT_SENSOR_MAP.
         parsed = json.loads(override)
         if isinstance(parsed, dict):
             items = []
@@ -244,7 +261,7 @@ async def connect_sensor(state: SensorState) -> None:
             continue
         try:
             async with BleakClient(state.address, timeout=10.0) as client:
-                await client.get_services()
+                client.services
                 state.notify_uuid = await resolve_notify_uuid(client)
 
                 def handle(_: Any, data: bytearray) -> None:
@@ -315,6 +332,9 @@ async def dashboard_loop(states: list[SensorState]) -> None:
 async def main() -> None:
     configs = load_sensor_configs()
     states = [SensorState(config=config) for config in configs]
+    print("Configured logical sensors:")
+    for config in configs:
+        print(f"  {config.device_id} label={config.label} mac={config.mac or '-'} leg={config.leg} body_part={config.body_part}")
     assignments = await discover_sensor_assignments(configs)
     for state in states:
         assignment = assignments.get(state.config.device_id)
