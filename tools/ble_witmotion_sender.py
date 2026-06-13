@@ -4,10 +4,10 @@ from __future__ import annotations
 WitMotion BLE -> OrthoScan IMU bridge.
 
 Usage notes:
-- The bridge can run with 2 sensors or 4 sensors.
-- For reliable 4-device usage, set all 4 MAC addresses in DEFAULT_SENSOR_MAP
-  or pass all 4 devices in ORTHO_BLE_SENSORS.
-- If only 2 devices are configured, only those 2 device_ids will connect/post.
+- The bridge can run with 2 sensors or 3 sensors.
+- For reliable 3-device usage, set all 3 MAC addresses in DEFAULT_SENSOR_MAP
+  or pass all 3 devices in ORTHO_BLE_SENSORS.
+- If fewer devices are configured, only those device_ids will connect/post.
 - The terminal dashboard stays visible so you can move each physical sensor and
   confirm which logical card/device_id is receiving updates.
 """
@@ -31,11 +31,10 @@ NOTIFY_UUID_CANDIDATES = (
 )
 
 # Edit these defaults directly if you want fixed MAC assignments without env vars.
-# To use 4 physical WitMotion sensors, set all 4 MAC addresses here.
-# To use only 2 sensors, leave the unused entries as None.
+# To use 3 physical WitMotion sensors, set all 3 MAC addresses here.
+# To use fewer sensors, leave the unused entries as None.
 DEFAULT_SENSOR_MAP = [
-    {"label": "Left_Thigh_Knee", "device_id": "ble_left_thigh", "leg": "left", "body_part": "thigh/knee", "mac": "C9:CE:CE:5D:A9:BF"},
-    {"label": "Left_Shin_Ankle", "device_id": "ble_left_shin", "leg": "left", "body_part": "shin/ankle", "mac": None},
+    {"label": "Right_Hip", "device_id": "ble_right_hip", "leg": "right", "body_part": "hip", "mac": "C9:CE:CE:5D:A9:BF"},
     {"label": "Right_Thigh_Knee", "device_id": "ble_right_thigh", "leg": "right", "body_part": "thigh/knee", "mac": None},
     {"label": "Right_Shin_Ankle", "device_id": "ble_right_shin", "leg": "right", "body_part": "shin/ankle", "mac": None},
 ]
@@ -187,7 +186,7 @@ def load_sensor_configs() -> list[SensorConfig]:
     items: list[dict[str, Any]]
     if override:
         # Supported formats:
-        # 1. JSON list of full sensor objects for 2 or 4 devices.
+        # 1. JSON list of full sensor objects for 2 or 3 devices.
         # 2. JSON object keyed by device_id, merged over DEFAULT_SENSOR_MAP.
         parsed = json.loads(override)
         if isinstance(parsed, dict):

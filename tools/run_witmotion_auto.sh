@@ -42,16 +42,16 @@ done
 
 echo
 echo "4) Auto assignment:"
-LABELS=("Left_Thigh_Knee" "Left_Shin_Ankle" "Right_Thigh_Knee" "Right_Shin_Ankle")
-DISPLAY_LABELS=("Left thigh / knee" "Left shin / ankle" "Right thigh / knee" "Right shin / ankle")
-DEVICE_IDS=("ble_left_thigh" "ble_left_shin" "ble_right_thigh" "ble_right_shin")
-LEGS=("left" "left" "right" "right")
-BODY_PARTS=("thigh/knee" "shin/ankle" "thigh/knee" "shin/ankle")
+LABELS=("Right_Hip" "Right_Thigh_Knee" "Right_Shin_Ankle")
+DISPLAY_LABELS=("Right hip" "Right thigh / knee" "Right shin / ankle")
+DEVICE_IDS=("ble_right_hip" "ble_right_thigh" "ble_right_shin")
+LEGS=("right" "right" "right")
+BODY_PARTS=("hip" "thigh/knee" "shin/ankle")
 
 JSON="["
 COUNT=0
 
-for idx in 0 1 2 3; do
+for idx in 0 1 2; do
   [ -n "${MACS[$idx]:-}" ] || continue
 
   echo "  ${DISPLAY_LABELS[$idx]} -> ${MACS[$idx]} (${DEVICE_IDS[$idx]})"

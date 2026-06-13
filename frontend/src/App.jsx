@@ -290,19 +290,19 @@ const REALTIME_IMU_COPY = {
     title: "Real IMU sensor feed",
     latestSensor: "Live IMU sensor",
     cardTitle: "Sensor cards",
-    raspberryPiSensors: "Raspberry Pi knee sensors",
-    bluetoothSensors: "Bluetooth / WitMotion IMU sensors",
+    raspberryPiSensors: "Raspberry Pi IMU sensors (left leg)",
+    bluetoothSensors: "WitMotion IMU sensors (right leg)",
     hipSensor: "Hip sensor",
     kneeSensor: "Knee / thigh sensor",
     ankleSensor: "Ankle / shin sensor",
-    recentTable: "Recent IMU data",
+    recentTable: "Recent IMU data (live)",
     refreshNote: "Auto-refresh every 1.5 seconds",
     noSensor: "Waiting for live sensor data.",
     waitingForSensor: "Waiting for sensor",
     noRows: "No IMU samples received yet.",
     source: "Source",
     raspberryPiSource: "Raspberry Pi",
-    bluetoothSource: "Bluetooth",
+    bluetoothSource: "WitMotion",
     unknownSource: "Unknown",
     timestamp: "Timestamp",
     deviceId: "Device ID",
@@ -314,27 +314,30 @@ const REALTIME_IMU_COPY = {
     lastUpdated: "Last updated",
     pitch: "Pitch",
     roll: "Roll",
+    yaw: "Yaw",
     accX: "Acc X",
     accY: "Acc Y",
     accZ: "Acc Z",
+    temp: "Temp",
+    label: "Label",
   },
   ru: {
     title: "Поток реального IMU",
     latestSensor: "Реальный IMU датчик",
     cardTitle: "Карточки датчиков",
-    raspberryPiSensors: "Raspberry Pi датчики колена",
-    bluetoothSensors: "Bluetooth / WitMotion IMU датчики",
+    raspberryPiSensors: "Raspberry Pi IMU датчики (левая нога)",
+    bluetoothSensors: "WitMotion IMU датчики (правая нога)",
     hipSensor: "Датчик бедра",
     kneeSensor: "Датчик колена / бедра",
     ankleSensor: "Датчик лодыжки / голени",
-    recentTable: "Последние данные IMU",
+    recentTable: "Последние данные IMU (live)",
     refreshNote: "Автообновление каждые 1.5 секунды",
     noSensor: "Ожидание данных от реального датчика.",
     waitingForSensor: "Ожидание датчика",
     noRows: "Пока нет полученных IMU сэмплов.",
     source: "Источник",
     raspberryPiSource: "Raspberry Pi",
-    bluetoothSource: "Bluetooth",
+    bluetoothSource: "WitMotion",
     unknownSource: "Неизвестно",
     timestamp: "Время",
     deviceId: "ID устройства",
@@ -346,27 +349,30 @@ const REALTIME_IMU_COPY = {
     lastUpdated: "Последнее обновление",
     pitch: "Pitch",
     roll: "Roll",
+    yaw: "Yaw",
     accX: "Acc X",
     accY: "Acc Y",
     accZ: "Acc Z",
+    temp: "Temp",
+    label: "Label",
   },
   kz: {
     title: "Нақты IMU ағыны",
     latestSensor: "Нақты IMU сенсоры",
     cardTitle: "Сенсор карталары",
-    raspberryPiSensors: "Raspberry Pi тізе сенсорлары",
-    bluetoothSensors: "Bluetooth / WitMotion IMU сенсорлары",
+    raspberryPiSensors: "Raspberry Pi IMU сенсорлары (сол аяқ)",
+    bluetoothSensors: "WitMotion IMU сенсорлары (оң аяқ)",
     hipSensor: "Жамбас сенсоры",
     kneeSensor: "Тізе / сан сенсоры",
     ankleSensor: "Тобық / жіліншік сенсоры",
-    recentTable: "Соңғы IMU деректері",
+    recentTable: "Соңғы IMU деректері (live)",
     refreshNote: "Әр 1.5 секунд сайын жаңарады",
     noSensor: "Нақты сенсор дерегі күтілуде.",
     waitingForSensor: "Сенсор күтілуде",
     noRows: "Әзірге IMU үлгілері түскен жоқ.",
     source: "Дереккөзі",
     raspberryPiSource: "Raspberry Pi",
-    bluetoothSource: "Bluetooth",
+    bluetoothSource: "WitMotion",
     unknownSource: "Белгісіз",
     timestamp: "Уақыты",
     deviceId: "Құрылғы ID",
@@ -378,29 +384,33 @@ const REALTIME_IMU_COPY = {
     lastUpdated: "Соңғы жаңарту",
     pitch: "Pitch",
     roll: "Roll",
+    yaw: "Yaw",
     accX: "Acc X",
     accY: "Acc Y",
     accZ: "Acc Z",
+    temp: "Temp",
+    label: "Label",
   },
 };
 
 const STEP4_IMU_COPY = {
   dataSource: "Data source",
   sourceCsv: "Upload IMU CSV",
-  sourcePi: "Use Raspberry Pi sensor data",
-  sourceBle: "Use WitMotion Bluetooth sensor data",
-  sourceCsvHint: "Use CSV if you already recorded data.",
-  sourcePiHint: "Use live Raspberry Pi sensors for knee ROM analysis.",
-  sourceBleHint: "Use WitMotion Bluetooth sensors for live device identification.",
+  sourceLive: "Real-time IMU data",
+  sourceCsvHint: "Upload a recorded IMU CSV file for offline knee ROM analysis.",
+  sourceLiveHint: "Use Raspberry Pi sensors for the LEFT leg and WitMotion Bluetooth sensors for the RIGHT leg.",
+  csvUploadHelper: "Use CSV if you already recorded data.",
   selectedLeg: "Selected leg",
   leftLeg: "Left leg",
   rightLeg: "Right leg",
   leftSide: "Left",
   rightSide: "Right",
-  legHint: "The same three physical sensors can be attached to either leg. Live analysis uses this UI choice as analysis_leg.",
-  witmotionLiveNote: "WitMotion sensors are live. Knee ROM calculation needs a mapped thigh/knee and shin/ankle pair.",
-  witmotionMappingNote: "Legacy Bluetooth rows are remapped to these lower-limb labels automatically.",
-  witmotionHelperText: "Move each physical sensor and watch the matching block rotate.",
+  sensorMappingTitle: "Sensor mapping",
+  howItWorksTitle: "How it works",
+  legHint: "CSV mode keeps the existing offline workflow. Real-time mode uses fixed left/right hardware mapping.",
+  witmotionLiveNote: "Raspberry Pi measures the left leg. WitMotion measures the right leg. Real-time mode uses both together.",
+  witmotionMappingNote: "Legacy Bluetooth rows are normalized into the right-leg sensor mapping automatically.",
+  witmotionHelperText: "Move each physical sensor and watch the matching block rotate in real time.",
   liveMovementTitle: "Live movement visualization",
   liveSampleTitle: "Live IMU sample data",
   sampleTableHint: "Analyze ROM uses the same rows shown in this table.",
@@ -416,15 +426,18 @@ const STEP4_IMU_COPY = {
   hipSensor: "Hip sensor",
   kneeSensor: "Thigh/knee sensor",
   ankleSensor: "Ankle/shin sensor",
-  liveResultTitle: "Live-derived IMU samples",
-  liveResultFormula: "Live ROM = max relative angle - min relative angle using calibrated ankle/shin minus thigh/knee values.",
+  liveResultTitle: "Live ROM results",
+  liveResultFormula: "Relative angle = distal sensor pitch - proximal sensor pitch. ROM = max(relative angle) - min(relative angle).",
   liveResultEmpty: "Run live analysis after enough sensor samples have been received.",
   liveResultUnavailable: "Not enough calibrated live data is available to calculate ROM yet.",
-  liveResultPiWarning: "Need thigh/knee and ankle/shin sensor data to calculate ROM.",
-  bluetoothMappingWarning: "Bluetooth sensors are live, but knee ROM needs thigh/knee and ankle/shin mapping.",
+  liveResultPiWarning: "Left-leg Raspberry Pi ROM needs left thigh/knee (pi2) and left shin/ankle (pi3) sensors.",
+  bluetoothMappingWarning: "Right-leg WitMotion ROM needs right thigh/knee and right shin/ankle sensors.",
   liveTableAnalysisLeg: "Analysis leg",
   liveTableSensorRole: "Sensor role",
   liveTableCalibratedAngle: "Calibrated angle",
+  leftLegRomTitle: "Left-leg ROM (Raspberry Pi)",
+  rightLegRomTitle: "Right-leg ROM (WitMotion)",
+  liveCombinedStatus: "Live dual-leg analysis",
 };
 
 const STRINGS = {
@@ -1320,21 +1333,25 @@ button,input,select{font:inherit}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .metrics.wideMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}
 .summaryCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.imuSourceCards{grid-template-columns:repeat(2,minmax(0,1fr))}
 .summaryCard{background:#fffaf0;border:1px solid var(--border);padding:14px 16px;display:grid;gap:6px}
 .summaryCard small{color:var(--muted);font-size:12px;font-weight:700}
 .summaryCard strong{display:block;font-size:30px;line-height:1.05;letter-spacing:-.04em}
 .sensorCard{grid-template-rows:auto auto 1fr}
 .sensorCardHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .sensorCardHeader strong{font-size:22px;line-height:1.15;letter-spacing:-.03em}
+.sensorCardSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .sensorCardPlaceholder{display:grid;place-items:center;min-height:140px;border:1px dashed var(--border);background:#f8f3e8;color:var(--muted);font-weight:700}
 .sensorMeta{display:grid;gap:8px}
 .sensorMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .sensorMetric{border:1px solid var(--border);background:#f8f3e8;padding:10px}
 .sensorMetric strong{margin-top:4px;font-size:15px;line-height:1.25;letter-spacing:0}
 .summaryDate{font-size:16px !important;line-height:1.35 !important;letter-spacing:0 !important}
+.imuRealtimeSections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.imuSensorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .bleLiveLayout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.95fr);gap:16px;align-items:start}
 .bleVisualizationPanel{border:1px solid var(--border);background:linear-gradient(180deg,#fffaf0,#f5eddc);padding:14px 16px}
-.bleVisualizationGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.bleVisualizationGrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:14px}
 .bleVizCard{border:1px solid var(--border);background:rgba(255,255,255,.7);padding:12px;display:grid;gap:8px;justify-items:center;text-align:center}
 .bleVizCard strong{font-size:14px;line-height:1.3}
 .bleVizCard span{font-size:12px;color:var(--muted)}
@@ -1346,6 +1363,13 @@ button,input,select{font:inherit}
 .bleVizStage.offline .bleVizFaceTop{background:linear-gradient(180deg,#c7c1b3,#a79f90)}
 .bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(24px);height:28px;inset:auto 0 0}
 .bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(14px);width:28px;inset:0 auto 0 0}
+.imuLegResultGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.imuLegResultCard{border:1px solid var(--border);background:#f8f3e8;padding:14px;display:grid;gap:10px}
+.imuLegResultCard h5{margin:0;font-size:16px}
+.imuSidebarCard{border-top:1px solid var(--border);padding-top:18px;margin-top:18px;display:grid;gap:14px}
+.imuSidebarGroup{display:grid;gap:8px}
+.imuSidebarGroup strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.imuSidebarGroup span{font-size:13px;line-height:1.4;color:var(--text)}
 .metric{background:#f8f3e8;border:1px solid var(--border);padding:11px}
 .metric small{color:var(--muted);font-size:12px;font-weight:700}
 .metric strong{display:block;margin-top:6px;font-size:26px;line-height:1.1;letter-spacing:-.035em}
@@ -1524,6 +1548,8 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .main{padding:28px 34px 52px}
   .klLayout{grid-template-columns:1fr}
   .bleLiveLayout{grid-template-columns:1fr}
+  .imuRealtimeSections,.imuLegResultGrid{grid-template-columns:1fr}
+  .bleVisualizationGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media (max-width:760px){
   .shell{grid-template-columns:1fr}
@@ -1534,7 +1560,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .bleVisualizationGrid{grid-template-columns:1fr 1fr}
+  .bleVisualizationGrid,.imuSensorGrid,.imuSourceCards,.sensorCardSummary{grid-template-columns:1fr}
   .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
@@ -1654,23 +1680,23 @@ function realtimeImuCopy(lang) {
 
 const LIVE_IMU_RECENT_MS = 2 * 60 * 1000;
 const LIVE_IMU_FETCH_LIMIT = 300;
-const LIVE_IMU_ROLE_ORDER = [
-  { key: "hip", titleKey: "hipSensor", deviceId: "pi1" },
-  { key: "knee", titleKey: "kneeSensor", deviceId: "pi2" },
-  { key: "ankle", titleKey: "ankleSensor", deviceId: "pi3" },
-];
 const LEGACY_BLE_DEVICE_ID_MAP = {
-  ble_left_arm: "ble_left_thigh",
-  ble_left_leg: "ble_left_shin",
-  ble_right_arm: "ble_right_thigh",
+  ble_left_arm: "ble_right_hip",
+  ble_left_leg: "ble_right_thigh",
+  ble_right_arm: "ble_right_shin",
   ble_right_leg: "ble_right_shin",
 };
-const BLE_IMU_DEVICE_CONFIG = [
-  { deviceId: "ble_left_thigh", label: "Left thigh / knee", leg: "left", bodyPart: "thigh/knee" },
-  { deviceId: "ble_left_shin", label: "Left shin / ankle", leg: "left", bodyPart: "shin/ankle" },
+const PI_IMU_DEVICE_CONFIG = [
+  { deviceId: "pi1", label: "Left hip", leg: "left", bodyPart: "hip" },
+  { deviceId: "pi2", label: "Left thigh / knee", leg: "left", bodyPart: "thigh/knee" },
+  { deviceId: "pi3", label: "Left shin / ankle", leg: "left", bodyPart: "shin/ankle" },
+];
+const WITMOTION_IMU_DEVICE_CONFIG = [
+  { deviceId: "ble_right_hip", label: "Right hip", leg: "right", bodyPart: "hip" },
   { deviceId: "ble_right_thigh", label: "Right thigh / knee", leg: "right", bodyPart: "thigh/knee" },
   { deviceId: "ble_right_shin", label: "Right shin / ankle", leg: "right", bodyPart: "shin/ankle" },
 ];
+const REALTIME_IMU_DEVICE_CONFIG = [...PI_IMU_DEVICE_CONFIG, ...WITMOTION_IMU_DEVICE_CONFIG];
 
 function createDefaultLiveSensorConfig() {
   return {
@@ -1706,17 +1732,63 @@ function normalizeBluetoothDeviceId(deviceId) {
   return LEGACY_BLE_DEVICE_ID_MAP[value] || value;
 }
 
-function isBluetoothImuRow(row) {
-  return getImuDeviceId(row).startsWith("ble_");
-}
-
-function isRaspberryPiImuRow(row) {
+function isPiRow(row) {
   return getImuDeviceId(row).startsWith("pi");
 }
 
+function isWitMotionRow(row) {
+  return getImuDeviceId(row).startsWith("ble_");
+}
+
+function getSource(deviceId) {
+  if (String(deviceId || "").startsWith("pi")) return "pi";
+  if (String(deviceId || "").startsWith("ble_")) return "ble";
+  return "unknown";
+}
+
+function getDeviceConfig(deviceId) {
+  return REALTIME_IMU_DEVICE_CONFIG.find((item) => item.deviceId === String(deviceId || "").trim()) || null;
+}
+
+function normalizeImuRow(row) {
+  if (!row) return null;
+  const rawDeviceId = getImuDeviceId(row);
+  const normalizedDeviceId = isWitMotionRow(row) ? normalizeBluetoothDeviceId(rawDeviceId) : rawDeviceId;
+  const config = getDeviceConfig(normalizedDeviceId);
+  return {
+    ...row,
+    original_device_id: rawDeviceId,
+    device_id: normalizedDeviceId,
+    leg: config?.leg || row.leg || "-",
+    body_part: config?.bodyPart || row.body_part || "-",
+    label: config?.label || normalizedDeviceId || "-",
+    source: getSource(normalizedDeviceId),
+  };
+}
+
+function normalizeImuRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeImuRow(row))
+    .filter(Boolean);
+}
+
+function getImuLabel(row) {
+  if (!row) return "-";
+  return row.label || getDeviceConfig(getImuDeviceId(row))?.label || getImuDeviceId(row) || "-";
+}
+
+function isBluetoothImuRow(row) {
+  return isWitMotionRow(row);
+}
+
+function isRaspberryPiImuRow(row) {
+  return isPiRow(row);
+}
+
 function getImuSourceLabel(row, liveCopy) {
-  if (isRaspberryPiImuRow(row)) return liveCopy.raspberryPiSource;
-  if (isBluetoothImuRow(row)) return liveCopy.bluetoothSource;
+  const source = row?.source || getSource(getImuDeviceId(row));
+  if (source === "pi") return liveCopy.raspberryPiSource;
+  if (source === "ble") return "WitMotion";
   return liveCopy.unknownSource;
 }
 
@@ -1733,31 +1805,109 @@ function buildLatestRowsByDevice(rows) {
   return latestByDevice;
 }
 
-function buildLatestBluetoothRowsByDevice(rows) {
-  const latestByDevice = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    if (!isBluetoothImuRow(row)) continue;
-    const deviceId = normalizeBluetoothDeviceId(getImuDeviceId(row));
-    if (!deviceId) continue;
-    const existing = latestByDevice.get(deviceId);
-    const rowTime = toTimestampMs(row?.timestamp) ?? -1;
-    const existingTime = toTimestampMs(existing?.timestamp) ?? -1;
-    if (!existing || rowTime > existingTime) latestByDevice.set(deviceId, row);
+function buildRealtimeSensorCards(config, latestByDevice, liveCopy) {
+  return config.map((device) => {
+    const latestRow = latestByDevice.get(device.deviceId) || null;
+    return {
+      ...device,
+      latestRow,
+      isOnline: Boolean(latestRow && isLiveSensorRecent(latestRow)),
+      statusLabel: latestRow ? (isLiveSensorRecent(latestRow) ? liveCopy.online : liveCopy.waitingForData) : liveCopy.waitingForSensor,
+    };
+  });
+}
+
+function buildRealtimeLegAnalysis({ rows, title, sourceLabel, proximalDeviceId, distalDeviceId, warningText }) {
+  const filteredRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row.device_id === proximalDeviceId || row.device_id === distalDeviceId)
+    .sort((a, b) => (toTimestampMs(a?.timestamp) ?? 0) - (toTimestampMs(b?.timestamp) ?? 0));
+
+  const hasProximal = filteredRows.some((row) => row.device_id === proximalDeviceId);
+  const hasDistal = filteredRows.some((row) => row.device_id === distalDeviceId);
+  const warnings = [];
+  const relativeAngles = [];
+  let proximalAngle = null;
+  let distalAngle = null;
+
+  for (const row of filteredRows) {
+    const pitch = asFiniteNumber(row.pitch);
+    if (pitch === null) continue;
+    if (row.device_id === proximalDeviceId) proximalAngle = pitch;
+    if (row.device_id === distalDeviceId) distalAngle = pitch;
+    if (proximalAngle !== null && distalAngle !== null) {
+      relativeAngles.push(roundCalc(distalAngle - proximalAngle, 3));
+    }
   }
-  return latestByDevice;
+
+  if (!hasProximal || !hasDistal) warnings.push(warningText);
+  if (relativeAngles.length === 0 && warnings.length === 0) warnings.push(warningText);
+
+  if (relativeAngles.length === 0) {
+    return {
+      title,
+      sourceLabel,
+      rom_deg: null,
+      min_angle_deg: null,
+      max_angle_deg: null,
+      valid: false,
+      warnings,
+    };
+  }
+
+  const minAngle = Math.min(...relativeAngles);
+  const maxAngle = Math.max(...relativeAngles);
+  return {
+    title,
+    sourceLabel,
+    rom_deg: roundCalc(maxAngle - minAngle, 1),
+    min_angle_deg: roundCalc(minAngle, 1),
+    max_angle_deg: roundCalc(maxAngle, 1),
+    valid: warnings.length === 0,
+    warnings,
+  };
 }
 
-function getBluetoothDeviceConfig(deviceId) {
-  const normalizedDeviceId = normalizeBluetoothDeviceId(deviceId);
-  return BLE_IMU_DEVICE_CONFIG.find((device) => device.deviceId === normalizedDeviceId) || null;
-}
-
-function getBluetoothLegLabel(row) {
-  return getBluetoothDeviceConfig(getImuDeviceId(row))?.leg || row?.leg || "-";
-}
-
-function getBluetoothBodyPartLabel(row) {
-  return getBluetoothDeviceConfig(getImuDeviceId(row))?.bodyPart || row?.body_part || "-";
+function buildRealtimeAnalysis(rows, step4Copy) {
+  const leftLeg = buildRealtimeLegAnalysis({
+    rows,
+    title: step4Copy.leftLegRomTitle,
+    sourceLabel: "Raspberry Pi",
+    proximalDeviceId: "pi2",
+    distalDeviceId: "pi3",
+    warningText: step4Copy.liveResultPiWarning,
+  });
+  const rightLeg = buildRealtimeLegAnalysis({
+    rows,
+    title: step4Copy.rightLegRomTitle,
+    sourceLabel: "WitMotion",
+    proximalDeviceId: "ble_right_thigh",
+    distalDeviceId: "ble_right_shin",
+    warningText: step4Copy.bluetoothMappingWarning,
+  });
+  const warnings = [...leftLeg.warnings, ...rightLeg.warnings];
+  const availableRoms = [leftLeg.rom_deg, rightLeg.rom_deg].filter((value) => Number.isFinite(Number(value)));
+  const combinedRom = availableRoms.length > 0
+    ? roundCalc(availableRoms.reduce((sum, value) => sum + Number(value), 0) / availableRoms.length, 1)
+    : null;
+  return {
+    analysis_source: "live_combined",
+    dominant_activity_label: step4Copy.liveCombinedStatus,
+    rom_deg: combinedRom,
+    current_ROM: combinedRom,
+    left_leg: leftLeg,
+    right_leg: rightLeg,
+    live_samples: rows,
+    warning: warnings[0] || "",
+    feedback: warnings.length ? [{ level: "Needs sensor check" }] : [{ level: "Ready for report" }],
+    session_summary: {
+      rom_deg: combinedRom,
+      rom_valid: leftLeg.valid && rightLeg.valid,
+      rom_method_used: "live_dual_leg_relative_angle",
+      rom_warning: warnings.join(" | "),
+      sensor_format: "live_dual_leg_stream",
+      sensor_setup_note: "Real-time mode combines Raspberry Pi left-leg sensors with WitMotion right-leg sensors.",
+    },
+  };
 }
 
 function getConfiguredAngleValue(row, axis) {
@@ -2139,49 +2289,35 @@ export default function App() {
     currentKoosPanel.note === "Includes next section"
       ? t.messages.includesNextSection
       : currentKoosPanel.note || "";
-  const step4LiveSensorCards = useMemo(
-    () => buildStep4LiveSensorCards({
-      latestRows: liveImuLatest,
-      rows: liveImuRows,
-      config: liveSensorConfig,
-      baselines: liveSensorBaselines,
-      analysisLeg: imuAnalysisLeg,
-      liveCopy: liveImuText,
-      step4Copy: step4ImuText,
-    }),
-    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4ImuText]
+  const normalizedLiveImuLatest = useMemo(() => normalizeImuRows(liveImuLatest), [liveImuLatest]);
+  const normalizedLiveImuRows = useMemo(() => normalizeImuRows(liveImuRows), [liveImuRows]);
+  const realtimeLatestByDevice = useMemo(
+    () => buildLatestRowsByDevice([...(Array.isArray(normalizedLiveImuLatest) ? normalizedLiveImuLatest : []), ...(Array.isArray(normalizedLiveImuRows) ? normalizedLiveImuRows : [])]),
+    [normalizedLiveImuLatest, normalizedLiveImuRows]
   );
-  const step4BluetoothSensorCards = useMemo(
-    () => buildBluetoothLiveSensorCards({
-      latestRows: liveImuLatest,
-      rows: liveImuRows,
-      liveCopy: liveImuText,
-    }),
-    [liveImuLatest, liveImuRows, liveImuText]
+  const step4PiSensorCards = useMemo(
+    () => buildRealtimeSensorCards(PI_IMU_DEVICE_CONFIG, realtimeLatestByDevice, liveImuText),
+    [realtimeLatestByDevice, liveImuText]
   );
-  const step4LiveAnalysis = useMemo(
-    () => buildLiveImuAnalysis({
-      latestRows: liveImuLatest,
-      rows: liveImuRows,
-      config: liveSensorConfig,
-      baselines: liveSensorBaselines,
-      analysisLeg: imuAnalysisLeg,
-      copy: liveImuText,
-      fallbackCopy: step4ImuText,
-    }),
-    [imuAnalysisLeg, liveImuLatest, liveImuRows, liveImuText, liveSensorBaselines, liveSensorConfig, step4ImuText]
+  const step4WitMotionSensorCards = useMemo(
+    () => buildRealtimeSensorCards(WITMOTION_IMU_DEVICE_CONFIG, realtimeLatestByDevice, liveImuText),
+    [realtimeLatestByDevice, liveImuText]
+  );
+  const step4RealtimeAnalysis = useMemo(
+    () => buildRealtimeAnalysis(normalizedLiveImuRows, step4ImuText),
+    [normalizedLiveImuRows, step4ImuText]
   );
   const step4RecentLiveRows = useMemo(
-    () => (Array.isArray(liveImuRows) ? liveImuRows : [])
+    () => (Array.isArray(normalizedLiveImuRows) ? normalizedLiveImuRows : [])
       .filter((row) => {
-        if (imuDataSource === "pi") return isRaspberryPiImuRow(row);
-        if (imuDataSource === "ble") return isBluetoothImuRow(row);
+        if (imuDataSource === "live") return isPiRow(row) || isWitMotionRow(row);
         return false;
       })
       .sort((a, b) => (toTimestampMs(b?.timestamp) ?? 0) - (toTimestampMs(a?.timestamp) ?? 0)),
-    [imuDataSource, liveImuRows]
+    [imuDataSource, normalizedLiveImuRows]
   );
-  const step4VisibleSampleRows = Array.isArray(step4LiveAnalysis.liveSamples) ? step4LiveAnalysis.liveSamples : [];
+  const step4VisualizationSensors = [...step4PiSensorCards, ...step4WitMotionSensorCards];
+  const step4VisibleSampleRows = Array.isArray(step4RealtimeAnalysis.live_samples) ? step4RealtimeAnalysis.live_samples : [];
   const koosBreakdowns = useMemo(() => {
     if (!koosResult) return [];
 
@@ -2441,7 +2577,7 @@ export default function App() {
       }
     }
 
-    if (!(activeStep === "imu" && (imuDataSource === "pi" || imuDataSource === "ble"))) {
+    if (!(activeStep === "imu" && imuDataSource === "live")) {
       setLiveImuLoading(false);
       return () => {
         active = false;
@@ -2580,28 +2716,15 @@ export default function App() {
   }
 
   async function analyzeImu() {
-    if (imuDataSource === "pi") {
+    if (imuDataSource === "live") {
       setImuLoading(true);
       setImuError("");
       try {
-        const liveAnalysis = step4LiveAnalysis;
-        if (!liveAnalysis.result) {
-          setImuResult(null);
-          setImuError(liveAnalysis.warnings[0] || step4ImuText.liveResultUnavailable);
-          return;
-        }
-        setImuResult(liveAnalysis.result);
-        setImuError("");
+        setImuResult(step4RealtimeAnalysis);
         return;
       } finally {
         setImuLoading(false);
       }
-    }
-
-    if (imuDataSource === "ble") {
-      setImuResult(null);
-      setImuError(step4ImuText.witmotionLiveNote);
-      return;
     }
 
     if (!imuFile) return;
@@ -3187,11 +3310,10 @@ export default function App() {
                 <div>
                   <div className="field">
                     <label>{step4ImuText.dataSource}</label>
-                    <div className="summaryCards" role="radiogroup" aria-label={step4ImuText.dataSource}>
+                    <div className="summaryCards imuSourceCards" role="radiogroup" aria-label={step4ImuText.dataSource}>
                       {[
                         { value: "csv", label: step4ImuText.sourceCsv, hint: step4ImuText.sourceCsvHint },
-                        { value: "pi", label: step4ImuText.sourcePi, hint: step4ImuText.sourcePiHint },
-                        { value: "ble", label: step4ImuText.sourceBle, hint: step4ImuText.sourceBleHint },
+                        { value: "live", label: step4ImuText.sourceLive, hint: step4ImuText.sourceLiveHint },
                       ].map((option) => (
                         <label key={option.value} className="summaryCard" style={{ cursor: "pointer" }}>
                           <div className="sensorCardHeader">
@@ -3215,7 +3337,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {imuDataSource !== "ble" ? (
+                  {imuDataSource === "csv" ? (
                     <div className="field sectionBody">
                       <label htmlFor="imu-analysis-leg">{step4ImuText.selectedLeg}</label>
                       <select id="imu-analysis-leg" value={imuAnalysisLeg} onChange={(event) => handleImuAnalysisLegChange(event.target.value)}>
@@ -3238,7 +3360,7 @@ export default function App() {
                             selectImuFile(event.dataTransfer.files?.[0]);
                           }}
                         >
-                          <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span></div>
+                          <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span><div className="fileHint">{step4ImuText.csvUploadHelper}</div></div>
                         </button>
                       ) : (
                         <div className="fileSummary sectionBody">
@@ -3255,249 +3377,112 @@ export default function App() {
                         e.target.value = "";
                       }} />
                     </>
-                  ) : imuDataSource === "pi" ? (
-                    <div className="reportBlock sectionBody">
-                      <div className="reportBlockHead">
-                        <h4>{liveImuText.title}</h4>
-                        <span className="microNote">{liveImuText.refreshNote}</span>
-                      </div>
-                      <p className="microNote">{step4ImuText.legHint}</p>
-                      {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
-                      <div className="reportBlock">
-                        <div className="tableTitle">{liveImuText.raspberryPiSensors}</div>
-                        <div className="summaryCards sectionBody" aria-label={liveImuText.cardTitle}>
-                          {step4LiveSensorCards.map((card) => (
-                            <article key={card.key} className="summaryCard sensorCard">
-                              <div className="sensorCardHeader">
-                                <div>
-                                  <small>{card.deviceId}</small>
-                                  <strong className="summaryDate">{card.positionLabel}</strong>
-                                </div>
-                                <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.statusLabel}</span>
-                              </div>
-                              {card.latestRow ? (
-                                <div className="sensorMeta">
-                                  <div className="sensorMetrics">
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.pitch}</small>
-                                      <strong>{f(card.latestRow.pitch, "°")}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.roll}</small>
-                                      <strong>{f(card.latestRow.roll, "°")}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accX}</small>
-                                      <strong>{f(card.latestRow.acc_x)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accY}</small>
-                                      <strong>{f(card.latestRow.acc_y)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accZ}</small>
-                                      <strong>{f(card.latestRow.acc_z)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{step4ImuText.liveTableCalibratedAngle}</small>
-                                      <strong>{f(card.calibratedAngle, "°")}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.lastUpdated}</small>
-                                      <strong>{formatDate(card.latestRow.timestamp)}</strong>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
-                              )}
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="dataTableWrap imuTableWrap" id="imu-live">
-                        <div className="tableTitle">{liveImuText.recentTable}</div>
-                        {step4RecentLiveRows.length === 0 ? (
-                          <div className="microNote">{liveImuText.noRows}</div>
-                        ) : (
-                          <table className="dataTable imuDataTable">
-                            <thead>
-                              <tr>
-                                <th>{liveImuText.timestamp}</th>
-                                <th>{liveImuText.source}</th>
-                                <th>{liveImuText.deviceId}</th>
-                                <th>{liveImuText.leg}</th>
-                                <th>{liveImuText.bodyPart}</th>
-                                <th>{liveImuText.pitch}</th>
-                                <th>{liveImuText.roll}</th>
-                                <th>{liveImuText.accX}</th>
-                                <th>{liveImuText.accY}</th>
-                                <th>{liveImuText.accZ}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {step4RecentLiveRows.map((row, index) => (
-                                <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
-                                  <td>{formatDate(row.timestamp)}</td>
-                                  <td>{getImuSourceLabel(row, liveImuText)}</td>
-                                  <td>{row.device_id || "-"}</td>
-                                  <td>{row.leg || imuAnalysisLeg}</td>
-                                  <td>{row.body_part || "-"}</td>
-                                  <td>{f(row.pitch, "°")}</td>
-                                  <td>{f(row.roll, "°")}</td>
-                                  <td>{f(row.acc_x)}</td>
-                                  <td>{f(row.acc_y)}</td>
-                                  <td>{f(row.acc_z)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-
-                      <div className="reportBlock" id="imu-config">
-                        <h4>{step4ImuText.axisTitle}</h4>
-                        <div className="grid2 sectionBody">
-                          {step4LiveAnalysis.roleStatuses.map((status) => (
-                            <div className="field" key={`${status.key}-axis`}>
-                              <label htmlFor={`axis-${status.key}`}>{status.title}</label>
-                              <select
-                                id={`axis-${status.key}`}
-                                value={status.config.axis}
-                                onChange={(event) => updateLiveSensorRoleConfig(status.key, { axis: event.target.value })}
-                              >
-                                <option value="pitch">pitch</option>
-                                <option value="roll">roll</option>
-                              </select>
-                              <select
-                                aria-label={`${status.title} sign`}
-                                value={String(status.config.sign)}
-                                onChange={(event) => updateLiveSensorRoleConfig(status.key, { sign: Number(event.target.value) })}
-                              >
-                                <option value="1">1</option>
-                                <option value="-1">-1</option>
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="reportBlock">
-                        <div className="reportBlockHead">
-                          <h4>{step4ImuText.calibrationTitle}</h4>
-                          <button className="btn" onClick={captureLiveBaseline}>{step4ImuText.calibrationButton}</button>
-                        </div>
-                        <p>{step4ImuText.calibrationHint}</p>
-                        <div className="summaryCards sectionBody">
-                          {step4LiveAnalysis.roleStatuses.map((status) => (
-                            <article key={`${status.key}-baseline`} className="summaryCard">
-                              <small>{status.title}</small>
-                              <strong style={{ fontSize: 18 }}>
-                                {status.baselineReady ? step4ImuText.baselineReady : step4ImuText.baselineWaiting}
-                              </strong>
-                              <span className="microNote">
-                                {status.baseline?.timestamp ? formatDate(status.baseline.timestamp) : "Waiting"}
-                              </span>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
                   ) : (
                     <div className="reportBlock sectionBody">
                       <div className="reportBlockHead">
-                        <h4>{liveImuText.bluetoothSensors}</h4>
+                        <h4>{step4ImuText.sourceLive}</h4>
                         <span className="microNote">{liveImuText.refreshNote}</span>
                       </div>
                       <p className="microNote">{step4ImuText.witmotionLiveNote}</p>
                       <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
                       {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
-                      <div className="reportBlock">
-                        <div className="bleLiveLayout">
-                          <div className="summaryCards sectionBody" aria-label={liveImuText.bluetoothSensors}>
-                            {step4BluetoothSensorCards.map((card) => (
-                              <article key={card.deviceId} className="summaryCard sensorCard">
-                                <div className="sensorCardHeader">
-                                  <div>
-                                    <small>{card.deviceId}</small>
-                                    <strong className="summaryDate">{card.label}</strong>
+                      <div className="imuRealtimeSections">
+                        {[
+                          { title: liveImuText.raspberryPiSensors, cards: step4PiSensorCards },
+                          { title: liveImuText.bluetoothSensors, cards: step4WitMotionSensorCards },
+                        ].map((section) => (
+                          <div className="reportBlock" key={section.title}>
+                            <div className="tableTitle">{section.title}</div>
+                            <div className="imuSensorGrid sectionBody" aria-label={section.title}>
+                              {section.cards.map((card) => (
+                                <article key={card.deviceId} className="summaryCard sensorCard">
+                                  <div className="sensorCardHeader">
+                                    <div>
+                                      <small>{card.deviceId}</small>
+                                      <strong className="summaryDate">{card.label}</strong>
+                                    </div>
+                                    <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.isOnline ? liveImuText.online : step4ImuText.waitingStatus}</span>
                                   </div>
-                                  <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.statusLabel}</span>
-                                </div>
-                                {card.latestRow ? (
-                                  <div className="sensorMeta">
-                                    <div className="sensorMetrics">
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.leg}</small>
-                                        <strong>{getBluetoothLegLabel(card.latestRow)}</strong>
+                                  {card.latestRow ? (
+                                    <div className="sensorMeta">
+                                      <div className="sensorMetrics">
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.pitch}</small>
+                                          <strong>{f(card.latestRow.pitch, "°")}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.roll}</small>
+                                          <strong>{f(card.latestRow.roll, "°")}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.yaw}</small>
+                                          <strong>{f(card.latestRow.yaw, "°")}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.accX}</small>
+                                          <strong>{f(card.latestRow.acc_x)}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.accY}</small>
+                                          <strong>{f(card.latestRow.acc_y)}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.accZ}</small>
+                                          <strong>{f(card.latestRow.acc_z)}</strong>
+                                        </div>
                                       </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.bodyPart}</small>
-                                        <strong>{getBluetoothBodyPartLabel(card.latestRow)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.pitch}</small>
-                                        <strong>{f(card.latestRow.pitch, "°")}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.roll}</small>
-                                        <strong>{f(card.latestRow.roll, "°")}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accX}</small>
-                                        <strong>{f(card.latestRow.acc_x)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accY}</small>
-                                        <strong>{f(card.latestRow.acc_y)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accZ}</small>
-                                        <strong>{f(card.latestRow.acc_z)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.lastUpdated}</small>
-                                        <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                      <div className="sensorCardSummary">
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.leg}</small>
+                                          <strong>{card.leg}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.bodyPart}</small>
+                                          <strong>{card.bodyPart}</strong>
+                                        </div>
+                                        <div className="sensorMetric">
+                                          <small>{liveImuText.lastUpdated}</small>
+                                          <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                ) : (
-                                  <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
-                                )}
-                              </article>
-                            ))}
+                                  ) : (
+                                    <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
+                                  )}
+                                </article>
+                              ))}
+                            </div>
                           </div>
+                        ))}
+                      </div>
 
-                          <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
-                            <div className="reportBlockHead">
-                              <h4>{step4ImuText.liveMovementTitle}</h4>
-                            </div>
-                            <p className="microNote">{step4ImuText.witmotionHelperText}</p>
-                            <div className="bleVisualizationGrid">
-                              {step4BluetoothSensorCards.map((card) => {
-                                const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
-                                const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
-                                const tileStyle = {
-                                  "--tile-rotate-x": `${pitch}deg`,
-                                  "--tile-rotate-z": `${roll}deg`,
-                                };
-                                return (
-                                  <div key={`${card.deviceId}-viz`} className="bleVizCard">
-                                    <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
-                                      <div className="bleVizTile" style={tileStyle}>
-                                        <span className="bleVizFace bleVizFaceTop" />
-                                        <span className="bleVizFace bleVizFaceFront" />
-                                        <span className="bleVizFace bleVizFaceSide" />
-                                      </div>
-                                    </div>
-                                    <strong>{card.label}</strong>
-                                    <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
+                      <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
+                        <div className="reportBlockHead">
+                          <h4>{step4ImuText.liveMovementTitle}</h4>
+                        </div>
+                        <p className="microNote">{step4ImuText.witmotionHelperText}</p>
+                        <div className="bleVisualizationGrid">
+                          {step4VisualizationSensors.map((card) => {
+                            const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
+                            const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
+                            const tileStyle = {
+                              "--tile-rotate-x": `${pitch}deg`,
+                              "--tile-rotate-z": `${roll}deg`,
+                            };
+                            return (
+                              <div key={`${card.deviceId}-viz`} className="bleVizCard">
+                                <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
+                                  <div className="bleVizTile" style={tileStyle}>
+                                    <span className="bleVizFace bleVizFaceTop" />
+                                    <span className="bleVizFace bleVizFaceFront" />
+                                    <span className="bleVizFace bleVizFaceSide" />
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </div>
+                                </div>
+                                <strong>{`${card.label} (${card.deviceId})`}</strong>
+                                <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -3512,13 +3497,16 @@ export default function App() {
                                 <th>{liveImuText.timestamp}</th>
                                 <th>{liveImuText.source}</th>
                                 <th>{liveImuText.deviceId}</th>
+                                <th>{liveImuText.label}</th>
                                 <th>{liveImuText.leg}</th>
                                 <th>{liveImuText.bodyPart}</th>
                                 <th>{liveImuText.pitch}</th>
                                 <th>{liveImuText.roll}</th>
+                                <th>{liveImuText.yaw}</th>
                                 <th>{liveImuText.accX}</th>
                                 <th>{liveImuText.accY}</th>
                                 <th>{liveImuText.accZ}</th>
+                                <th>{liveImuText.temp}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3527,13 +3515,16 @@ export default function App() {
                                   <td>{formatDate(row.timestamp)}</td>
                                   <td>{getImuSourceLabel(row, liveImuText)}</td>
                                   <td>{row.device_id || "-"}</td>
-                                  <td>{getBluetoothLegLabel(row)}</td>
-                                  <td>{getBluetoothBodyPartLabel(row)}</td>
+                                  <td>{getImuLabel(row)}</td>
+                                  <td>{row.leg || "-"}</td>
+                                  <td>{row.body_part || "-"}</td>
                                   <td>{f(row.pitch, "°")}</td>
                                   <td>{f(row.roll, "°")}</td>
+                                  <td>{f(row.yaw, "°")}</td>
                                   <td>{f(row.acc_x)}</td>
                                   <td>{f(row.acc_y)}</td>
                                   <td>{f(row.acc_z)}</td>
+                                  <td>{f(row.temperature)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3548,88 +3539,125 @@ export default function App() {
                     {imuLoading ? t.buttons.analyzing : t.buttons.analyzeImu}
                   </button>
                   {imuError ? <div className="error">{imuError}</div> : null}
-                  {!imuResult && !imuError ? <div className="empty">{t.messages.noImuResult}</div> : null}
                   {imuResult ? (
-                    <div className="resultHero">
-                      <div className="resultHeroTop">
-                        <div>
-                          <div className="resultKicker">{stepCompleteText(4)}</div>
-                          <h4>{t.completion.imuTitle}</h4>
-                          <p>{t.completion.imuText}</p>
+                    imuResult?.analysis_source === "live_combined" ? (
+                      <div className="resultHero">
+                        <div className="resultHeroTop">
+                          <div>
+                            <div className="resultKicker">{stepCompleteText(4)}</div>
+                            <h4>{t.completion.imuTitle}</h4>
+                            <p>{t.completion.imuText}</p>
+                          </div>
+                          <div className="resultValue">{f(currentRom, "°")}<span>{step4ImuText.liveCombinedStatus}</span></div>
                         </div>
-                        <div className="resultValue">{f(currentRom, "°")}<span>{t.labels.rangeOfMotion}</span></div>
+                        <div className="formulaBox">{step4ImuText.liveResultFormula}</div>
+                        <div className="imuLegResultGrid">
+                          {[imuResult.left_leg, imuResult.right_leg].map((side) => (
+                            <div className="imuLegResultCard" key={side.title}>
+                              <div className="sensorCardHeader">
+                                <div>
+                                  <small>{side.sourceLabel}</small>
+                                  <h5>{side.title}</h5>
+                                </div>
+                                <span className={`chip ${side.valid ? "teal" : "coral"}`}>{side.valid ? t.status.ready : "Warning"}</span>
+                              </div>
+                              {side.rom_deg !== null ? (
+                                <div className="metrics">
+                                  <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(side.rom_deg, "°")}</strong></div>
+                                  <div className="metric"><small>Min angle</small><strong>{f(side.min_angle_deg, "°")}</strong></div>
+                                  <div className="metric"><small>Max angle</small><strong>{f(side.max_angle_deg, "°")}</strong></div>
+                                </div>
+                              ) : null}
+                              {side.warnings.map((warning) => (
+                                <div className="error" key={warning}>{warning}</div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="metrics wideMetrics">
+                          <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
+                          <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
+                          <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
+                          <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
+                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{imuRomValid ? t.labels.readyForReport : "Needs sensor check"}</strong></div>
+                          <div className="metric"><small>ROM method used</small><strong style={{ fontSize: 16 }}>{imuRomMethodUsed}</strong></div>
+                          <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
+                          <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
+                        </div>
+                        <div className="formulaBox">{imuSensorSetupNote}</div>
+                        <div className="resultActions">
+                          <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
+                          <button className="btn" onClick={analyzeImu} disabled={imuLoading}>{t.buttons.rerunImu}</button>
+                          <button className="btn" onClick={() => setImuResult(null)}>{t.buttons.editImuData}</button>
+                        </div>
                       </div>
-                      <div className="explainList">
-                        <div className="explainItem">{t.explanations.imuRomFormula}</div>
-                        <div className="explainItem">{t.explanations.deltaRomExplanation}</div>
-                        <div className="explainItem">{t.explanations.imuSmoothness}</div>
-                      </div>
-                      <div className="formulaBox">ROM = max angle - min angle</div>
-                      <div className="metrics wideMetrics">
-                        <div className="metric"><small>Min angle</small><strong>{f(currentMinAngle, "°")}</strong></div>
-                        <div className="metric"><small>Max angle</small><strong>{f(currentMaxAngle, "°")}</strong></div>
-                        <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
-                        <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
-                        <div className="metric"><small>{t.labels.sensorSetup}</small><strong style={{ fontSize: 18 }}>{t.sensorSetups[sensorLocation] || sensorLocation}</strong></div>
-                        <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
-                        <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
-                        <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
-                        <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
-                        <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
-                        <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
-                        <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
-                        <div className="metric"><small>ROM method used</small><strong style={{ fontSize: 16 }}>{imuRomMethodUsed}</strong></div>
-                        <div className="metric"><small>Real channels</small><strong>{imuRealChannelsCount ?? "-"}</strong></div>
-                        <div className="metric"><small>EMG detected</small><strong>{imuEmgDetected}</strong></div>
-                      </div>
-                      <div className="formulaBox">{imuSensorSetupNote}</div>
-                      {imuFallbackWarning ? (
-                        <div className={imuRomValid ? "empty" : "error"}>{imuFallbackWarning}</div>
-                      ) : null}
-                      {imuResult?.analysis_source === "live" ? (
-                        <div className="dataTableWrap">
-                          <div className="tableTitle">{step4ImuText.liveResultTitle}</div>
-                          <div className="microNote">{step4ImuText.liveResultFormula}</div>
-                          {Array.isArray(imuResult.live_samples) && imuResult.live_samples.length > 0 ? (
-                            <Step4ImuSampleTable
-                              title={step4ImuText.liveResultTitle}
-                              rows={imuResult.live_samples}
-                              liveCopy={liveImuText}
+                    ) : (
+                      <div className="resultHero">
+                        <div className="resultHeroTop">
+                          <div>
+                            <div className="resultKicker">{stepCompleteText(4)}</div>
+                            <h4>{t.completion.imuTitle}</h4>
+                            <p>{t.completion.imuText}</p>
+                          </div>
+                          <div className="resultValue">{f(currentRom, "°")}<span>{t.labels.rangeOfMotion}</span></div>
+                        </div>
+                        <div className="explainList">
+                          <div className="explainItem">{t.explanations.imuRomFormula}</div>
+                          <div className="explainItem">{t.explanations.deltaRomExplanation}</div>
+                          <div className="explainItem">{t.explanations.imuSmoothness}</div>
+                        </div>
+                        <div className="formulaBox">ROM = max angle - min angle</div>
+                        <div className="metrics wideMetrics">
+                          <div className="metric"><small>Min angle</small><strong>{f(currentMinAngle, "°")}</strong></div>
+                          <div className="metric"><small>Max angle</small><strong>{f(currentMaxAngle, "°")}</strong></div>
+                          <div className="metric"><small>{t.labels.rangeOfMotion}</small><strong>{f(currentRom, "°")}</strong></div>
+                          <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
+                          <div className="metric"><small>{t.labels.sensorSetup}</small><strong style={{ fontSize: 18 }}>{t.sensorSetups[sensorLocation] || sensorLocation}</strong></div>
+                          <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
+                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
+                          <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
+                          <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
+                          <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
+                          <div className="metric"><small>{t.labels.smoothness}</small><strong style={{ fontSize: 18 }}>{imuResult?.feedback?.[1]?.level || imuResult?.feedback?.[0]?.level || "-"}</strong></div>
+                          <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
+                          <div className="metric"><small>ROM method used</small><strong style={{ fontSize: 16 }}>{imuRomMethodUsed}</strong></div>
+                          <div className="metric"><small>Real channels</small><strong>{imuRealChannelsCount ?? "-"}</strong></div>
+                          <div className="metric"><small>EMG detected</small><strong>{imuEmgDetected}</strong></div>
+                        </div>
+                        <div className="formulaBox">{imuSensorSetupNote}</div>
+                        {imuFallbackWarning ? (
+                          <div className={imuRomValid ? "empty" : "error"}>{imuFallbackWarning}</div>
+                        ) : null}
+                        {imuRomDetail ? (
+                          <div className="calcCardGrid">
+                            <FormulaBreakdown
+                              title={imuRomDetail.title}
+                              formula={imuRomDetail.formula}
+                              inputs={imuRomDetail.inputs}
+                              steps={imuRomDetail.romSteps}
+                              finalAnswer={imuRomDetail.romFinal}
+                              meaningText={imuRomDetail.smoothnessText}
                             />
-                          ) : (
-                            <div className="microNote">{step4ImuText.liveResultEmpty}</div>
-                          )}
+                            <FormulaBreakdown
+                              title="Delta ROM"
+                              formula={imuRomDetail.deltaFormula}
+                              inputs={[
+                                { label: "Current ROM", value: `${formatCalcNumber(currentRom, 1)}°` },
+                                { label: "Previous ROM", value: previousSessionRom !== null ? `${formatCalcNumber(previousSessionRom, 1)}°` : "No previous session" },
+                              ]}
+                              steps={imuRomDetail.deltaSteps}
+                              finalAnswer={imuRomDetail.deltaFinal}
+                              meaningText="Signed Delta ROM shows direction of change. Absolute Delta ROM shows the size of the difference."
+                            />
+                          </div>
+                        ) : null}
+                        <div className="resultActions">
+                          <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
+                          <button className="btn" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>{t.buttons.rerunImu}</button>
+                          <button className="btn" onClick={imuDataSource === "csv" ? clearImuFile : () => setImuResult(null)}>{t.buttons.editImuData}</button>
                         </div>
-                      ) : null}
-                      {imuRomDetail ? (
-                        <div className="calcCardGrid">
-                          <FormulaBreakdown
-                            title={imuRomDetail.title}
-                            formula={imuRomDetail.formula}
-                            inputs={imuRomDetail.inputs}
-                            steps={imuRomDetail.romSteps}
-                            finalAnswer={imuRomDetail.romFinal}
-                            meaningText={imuRomDetail.smoothnessText}
-                          />
-                          <FormulaBreakdown
-                            title="Delta ROM"
-                            formula={imuRomDetail.deltaFormula}
-                            inputs={[
-                              { label: "Current ROM", value: `${formatCalcNumber(currentRom, 1)}°` },
-                              { label: "Previous ROM", value: previousSessionRom !== null ? `${formatCalcNumber(previousSessionRom, 1)}°` : "No previous session" },
-                            ]}
-                            steps={imuRomDetail.deltaSteps}
-                            finalAnswer={imuRomDetail.deltaFinal}
-                            meaningText="Signed Delta ROM shows direction of change. Absolute Delta ROM shows the size of the difference."
-                          />
-                        </div>
-                      ) : null}
-                      <div className="resultActions">
-                        <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
-                        <button className="btn" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>{t.buttons.rerunImu}</button>
-                        <button className="btn" onClick={imuDataSource === "csv" ? clearImuFile : () => setImuResult(null)}>{t.buttons.editImuData}</button>
                       </div>
-                    </div>
+                    )
                   ) : null}
                 </div>
               </div>
@@ -3977,6 +4005,27 @@ export default function App() {
               <a className="tocLink" href={`#${item.id}`} key={item.id}>{t.toc[item.key]}</a>
             ))}
           </nav>
+          {activeStep === "imu" ? (
+            <div className="imuSidebarCard">
+              <div className="imuSidebarGroup">
+                <strong>{step4ImuText.sensorMappingTitle}</strong>
+                <span>LEFT LEG (Raspberry Pi)</span>
+                <span>pi1 Left hip</span>
+                <span>pi2 Left thigh / knee</span>
+                <span>pi3 Left shin / ankle</span>
+              </div>
+              <div className="imuSidebarGroup">
+                <span>RIGHT LEG (WitMotion)</span>
+                <span>ble_right_hip Right hip</span>
+                <span>ble_right_thigh Right thigh / knee</span>
+                <span>ble_right_shin Right shin / ankle</span>
+              </div>
+              <div className="imuSidebarGroup">
+                <strong>{step4ImuText.howItWorksTitle}</strong>
+                <span>{step4ImuText.witmotionLiveNote}</span>
+              </div>
+            </div>
+          ) : null}
         </aside>
       </div>
     </div>

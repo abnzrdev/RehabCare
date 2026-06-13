@@ -19,9 +19,11 @@ function buildImuRow({
   body_part,
   pitch,
   roll,
+  yaw = 0,
   acc_x,
   acc_y,
   acc_z,
+  temperature = 35.8,
 }) {
   return {
     timestamp,
@@ -36,8 +38,20 @@ function buildImuRow({
     gyro_z: -0.1,
     pitch,
     roll,
-    temperature: 35.8,
+    yaw,
+    temperature,
   };
+}
+
+function buildRealtimeMixedRows(now = new Date().toISOString()) {
+  return [
+    buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 2.1, roll: -0.8, yaw: 0.2, acc_x: 0.0, acc_y: 0.1, acc_z: 1.0 }),
+    buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh/knee", pitch: 12.0, roll: -33.6, yaw: 0.4, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+    buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin/ankle", pitch: 30.0, roll: 2.3, yaw: -0.1, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+    buildImuRow({ timestamp: now, device_id: "ble_right_hip", leg: "right", body_part: "hip", pitch: -1.4, roll: 0.6, yaw: 0.1, acc_x: 0.0, acc_y: 0.0, acc_z: 1.0, temperature: 31.8 }),
+    buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 8.0, roll: -32.6, yaw: 0.3, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9, temperature: 31.9 }),
+    buildImuRow({ timestamp: now, device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 24.0, roll: 2.1, yaw: -0.2, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0, temperature: 32.0 }),
+  ];
 }
 
 describe("clinical wizard patient and KOOS flow", () => {
@@ -237,20 +251,19 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/single sensor . right thigh/i).length).toBeGreaterThan(0);
   });
 
-  it("renders Step 4 radio buttons for CSV, Raspberry Pi, and WitMotion modes", async () => {
+  it("renders Step 4 with exactly two source choices: CSV and real-time IMU data", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
 
     expect(screen.getByRole("radio", { name: /upload imu csv/i })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /use raspberry pi sensor data/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i })).not.toBeChecked();
-    expect(screen.getByText(/use csv if you already recorded data/i)).toBeInTheDocument();
-    expect(screen.getByText(/use live raspberry pi sensors for knee rom analysis/i)).toBeInTheDocument();
-    expect(screen.getByText(/use witmotion bluetooth sensors for live device identification/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("radio")).toHaveLength(3);
-    expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /real-time imu data/i })).not.toBeChecked();
+    expect(screen.getByText(/upload a recorded imu csv file for offline knee rom analysis/i)).toBeInTheDocument();
+    expect(screen.getByText(/use raspberry pi sensors for the left leg and witmotion bluetooth sensors for the right leg/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.queryByRole("radio", { name: /use raspberry pi sensor data/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /use witmotion bluetooth sensor data/i })).not.toBeInTheDocument();
   });
 
   it("keeps Step 4 CSV mode available and analyzes uploaded CSV data", async () => {
@@ -272,28 +285,16 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText("94.0°").length).toBeGreaterThan(0);
   });
 
-  it("shows only Raspberry Pi cards with calibration controls in Raspberry Pi mode", async () => {
+  it("does not show the IMU result placeholder before Analyze ROM is pressed", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
 
-    const sensorCards = screen.getByLabelText(/sensor cards/i);
-    expect(within(sensorCards).getByText(/left hip/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/left thigh\/knee/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/left ankle\/shin/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi1$/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi2$/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/bluetooth \/ witmotion imu sensors/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^ble_left_arm$/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /set current position as neutral baseline/i })).toBeInTheDocument();
-    expect(screen.getAllByDisplayValue("pitch").length).toBeGreaterThan(0);
-    expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no imu result yet/i)).not.toBeInTheDocument();
   });
 
-  it("shows lower-limb Bluetooth WitMotion cards, legacy remapping, and the movement visualization in WitMotion mode", async () => {
+  it("shows both left-leg Raspberry Pi and right-leg WitMotion sections together in real-time mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -301,38 +302,8 @@ describe("clinical wizard patient and KOOS flow", () => {
         const url = String(input);
         if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
         if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) {
-          return jsonResponse({
-            count: 5,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_shin", body_part: "shin/ankle", pitch: 9.1, roll: 7.4, acc_x: 0.16, acc_y: 0.08, acc_z: 0.82 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 15.6, roll: 6.2, acc_x: 0.27, acc_y: 0.09, acc_z: 0.84 }),
-            ],
-          });
-        }
-        if (url.includes("/api/imu/data")) {
-          return jsonResponse({
-            count: 7,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_shin", body_part: "shin/ankle", pitch: 9.1, roll: 7.4, acc_x: 0.16, acc_y: 0.08, acc_z: 0.82 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 15.6, roll: 6.2, acc_x: 0.27, acc_y: 0.09, acc_z: 0.84 }),
-            ],
-          });
-        }
-        if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
-        if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-        if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
-        if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
+        if (url.includes("/api/imu/latest")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
+        if (url.includes("/api/imu/data")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
         return jsonResponse({});
       }),
     );
@@ -341,178 +312,53 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
 
-    expect(screen.queryByText(/raspberry pi knee sensors/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/bluetooth \/ witmotion imu sensors/i)).toBeInTheDocument();
+    expect(screen.getByText(/raspberry pi imu sensors \(left leg\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/witmotion imu sensors \(right leg\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^pi2$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^pi3$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_hip$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_thigh$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_shin$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/left hip/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/left thigh \/ knee/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/left shin \/ ankle/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right hip/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/right thigh \/ knee/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/right shin \/ ankle/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/^left_arm$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^arm$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Left_Leg$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Right_Leg$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and shin\/ankle pair\./i)).toBeInTheDocument();
-    expect(screen.getByText(/move each physical sensor and watch the matching block rotate\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/arm/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/foot/i)).not.toBeInTheDocument();
     expect(screen.getByText(/live movement visualization/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/live movement visualization/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/left hip \(pi1\)|left thigh \/ knee \(pi2\)|left shin \/ ankle \(pi3\)|right hip \(ble_right_hip\)|right thigh \/ knee \(ble_right_thigh\)|right shin \/ ankle \(ble_right_shin\)/i)).toHaveLength(6);
+    expect(screen.getByText(/recent imu data \(live\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/raspberry pi/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/witmotion/i).length).toBeGreaterThan(0);
   });
 
-  it("maps pi1, pi2, and pi3 to the right-leg sensor cards when Right leg is selected", async () => {
-    const now = new Date().toISOString();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input) => {
-        const url = String(input);
-        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
-        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) {
-          return jsonResponse({
-            count: 3,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-            ],
-          });
-        }
-        if (url.includes("/api/imu/data")) {
-          return jsonResponse({
-            count: 3,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-            ],
-          });
-        }
-        if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
-        if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-        if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
-        if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
-        return jsonResponse({});
-      }),
-    );
-
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
-    await user.selectOptions(screen.getByLabelText(/selected leg/i), "right");
-
-    const sensorCards = screen.getByLabelText(/sensor cards/i);
-    expect(within(sensorCards).getByText(/right hip/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/right thigh\/knee/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/right ankle\/shin/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi1$/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi2$/i)).toBeInTheDocument();
-    expect(within(sensorCards).getByText(/^pi3$/i)).toBeInTheDocument();
-  });
-
-  it("shows only Raspberry Pi rows in the recent IMU table for Raspberry Pi mode", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
-
-    expect(screen.getByText(/recent imu data/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/device id/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/^ble_left_arm$/i)).not.toBeInTheDocument();
-  });
-
-  it("shows only Bluetooth rows in the recent IMU table for WitMotion mode and remaps legacy device labels", async () => {
-    const now = new Date().toISOString();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input) => {
-        const url = String(input);
-        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
-        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-        if (url.includes("/api/imu/latest")) {
-          return jsonResponse({
-            count: 2,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-            ],
-          });
-        }
-        if (url.includes("/api/imu/data")) {
-          return jsonResponse({
-            count: 2,
-            items: [
-              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-            ],
-          });
-        }
-        return jsonResponse({});
-      }),
-    );
-
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
-
-    expect(screen.getAllByText(/source/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/bluetooth/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/left thigh \/ knee/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/^arm$/i)).not.toBeInTheDocument();
-  });
-
-  it("does not show the removed demo seed controls in Step 4 live mode", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
-
-    expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /clear demo data/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/demo imu sample data/i)).not.toBeInTheDocument();
-  });
-
-  it("analyzes Raspberry Pi ROM from fetched backend rows without calling the CSV analysis endpoint", async () => {
+  it("analyzes both left and right ROM in real-time mode without calling the CSV endpoint", async () => {
     const now = new Date().toISOString();
     const fetchMock = vi.fn(async (input) => {
       const url = String(input);
       if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
       if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
-      if (url.includes("/api/imu/latest")) {
-        return jsonResponse({
-          count: 3,
-          items: [
-            buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 6, roll: 1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
-            buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 10, roll: 2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
-            buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 28, roll: 3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
-          ],
-        });
-      }
+      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
       if (url.includes("/api/imu/data")) {
         return jsonResponse({
-          count: 6,
+          count: 8,
           items: [
-            buildImuRow({ timestamp: "2026-06-10T10:00:00Z", device_id: "pi2", body_part: "thigh", pitch: 5, roll: 1, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
-            buildImuRow({ timestamp: "2026-06-10T10:00:01Z", device_id: "pi3", body_part: "shin", pitch: 12, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
-            buildImuRow({ timestamp: "2026-06-10T10:00:02Z", device_id: "pi2", body_part: "thigh", pitch: 9, roll: 1, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
-            buildImuRow({ timestamp: "2026-06-10T10:00:03Z", device_id: "pi3", body_part: "shin", pitch: 27, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
-            buildImuRow({ timestamp: "2026-06-10T10:00:04Z", device_id: "pi1", body_part: "hip", pitch: 7, roll: 1, acc_x: 0.1, acc_y: 0.01, acc_z: 0.97 }),
-            buildImuRow({ timestamp: "2026-06-10T10:00:05Z", device_id: "pi3", body_part: "shin", pitch: 18, roll: 1, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:00Z", device_id: "pi2", body_part: "thigh/knee", pitch: 6, roll: 0, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:01Z", device_id: "pi3", body_part: "shin/ankle", pitch: 18, roll: 0, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:02Z", device_id: "pi2", body_part: "thigh/knee", pitch: 10, roll: 0, acc_x: 0.2, acc_y: 0.01, acc_z: 0.96 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:03Z", device_id: "pi3", body_part: "shin/ankle", pitch: 28, roll: 0, acc_x: 0.3, acc_y: 0.01, acc_z: 0.95 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:04Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 4, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:05Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 12, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:06Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 8, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+            buildImuRow({ timestamp: "2026-06-10T10:00:07Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 24, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
           ],
         });
       }
-      if (url.includes("/api/koos/calculate")) return jsonResponse({ koos_total: 72.4, subscales: {} });
-      if (url.includes("/api/predict-kl")) return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
-      if (url.includes("/api/rehab/report")) return jsonResponse({ session_id: "session-123" });
       if (url.includes("/api/imu/analyze")) return jsonResponse({ rom_deg: 94, session_summary: { rom_deg: 94, rom_valid: true } });
       return jsonResponse({});
     });
@@ -522,18 +368,17 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(await screen.findByText(/IMU movement analysis completed/i)).toBeInTheDocument();
-    expect(screen.getAllByText("18.0°").length).toBeGreaterThan(0);
-    expect(screen.getByText(/live_3sensor_stream/i)).toBeInTheDocument();
-    expect(screen.getByText(/live_relative_angle/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/^left$/i).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/left-leg rom \(raspberry pi\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/right-leg rom \(witmotion\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText("12.0°").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("8.0°").length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/imu/analyze"))).toBe(false);
   });
 
-  it("shows a clear warning when pi2 or pi3 data is missing in Raspberry Pi mode", async () => {
+  it("normalizes legacy BLE IDs into the new right-leg mapping in real-time mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -543,17 +388,61 @@ describe("clinical wizard patient and KOOS flow", () => {
         if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
         if (url.includes("/api/imu/latest")) {
           return jsonResponse({
-            count: 1,
+            count: 6,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 1, roll: 1, acc_x: 0, acc_y: 0.1, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh/knee", pitch: 2, roll: 1, acc_x: 0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin/ankle", pitch: 3, roll: 1, acc_x: -0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 4, roll: 1, acc_x: 0, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_leg", body_part: "leg", pitch: 5, roll: 1, acc_x: 0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_arm", leg: "right", body_part: "arm", pitch: 6, roll: 1, acc_x: -0.1, acc_y: 0, acc_z: 1 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    expect(screen.getAllByText(/^ble_right_hip$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_thigh$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^ble_right_shin$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right hip/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right thigh \/ knee/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right shin \/ ankle/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows only the left warning when the Raspberry Pi pair is missing in real-time mode", async () => {
+    const now = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 2,
             items: [
               buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 10, roll: 1, acc_x: 0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 22, roll: 1, acc_x: -0.1, acc_y: 0, acc_z: 1 }),
             ],
           });
         }
         if (url.includes("/api/imu/data")) {
           return jsonResponse({
-            count: 1,
+            count: 3,
             items: [
               buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 10, roll: 1, acc_x: 0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 22, roll: 1, acc_x: -0.1, acc_y: 0, acc_z: 1 }),
             ],
           });
         }
@@ -569,13 +458,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use raspberry pi sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect(await screen.findByText(/need thigh\/knee and ankle\/shin sensor data to calculate rom/i)).toBeInTheDocument();
+    expect(await screen.findByText(/left-leg raspberry pi rom needs left thigh\/knee \(pi2\) and left shin\/ankle \(pi3\) sensors/i)).toBeInTheDocument();
+    expect(screen.queryByText(/right-leg witmotion rom needs right thigh\/knee and right shin\/ankle sensors/i)).not.toBeInTheDocument();
   });
 
-  it("shows a Bluetooth mapping warning when analyzing in WitMotion mode", async () => {
+  it("shows only the right warning when the WitMotion pair is missing in real-time mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -587,8 +477,8 @@ describe("clinical wizard patient and KOOS flow", () => {
           return jsonResponse({
             count: 2,
             items: [
-              buildImuRow({ timestamp: now, device_id: "ble_left_leg", body_part: "leg", pitch: 16.5, roll: 2.1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.4, roll: 2.8, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh/knee", pitch: 8, roll: 1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin/ankle", pitch: 20, roll: 1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
             ],
           });
         }
@@ -596,8 +486,8 @@ describe("clinical wizard patient and KOOS flow", () => {
           return jsonResponse({
             count: 2,
             items: [
-              buildImuRow({ timestamp: now, device_id: "ble_left_leg", body_part: "leg", pitch: 16.5, roll: 2.1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.4, roll: 2.8, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh/knee", pitch: 8, roll: 1, acc_x: 0.2, acc_y: 0.1, acc_z: 0.9 }),
+              buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin/ankle", pitch: 20, roll: 1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
             ],
           });
         }
@@ -609,10 +499,23 @@ describe("clinical wizard patient and KOOS flow", () => {
     render(<App />);
 
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
-    await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect((await screen.findAllByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and shin\/ankle pair\./i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/right-leg witmotion rom needs right thigh\/knee and right shin\/ankle sensors/i)).toBeInTheDocument();
+    expect(screen.queryByText(/left-leg raspberry pi rom needs left thigh\/knee \(pi2\) and left shin\/ankle \(pi3\) sensors/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show the removed demo seed controls in Step 4 live mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    expect(screen.queryByRole("button", { name: /seed demo imu data/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /clear demo data/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/demo imu sample data/i)).not.toBeInTheDocument();
   });
 
   it("shows KOOS in 14 panels with category tags", async () => {
@@ -678,7 +581,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByRole("heading", { name: /IMU movement analysis/i })).toBeInTheDocument();
     expect(screen.getByText(/capture or upload IMU movement data to calculate knee ROM/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /analyze ROM/i })).toBeInTheDocument();
-    expect(screen.getByText(/no IMU result yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no IMU result yet/i)).not.toBeInTheDocument();
 
     const imuInput = container.querySelector('input[type="file"][accept*=".csv"]');
     expect(imuInput).not.toBeNull();
