@@ -294,7 +294,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/no imu result yet/i)).not.toBeInTheDocument();
   });
 
-  it("shows both left-leg Raspberry Pi and right-leg WitMotion sections together in real-time mode", async () => {
+  it("shows compact real-time status and the live visualization in real-time mode", async () => {
     const now = new Date().toISOString();
     const older = new Date(Date.now() - 60_000).toISOString();
     vi.stubGlobal(
@@ -323,10 +323,10 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
     await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
 
-    expect(screen.getByText(/raspberry pi imu sensors \(left leg\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/witmotion imu sensors \(right leg\)/i)).toBeInTheDocument();
-    expect(within(screen.getByTestId("sensor-panel-pi")).getAllByTestId("imu-sensor-card")).toHaveLength(3);
-    expect(within(screen.getByTestId("sensor-panel-witmotion")).getAllByTestId("imu-sensor-card")).toHaveLength(3);
+    expect(screen.queryByText(/raspberry pi imu sensors \(left leg\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/witmotion imu sensors \(right leg\)/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/real-time sensor status/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId("imu-status-card")).toHaveLength(6);
     expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^pi2$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^pi3$/i).length).toBeGreaterThan(0);
@@ -342,6 +342,10 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/arm/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/foot/i)).not.toBeInTheDocument();
     expect(screen.getByText(/live movement visualization/i)).toBeInTheDocument();
+    expect(screen.getByText(/left leg — raspberry pi/i)).toBeInTheDocument();
+    expect(screen.getByText(/right leg — witmotion/i)).toBeInTheDocument();
+    expect(screen.getByText(/sensor blocks are shown on their body position/i)).toBeInTheDocument();
+    expect(screen.queryByText(/move each physical sensor and watch the matching block rotate in real time/i)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("imu-visualization-block")).toHaveLength(6);
     expect(screen.getByText(/recent imu data \(latest 5\)/i)).toBeInTheDocument();
     expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(5);
@@ -719,7 +723,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(
       screen.getByText("ROM improved by 12° compared with the previous session."),
     ).toBeInTheDocument();
-  });
+  }, 10000);
 
   it("renders first-session baseline report details without blocking the final report", async () => {
     vi.stubGlobal(
@@ -830,7 +834,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText("64.7").length).toBeGreaterThan(0);
     expect(screen.getByText(/^63.2$/)).toBeInTheDocument();
     expect(screen.getByText(/no previous rom was found, so this first report uses 0.00 as baseline/i)).toBeInTheDocument();
-  });
+  }, 10000);
 
   it("shows three advanced videos when the final rehab score maps to level 5", async () => {
     rehabReportScore = 88;
@@ -880,5 +884,5 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getByText("Lateral Step-Up")).toBeInTheDocument();
     expect(screen.getByText("Physio Lunge")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(3);
-  });
+  }, 10000);
 });

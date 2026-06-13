@@ -410,8 +410,11 @@ const STEP4_IMU_COPY = {
   legHint: "CSV mode keeps the existing offline workflow. Real-time mode uses fixed left/right hardware mapping.",
   witmotionLiveNote: "Raspberry Pi measures the left leg. WitMotion measures the right leg. Real-time mode uses both together.",
   witmotionMappingNote: "Legacy Bluetooth rows are normalized into the right-leg sensor mapping automatically.",
-  witmotionHelperText: "Move each physical sensor and watch the matching block rotate in real time.",
+  witmotionHelperText: "Sensor blocks are shown on their body position. Move each sensor and watch the matching body area rotate.",
   liveMovementTitle: "Live movement visualization",
+  realtimeStatusTitle: "Real-time sensor status",
+  leftLegPanelTitle: "Left leg — Raspberry Pi",
+  rightLegPanelTitle: "Right leg — WitMotion",
   liveSampleTitle: "Live IMU sample data",
   sampleTableHint: "Analyze ROM uses the same rows shown in this table.",
   axisTitle: "Axis and sign configuration",
@@ -1352,23 +1355,36 @@ button,input,select{font:inherit}
 .imuControlCard,.imuActionCard,.imuSensorPanel{border:1px solid var(--border);background:#fffaf0;padding:16px;min-width:0}
 .imuControlCard{display:grid;gap:16px}
 .imuActionCard{display:grid;gap:12px;align-content:start}
-.imuRealtimeSections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-.imuSensorPanel{display:grid;gap:14px}
-.imuSensorGrid{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px}
-.bleLiveLayout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.95fr);gap:16px;align-items:start}
+.imuRealtimeStatus{display:grid;gap:12px}
+.imuStatusGrid{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:10px}
+.imuStatusCard{border:1px solid var(--border);background:#fffaf0;padding:12px;display:grid;gap:6px;min-width:0}
+.imuStatusCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.imuStatusSource{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.imuStatusCard strong{font-size:14px;line-height:1.25;letter-spacing:0}
+.imuStatusCard small{font-size:11px;color:var(--muted)}
+.imuStatusMetrics{font-size:12px;color:var(--text);line-height:1.35}
 .bleVisualizationPanel{border:1px solid var(--border);background:linear-gradient(180deg,#fffaf0,#f5eddc);padding:14px 16px}
-.bleVisualizationGrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:14px}
-.bleVizCard{border:1px solid var(--border);background:rgba(255,255,255,.7);padding:12px;display:grid;gap:8px;justify-items:center;text-align:center}
-.bleVizCard strong{font-size:14px;line-height:1.3}
-.bleVizCard span{font-size:12px;color:var(--muted)}
-.bleVizStage{width:100%;min-height:92px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.08),rgba(255,255,255,.7));display:grid;place-items:center;perspective:900px}
-.bleVizStage.offline{background:linear-gradient(180deg,rgba(107,98,86,.08),rgba(255,255,255,.7))}
-.bleVizTile{position:relative;width:44px;height:60px;transform-style:preserve-3d;transform:rotateX(var(--tile-rotate-x,0deg)) rotateZ(var(--tile-rotate-z,0deg));transition:transform .24s ease-out}
+.bleVisualizationGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:14px}
+.legVizPanel{border:1px solid var(--border);background:rgba(255,255,255,.72);padding:14px;display:grid;gap:12px;min-width:0}
+.legVizPanelHeader{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.legVizPanelHeader h5{margin:0;font-size:16px;line-height:1.2}
+.legVizCanvas{position:relative;min-height:280px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.06),rgba(255,255,255,.65));display:grid;place-items:center;overflow:hidden}
+.legVizSvg{width:180px;height:250px;opacity:.34}
+.legVizSvg path,.legVizSvg circle,.legVizSvg rect{fill:#d6cfbf;stroke:#bdb29c;stroke-width:1.2}
+.legVizMarker{position:absolute;display:grid;gap:4px;justify-items:center;transform:translate(-50%,-50%)}
+.legVizStage{width:56px;height:56px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.08),rgba(255,255,255,.78));display:grid;place-items:center;perspective:900px;border-radius:16px}
+.legVizStage.offline{background:linear-gradient(180deg,rgba(107,98,86,.08),rgba(255,255,255,.78))}
+.bleVizTile{position:relative;width:34px;height:46px;transform-style:preserve-3d;transform:rotateX(var(--tile-rotate-x,0deg)) rotateZ(var(--tile-rotate-z,0deg));transition:transform .24s ease-out}
 .bleVizFace{position:absolute;inset:0;border:1px solid rgba(17,24,39,.16);border-radius:12px}
-.bleVizFaceTop{background:linear-gradient(180deg,#59d4c7,#18b7a6);transform:translateZ(12px)}
-.bleVizStage.offline .bleVizFaceTop{background:linear-gradient(180deg,#c7c1b3,#a79f90)}
-.bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(18px);height:24px;inset:auto 0 0}
-.bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(12px);width:24px;inset:0 auto 0 0}
+.bleVizFaceTop{background:linear-gradient(180deg,#59d4c7,#18b7a6);transform:translateZ(9px)}
+.legVizStage.offline .bleVizFaceTop{background:linear-gradient(180deg,#c7c1b3,#a79f90)}
+.bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(14px);height:18px;inset:auto 0 0}
+.bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(9px);width:18px;inset:0 auto 0 0}
+.legVizMarkerLabel{font-size:11px;color:var(--muted);text-align:center;line-height:1.2}
+.legVizLegend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.legVizLegendItem{border:1px solid var(--border);background:#f8f3e8;padding:8px 10px;display:grid;gap:3px}
+.legVizLegendItem strong{font-size:12px;line-height:1.25}
+.legVizLegendItem span{font-size:11px;color:var(--muted);line-height:1.35}
 .imuLegResultGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .imuLegResultCard{border:1px solid var(--border);background:#f8f3e8;padding:14px;display:grid;gap:10px}
 .imuLegResultCard h5{margin:0;font-size:16px}
@@ -1553,9 +1569,9 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .toc{display:none}
   .main{padding:28px 34px 52px}
   .klLayout{grid-template-columns:1fr}
-  .bleLiveLayout{grid-template-columns:1fr}
-  .imuDashboardTop,.imuRealtimeSections,.imuLegResultGrid{grid-template-columns:1fr}
-  .bleVisualizationGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .imuDashboardTop,.imuLegResultGrid{grid-template-columns:1fr}
+  .imuStatusGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .bleVisualizationGrid{grid-template-columns:1fr}
 }
 @media (max-width:760px){
   .shell{grid-template-columns:1fr}
@@ -1566,7 +1582,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .bleVisualizationGrid,.imuSensorGrid,.imuSourceCards,.sensorCardSummary,.sensorMetrics{grid-template-columns:1fr}
+  .bleVisualizationGrid,.imuStatusGrid,.imuSourceCards,.sensorCardSummary,.sensorMetrics,.legVizLegend{grid-template-columns:1fr}
   .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
@@ -1703,6 +1719,14 @@ const WITMOTION_IMU_DEVICE_CONFIG = [
   { deviceId: "ble_right_shin", label: "Right shin / ankle", leg: "right", bodyPart: "shin/ankle" },
 ];
 const REALTIME_IMU_DEVICE_CONFIG = [...PI_IMU_DEVICE_CONFIG, ...WITMOTION_IMU_DEVICE_CONFIG];
+const LEG_VISUALIZATION_LAYOUT = {
+  pi1: { left: "46%", top: "22%" },
+  pi2: { left: "51%", top: "47%" },
+  pi3: { left: "55%", top: "75%" },
+  ble_right_hip: { left: "54%", top: "22%" },
+  ble_right_thigh: { left: "49%", top: "47%" },
+  ble_right_shin: { left: "45%", top: "75%" },
+};
 
 function createDefaultLiveSensorConfig() {
   return {
@@ -3538,76 +3562,29 @@ export default function App() {
 
                 {imuDataSource === "live" ? (
                   <>
-                    <div className="imuRealtimeSections">
-                      {[
-                        { title: liveImuText.raspberryPiSensors, panelKey: "pi", cards: step4PiSensorCards },
-                        { title: liveImuText.bluetoothSensors, panelKey: "witmotion", cards: step4WitMotionSensorCards },
-                      ].map((section) => (
-                        <div className="imuSensorPanel" key={section.title} data-testid={`sensor-panel-${section.panelKey}`}>
-                          <div className="reportBlockHead">
-                            <h4>{section.title}</h4>
-                          </div>
-                          <div className="imuSensorGrid" aria-label={section.title}>
-                            {section.cards.map((card) => (
-                              <article key={card.deviceId} className="summaryCard sensorCard" data-testid="imu-sensor-card">
-                                <div className="sensorCardHeader">
-                                  <div>
-                                    <small>{card.deviceId}</small>
-                                    <strong className="summaryDate">{card.label}</strong>
-                                  </div>
-                                  <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.isOnline ? liveImuText.online : step4ImuText.waitingStatus}</span>
-                                </div>
-                                {card.latestRow ? (
-                                  <div className="sensorMeta">
-                                    <div className="sensorMetrics">
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.pitch}</small>
-                                        <strong>{f(card.latestRow.pitch, "°")}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.roll}</small>
-                                        <strong>{f(card.latestRow.roll, "°")}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.yaw}</small>
-                                        <strong>{f(card.latestRow.yaw, "°")}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accX}</small>
-                                        <strong>{f(card.latestRow.acc_x)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accY}</small>
-                                        <strong>{f(card.latestRow.acc_y)}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.accZ}</small>
-                                        <strong>{f(card.latestRow.acc_z)}</strong>
-                                      </div>
-                                    </div>
-                                    <div className="sensorCardSummary">
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.leg}</small>
-                                        <strong>{card.leg}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.bodyPart}</small>
-                                        <strong>{card.bodyPart}</strong>
-                                      </div>
-                                      <div className="sensorMetric">
-                                        <small>{liveImuText.lastUpdated}</small>
-                                        <strong>{formatDate(card.latestRow.timestamp)}</strong>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
-                                )}
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="imuSensorPanel imuRealtimeStatus">
+                      <div className="reportBlockHead">
+                        <h4>{step4ImuText.realtimeStatusTitle}</h4>
+                      </div>
+                      <div className="imuStatusGrid" aria-label={step4ImuText.realtimeStatusTitle}>
+                        {step4VisualizationSensors.map((card) => (
+                          <article key={`${card.deviceId}-status`} className="imuStatusCard" data-testid="imu-status-card">
+                            <div className="imuStatusCardTop">
+                              <div>
+                                <div className="imuStatusSource">{getImuSourceLabel(card.latestRow || { device_id: card.deviceId }, liveImuText)}</div>
+                                <strong>{card.label}</strong>
+                              </div>
+                              <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.isOnline ? liveImuText.online : step4ImuText.waitingStatus}</span>
+                            </div>
+                            <small>{card.deviceId}</small>
+                            <div className="imuStatusMetrics">
+                              {card.latestRow
+                                ? `Pitch ${f(card.latestRow.pitch, "°")} · Roll ${f(card.latestRow.roll, "°")}`
+                                : liveImuText.waitingForSensor}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
@@ -3616,27 +3593,59 @@ export default function App() {
                       </div>
                       <p className="microNote">{step4ImuText.witmotionHelperText}</p>
                       <div className="bleVisualizationGrid">
-                        {step4VisualizationSensors.map((card) => {
-                          const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
-                          const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
-                          const tileStyle = {
-                            "--tile-rotate-x": `${pitch}deg`,
-                            "--tile-rotate-z": `${roll}deg`,
-                          };
-                          return (
-                            <div key={`${card.deviceId}-viz`} className="bleVizCard" data-testid="imu-visualization-block">
-                              <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
-                                <div className="bleVizTile" style={tileStyle}>
-                                  <span className="bleVizFace bleVizFaceTop" />
-                                  <span className="bleVizFace bleVizFaceFront" />
-                                  <span className="bleVizFace bleVizFaceSide" />
-                                </div>
-                              </div>
-                              <strong>{`${card.label} (${card.deviceId})`}</strong>
-                              <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
+                        {[
+                          { title: step4ImuText.leftLegPanelTitle, cards: step4PiSensorCards },
+                          { title: step4ImuText.rightLegPanelTitle, cards: step4WitMotionSensorCards },
+                        ].map((panel) => (
+                          <div className="legVizPanel" key={panel.title}>
+                            <div className="legVizPanelHeader">
+                              <h5>{panel.title}</h5>
                             </div>
-                          );
-                        })}
+                            <div className="legVizCanvas">
+                              <svg className="legVizSvg" viewBox="0 0 180 250" aria-hidden="true">
+                                <circle cx="90" cy="28" r="18" />
+                                <rect x="64" y="40" width="52" height="28" rx="14" />
+                                <path d="M76 66 C66 96, 68 118, 74 144 L86 186 C88 194, 86 208, 82 226 L98 226 C102 206, 104 192, 101 182 L94 148 C91 128, 92 104, 104 74 Z" />
+                                <path d="M106 66 C116 96, 114 118, 108 144 L96 186 C94 194, 96 208, 100 226 L84 226 C80 206, 78 192, 81 182 L88 148 C91 128, 90 104, 78 74 Z" />
+                              </svg>
+                              {panel.cards.map((card) => {
+                                const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
+                                const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
+                                const tileStyle = {
+                                  "--tile-rotate-x": `${pitch}deg`,
+                                  "--tile-rotate-z": `${roll}deg`,
+                                };
+                                const position = LEG_VISUALIZATION_LAYOUT[card.deviceId] || { left: "50%", top: "50%" };
+                                return (
+                                  <div
+                                    key={`${card.deviceId}-viz`}
+                                    className="legVizMarker"
+                                    data-testid="imu-visualization-block"
+                                    style={{ left: position.left, top: position.top }}
+                                    title={`${card.deviceId} — ${card.label}`}
+                                  >
+                                    <div className={`legVizStage ${card.isOnline ? "online" : "offline"}`}>
+                                      <div className="bleVizTile" style={tileStyle}>
+                                        <span className="bleVizFace bleVizFaceTop" />
+                                        <span className="bleVizFace bleVizFaceFront" />
+                                        <span className="bleVizFace bleVizFaceSide" />
+                                      </div>
+                                    </div>
+                                    <div className="legVizMarkerLabel">{card.deviceId}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="legVizLegend">
+                              {panel.cards.map((card) => (
+                                <div className="legVizLegendItem" key={`${card.deviceId}-legend`}>
+                                  <strong>{card.deviceId}</strong>
+                                  <span>{card.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
