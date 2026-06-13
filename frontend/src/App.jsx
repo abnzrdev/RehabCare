@@ -398,8 +398,10 @@ const STEP4_IMU_COPY = {
   leftSide: "Left",
   rightSide: "Right",
   legHint: "The same three physical sensors can be attached to either leg. Live analysis uses this UI choice as analysis_leg.",
-  witmotionLiveNote: "WitMotion sensors are live. Knee ROM calculation needs a mapped thigh/knee and ankle/shin pair.",
-  witmotionMappingNote: "Move each physical sensor and watch which card changes, then label the device.",
+  witmotionLiveNote: "WitMotion sensors are live. Knee ROM calculation needs a mapped thigh/knee and shin/ankle pair.",
+  witmotionMappingNote: "Legacy Bluetooth rows are remapped to these lower-limb labels automatically.",
+  witmotionHelperText: "Move each physical sensor and watch the matching block rotate.",
+  liveMovementTitle: "Live movement visualization",
   liveSampleTitle: "Live IMU sample data",
   sampleTableHint: "Analyze ROM uses the same rows shown in this table.",
   axisTitle: "Axis and sign configuration",
@@ -1330,6 +1332,20 @@ button,input,select{font:inherit}
 .sensorMetric{border:1px solid var(--border);background:#f8f3e8;padding:10px}
 .sensorMetric strong{margin-top:4px;font-size:15px;line-height:1.25;letter-spacing:0}
 .summaryDate{font-size:16px !important;line-height:1.35 !important;letter-spacing:0 !important}
+.bleLiveLayout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.95fr);gap:16px;align-items:start}
+.bleVisualizationPanel{border:1px solid var(--border);background:linear-gradient(180deg,#fffaf0,#f5eddc);padding:14px 16px}
+.bleVisualizationGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.bleVizCard{border:1px solid var(--border);background:rgba(255,255,255,.7);padding:12px;display:grid;gap:8px;justify-items:center;text-align:center}
+.bleVizCard strong{font-size:14px;line-height:1.3}
+.bleVizCard span{font-size:12px;color:var(--muted)}
+.bleVizStage{width:100%;min-height:124px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.08),rgba(255,255,255,.7));display:grid;place-items:center;perspective:900px}
+.bleVizStage.offline{background:linear-gradient(180deg,rgba(107,98,86,.08),rgba(255,255,255,.7))}
+.bleVizTile{position:relative;width:54px;height:74px;transform-style:preserve-3d;transform:rotateX(var(--tile-rotate-x,0deg)) rotateZ(var(--tile-rotate-z,0deg));transition:transform .24s ease-out}
+.bleVizFace{position:absolute;inset:0;border:1px solid rgba(17,24,39,.16);border-radius:12px}
+.bleVizFaceTop{background:linear-gradient(180deg,#59d4c7,#18b7a6);transform:translateZ(14px)}
+.bleVizStage.offline .bleVizFaceTop{background:linear-gradient(180deg,#c7c1b3,#a79f90)}
+.bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(24px);height:28px;inset:auto 0 0}
+.bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(14px);width:28px;inset:0 auto 0 0}
 .metric{background:#f8f3e8;border:1px solid var(--border);padding:11px}
 .metric small{color:var(--muted);font-size:12px;font-weight:700}
 .metric strong{display:block;margin-top:6px;font-size:26px;line-height:1.1;letter-spacing:-.035em}
@@ -1484,9 +1500,13 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
 .reportList li{margin:6px 0}
 .tableTitle{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:10px 12px 0}
 .dataTableWrap{margin-top:14px;overflow:auto;border:1px solid var(--border);background:#f8f3e8}
+.imuTableWrap{max-width:100%;overflow-x:auto}
 .dataTable{width:100%;border-collapse:collapse;font-size:12px}
+.imuDataTable{min-width:1040px;font-size:13px}
 .dataTable th,.dataTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+.imuDataTable th,.imuDataTable td{padding:12px 14px}
 .dataTable th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:#f3ede0}
+.imuDataTable thead th{position:sticky;top:0;z-index:1;background:#efe6d4}
 .dataTable tr:last-child td{border-bottom:0}
 .betaTable{width:100%;border-collapse:collapse;margin-top:10px;background:#f8f3e8;border:1px solid var(--border);font-family:"IBM Plex Mono",monospace;font-size:12px}
 .betaTable th,.betaTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left}
@@ -1503,6 +1523,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .toc{display:none}
   .main{padding:28px 34px 52px}
   .klLayout{grid-template-columns:1fr}
+  .bleLiveLayout{grid-template-columns:1fr}
 }
 @media (max-width:760px){
   .shell{grid-template-columns:1fr}
@@ -1513,6 +1534,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
+  .bleVisualizationGrid{grid-template-columns:1fr 1fr}
   .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
@@ -1637,11 +1659,17 @@ const LIVE_IMU_ROLE_ORDER = [
   { key: "knee", titleKey: "kneeSensor", deviceId: "pi2" },
   { key: "ankle", titleKey: "ankleSensor", deviceId: "pi3" },
 ];
+const LEGACY_BLE_DEVICE_ID_MAP = {
+  ble_left_arm: "ble_left_thigh",
+  ble_left_leg: "ble_left_shin",
+  ble_right_arm: "ble_right_thigh",
+  ble_right_leg: "ble_right_shin",
+};
 const BLE_IMU_DEVICE_CONFIG = [
-  { deviceId: "ble_left_arm", label: "Left_Arm", leg: "left", bodyPart: "arm" },
-  { deviceId: "ble_left_leg", label: "Left_Leg", leg: "left", bodyPart: "leg" },
-  { deviceId: "ble_right_arm", label: "Right_Arm", leg: "right", bodyPart: "arm" },
-  { deviceId: "ble_right_leg", label: "Right_Leg", leg: "right", bodyPart: "leg" },
+  { deviceId: "ble_left_thigh", label: "Left thigh / knee", leg: "left", bodyPart: "thigh/knee" },
+  { deviceId: "ble_left_shin", label: "Left shin / ankle", leg: "left", bodyPart: "shin/ankle" },
+  { deviceId: "ble_right_thigh", label: "Right thigh / knee", leg: "right", bodyPart: "thigh/knee" },
+  { deviceId: "ble_right_shin", label: "Right shin / ankle", leg: "right", bodyPart: "shin/ankle" },
 ];
 
 function createDefaultLiveSensorConfig() {
@@ -1673,6 +1701,11 @@ function getImuDeviceId(row) {
   return String(row?.device_id || "").trim();
 }
 
+function normalizeBluetoothDeviceId(deviceId) {
+  const value = String(deviceId || "").trim();
+  return LEGACY_BLE_DEVICE_ID_MAP[value] || value;
+}
+
 function isBluetoothImuRow(row) {
   return getImuDeviceId(row).startsWith("ble_");
 }
@@ -1698,6 +1731,33 @@ function buildLatestRowsByDevice(rows) {
     if (!existing || rowTime > existingTime) latestByDevice.set(deviceId, row);
   }
   return latestByDevice;
+}
+
+function buildLatestBluetoothRowsByDevice(rows) {
+  const latestByDevice = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!isBluetoothImuRow(row)) continue;
+    const deviceId = normalizeBluetoothDeviceId(getImuDeviceId(row));
+    if (!deviceId) continue;
+    const existing = latestByDevice.get(deviceId);
+    const rowTime = toTimestampMs(row?.timestamp) ?? -1;
+    const existingTime = toTimestampMs(existing?.timestamp) ?? -1;
+    if (!existing || rowTime > existingTime) latestByDevice.set(deviceId, row);
+  }
+  return latestByDevice;
+}
+
+function getBluetoothDeviceConfig(deviceId) {
+  const normalizedDeviceId = normalizeBluetoothDeviceId(deviceId);
+  return BLE_IMU_DEVICE_CONFIG.find((device) => device.deviceId === normalizedDeviceId) || null;
+}
+
+function getBluetoothLegLabel(row) {
+  return getBluetoothDeviceConfig(getImuDeviceId(row))?.leg || row?.leg || "-";
+}
+
+function getBluetoothBodyPartLabel(row) {
+  return getBluetoothDeviceConfig(getImuDeviceId(row))?.bodyPart || row?.body_part || "-";
 }
 
 function getConfiguredAngleValue(row, axis) {
@@ -1748,19 +1808,17 @@ function buildStep4LiveSensorCards({ latestRows, rows, config, baselines, analys
 }
 
 function buildBluetoothLiveSensorCards({ latestRows, rows, liveCopy }) {
-  const mergedLatestRows = buildLatestRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
+  const mergedLatestRows = buildLatestBluetoothRowsByDevice([...(Array.isArray(latestRows) ? latestRows : []), ...(Array.isArray(rows) ? rows : [])]);
   return BLE_IMU_DEVICE_CONFIG
     .map((device) => {
       const latestRow = mergedLatestRows.get(device.deviceId) || null;
-      if (!latestRow) return null;
       return {
         ...device,
         latestRow,
-        isOnline: isLiveSensorRecent(latestRow),
-        statusLabel: isLiveSensorRecent(latestRow) ? liveCopy.online : liveCopy.waitingForData,
+        isOnline: Boolean(latestRow && isLiveSensorRecent(latestRow)),
+        statusLabel: latestRow ? (isLiveSensorRecent(latestRow) ? liveCopy.online : liveCopy.waitingForData) : liveCopy.waitingForSensor,
       };
-    })
-    .filter(Boolean);
+    });
 }
 
 function buildLiveImuAnalysis({ latestRows, rows, config, baselines, analysisLeg, copy, fallbackCopy }) {
@@ -3258,12 +3316,12 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="dataTableWrap" id="imu-live">
+                      <div className="dataTableWrap imuTableWrap" id="imu-live">
                         <div className="tableTitle">{liveImuText.recentTable}</div>
                         {step4RecentLiveRows.length === 0 ? (
                           <div className="microNote">{liveImuText.noRows}</div>
                         ) : (
-                          <table className="dataTable">
+                          <table className="dataTable imuDataTable">
                             <thead>
                               <tr>
                                 <th>{liveImuText.timestamp}</th>
@@ -3356,67 +3414,99 @@ export default function App() {
                       <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
                       {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
                       <div className="reportBlock">
-                        {step4BluetoothSensorCards.length === 0 ? (
-                          <div className="microNote">{liveImuText.noRows}</div>
-                        ) : (
+                        <div className="bleLiveLayout">
                           <div className="summaryCards sectionBody" aria-label={liveImuText.bluetoothSensors}>
                             {step4BluetoothSensorCards.map((card) => (
                               <article key={card.deviceId} className="summaryCard sensorCard">
                                 <div className="sensorCardHeader">
                                   <div>
-                                    <small>{card.label}</small>
-                                    <strong className="summaryDate">{card.deviceId}</strong>
+                                    <small>{card.deviceId}</small>
+                                    <strong className="summaryDate">{card.label}</strong>
                                   </div>
                                   <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.statusLabel}</span>
                                 </div>
-                                <div className="sensorMeta">
-                                  <div className="sensorMetrics">
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.leg}</small>
-                                      <strong>{card.latestRow.leg || card.leg}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.bodyPart}</small>
-                                      <strong>{card.latestRow.body_part || card.bodyPart}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.pitch}</small>
-                                      <strong>{f(card.latestRow.pitch, "°")}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.roll}</small>
-                                      <strong>{f(card.latestRow.roll, "°")}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accX}</small>
-                                      <strong>{f(card.latestRow.acc_x)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accY}</small>
-                                      <strong>{f(card.latestRow.acc_y)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.accZ}</small>
-                                      <strong>{f(card.latestRow.acc_z)}</strong>
-                                    </div>
-                                    <div className="sensorMetric">
-                                      <small>{liveImuText.lastUpdated}</small>
-                                      <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                {card.latestRow ? (
+                                  <div className="sensorMeta">
+                                    <div className="sensorMetrics">
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.leg}</small>
+                                        <strong>{getBluetoothLegLabel(card.latestRow)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.bodyPart}</small>
+                                        <strong>{getBluetoothBodyPartLabel(card.latestRow)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.pitch}</small>
+                                        <strong>{f(card.latestRow.pitch, "°")}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.roll}</small>
+                                        <strong>{f(card.latestRow.roll, "°")}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accX}</small>
+                                        <strong>{f(card.latestRow.acc_x)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accY}</small>
+                                        <strong>{f(card.latestRow.acc_y)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accZ}</small>
+                                        <strong>{f(card.latestRow.acc_z)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.lastUpdated}</small>
+                                        <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
+                                ) : (
+                                  <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
+                                )}
                               </article>
                             ))}
                           </div>
-                        )}
+
+                          <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
+                            <div className="reportBlockHead">
+                              <h4>{step4ImuText.liveMovementTitle}</h4>
+                            </div>
+                            <p className="microNote">{step4ImuText.witmotionHelperText}</p>
+                            <div className="bleVisualizationGrid">
+                              {step4BluetoothSensorCards.map((card) => {
+                                const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
+                                const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
+                                const tileStyle = {
+                                  "--tile-rotate-x": `${pitch}deg`,
+                                  "--tile-rotate-z": `${roll}deg`,
+                                };
+                                return (
+                                  <div key={`${card.deviceId}-viz`} className="bleVizCard">
+                                    <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
+                                      <div className="bleVizTile" style={tileStyle}>
+                                        <span className="bleVizFace bleVizFaceTop" />
+                                        <span className="bleVizFace bleVizFaceFront" />
+                                        <span className="bleVizFace bleVizFaceSide" />
+                                      </div>
+                                    </div>
+                                    <strong>{card.label}</strong>
+                                    <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="dataTableWrap" id="imu-live">
+                      <div className="dataTableWrap imuTableWrap" id="imu-live">
                         <div className="tableTitle">{liveImuText.recentTable}</div>
                         {step4RecentLiveRows.length === 0 ? (
                           <div className="microNote">{liveImuText.noRows}</div>
                         ) : (
-                          <table className="dataTable">
+                          <table className="dataTable imuDataTable">
                             <thead>
                               <tr>
                                 <th>{liveImuText.timestamp}</th>
@@ -3437,8 +3527,8 @@ export default function App() {
                                   <td>{formatDate(row.timestamp)}</td>
                                   <td>{getImuSourceLabel(row, liveImuText)}</td>
                                   <td>{row.device_id || "-"}</td>
-                                  <td>{row.leg || "-"}</td>
-                                  <td>{row.body_part || "-"}</td>
+                                  <td>{getBluetoothLegLabel(row)}</td>
+                                  <td>{getBluetoothBodyPartLabel(row)}</td>
                                   <td>{f(row.pitch, "°")}</td>
                                   <td>{f(row.roll, "°")}</td>
                                   <td>{f(row.acc_x)}</td>

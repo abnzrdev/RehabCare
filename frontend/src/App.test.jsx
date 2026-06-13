@@ -293,7 +293,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByDisplayValue("1").length).toBeGreaterThan(0);
   });
 
-  it("shows only Bluetooth WitMotion cards and mapping note in WitMotion mode", async () => {
+  it("shows lower-limb Bluetooth WitMotion cards, legacy remapping, and the movement visualization in WitMotion mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -309,19 +309,23 @@ describe("clinical wizard patient and KOOS flow", () => {
               buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
               buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
               buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_shin", body_part: "shin/ankle", pitch: 9.1, roll: 7.4, acc_x: 0.16, acc_y: 0.08, acc_z: 0.82 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 15.6, roll: 6.2, acc_x: 0.27, acc_y: 0.09, acc_z: 0.84 }),
             ],
           });
         }
         if (url.includes("/api/imu/data")) {
           return jsonResponse({
-            count: 5,
+            count: 7,
             items: [
               buildImuRow({ timestamp: now, device_id: "pi1", body_part: "hip", pitch: 8.4, roll: 1.1, acc_x: 0.11, acc_y: 0.01, acc_z: 0.97 }),
               buildImuRow({ timestamp: now, device_id: "pi2", body_part: "thigh", pitch: 17.2, roll: 2.2, acc_x: 0.21, acc_y: 0.02, acc_z: 0.96 }),
               buildImuRow({ timestamp: now, device_id: "pi3", body_part: "shin", pitch: 33.9, roll: 3.3, acc_x: 0.31, acc_y: 0.03, acc_z: 0.95 }),
               buildImuRow({ timestamp: now, device_id: "ble_left_arm", body_part: "arm", pitch: 12.3, roll: 4.5, acc_x: 0.1, acc_y: 0.2, acc_z: 0.9 }),
-              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "ble_left_shin", body_part: "shin/ankle", pitch: 9.1, roll: 7.4, acc_x: 0.16, acc_y: 0.08, acc_z: 0.82 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 18.7, roll: 5.1, acc_x: 0.3, acc_y: 0.1, acc_z: 0.8 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_leg", leg: "right", body_part: "leg", pitch: 15.6, roll: 6.2, acc_x: 0.27, acc_y: 0.09, acc_z: 0.84 }),
             ],
           });
         }
@@ -341,12 +345,18 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     expect(screen.queryByText(/raspberry pi knee sensors/i)).not.toBeInTheDocument();
     expect(screen.getByText(/bluetooth \/ witmotion imu sensors/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^ble_right_leg$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^arm$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^leg$/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and ankle\/shin pair\./i)).toBeInTheDocument();
-    expect(screen.getByText(/move each physical sensor and watch which card changes, then label the device\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/left thigh \/ knee/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/left shin \/ ankle/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right thigh \/ knee/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/right shin \/ ankle/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^left_arm$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^arm$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Left_Leg$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Right_Leg$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and shin\/ankle pair\./i)).toBeInTheDocument();
+    expect(screen.getByText(/move each physical sensor and watch the matching block rotate\./i)).toBeInTheDocument();
+    expect(screen.getByText(/live movement visualization/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/live movement visualization/i)).toBeInTheDocument();
     expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
   });
 
@@ -415,7 +425,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/^ble_left_arm$/i)).not.toBeInTheDocument();
   });
 
-  it("shows only Bluetooth rows in the recent IMU table for WitMotion mode", async () => {
+  it("shows only Bluetooth rows in the recent IMU table for WitMotion mode and remaps legacy device labels", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
       "fetch",
@@ -455,6 +465,8 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByText(/bluetooth/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^pi1$/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/^ble_left_arm$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/left thigh \/ knee/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^arm$/i)).not.toBeInTheDocument();
   });
 
   it("does not show the removed demo seed controls in Step 4 live mode", async () => {
@@ -600,7 +612,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getByRole("radio", { name: /use witmotion bluetooth sensor data/i }));
     await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
 
-    expect((await screen.findAllByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and ankle\/shin pair\./i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/witmotion sensors are live\. knee rom calculation needs a mapped thigh\/knee and shin\/ankle pair\./i)).length).toBeGreaterThan(0);
   });
 
   it("shows KOOS in 14 panels with category tags", async () => {
@@ -733,6 +745,14 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /open on youtube/i }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps the wizard at six steps and does not render any Step 7 UI", async () => {
+    const { container } = render(<App />);
+
+    expect(container.querySelectorAll(".stepList .stepItem")).toHaveLength(6);
+    expect(screen.queryByText(/step 7/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /step 7/i })).not.toBeInTheDocument();
   });
 
   it("renders backend interpretation and delta note in the final report", async () => {

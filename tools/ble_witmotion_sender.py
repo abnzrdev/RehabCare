@@ -34,10 +34,10 @@ NOTIFY_UUID_CANDIDATES = (
 # To use 4 physical WitMotion sensors, set all 4 MAC addresses here.
 # To use only 2 sensors, leave the unused entries as None.
 DEFAULT_SENSOR_MAP = [
-    {"label": "Left_Arm", "device_id": "ble_left_arm", "leg": "left", "body_part": "arm", "mac": "C9:CE:CE:5D:A9:BF"},
-    {"label": "Left_Leg", "device_id": "ble_left_leg", "leg": "left", "body_part": "leg", "mac": None},
-    {"label": "Right_Arm", "device_id": "ble_right_arm", "leg": "right", "body_part": "arm", "mac": None},
-    {"label": "Right_Leg", "device_id": "ble_right_leg", "leg": "right", "body_part": "leg", "mac": None},
+    {"label": "Left_Thigh_Knee", "device_id": "ble_left_thigh", "leg": "left", "body_part": "thigh/knee", "mac": "C9:CE:CE:5D:A9:BF"},
+    {"label": "Left_Shin_Ankle", "device_id": "ble_left_shin", "leg": "left", "body_part": "shin/ankle", "mac": None},
+    {"label": "Right_Thigh_Knee", "device_id": "ble_right_thigh", "leg": "right", "body_part": "thigh/knee", "mac": None},
+    {"label": "Right_Shin_Ankle", "device_id": "ble_right_shin", "leg": "right", "body_part": "shin/ankle", "mac": None},
 ]
 
 
@@ -90,6 +90,10 @@ class SensorState:
             "gyro_z": round(self.gyro_z, 3),
             "temperature": round(self.temperature, 3),
         }
+
+
+def human_label(label: str) -> str:
+    return label.replace("_", " ")
 
 
 class WitMotionParser:
@@ -203,7 +207,16 @@ def load_sensor_configs() -> list[SensorConfig]:
             raise ValueError("ORTHO_BLE_SENSORS must be a JSON list or object.")
     else:
         items = DEFAULT_SENSOR_MAP
-    return [SensorConfig(**item) for item in items]
+    configs = [SensorConfig(**item) for item in items]
+    print("Configured WitMotion sensors:")
+    for config in configs:
+        print(
+            f"  - {human_label(config.label)}"
+            f" -> {config.device_id}"
+            f" ({config.leg} {config.body_part})"
+            f" mac={config.mac or 'auto-scan'}"
+        )
+    return configs
 
 
 def looks_like_witmotion(device_name: str | None) -> bool:
@@ -226,7 +239,7 @@ async def discover_sensor_assignments(configs: list[SensorConfig]) -> dict[str, 
             continue
         assignments[config.device_id] = (device.address, device.name)
         used_addresses.add(device.address.upper())
-        print(f"FOUND SENSOR {config.device_id} mac={device.address} name={device.name or '-'}")
+        print(f"FOUND SENSOR {human_label(config.label)} -> {config.device_id} mac={device.address} name={device.name or '-'}")
 
     remaining = [device for device in devices if device.address.upper() not in used_addresses and looks_like_witmotion(device.name)]
     for config in configs:
@@ -235,7 +248,7 @@ async def discover_sensor_assignments(configs: list[SensorConfig]) -> dict[str, 
         device = remaining.pop(0)
         assignments[config.device_id] = (device.address, device.name)
         used_addresses.add(device.address.upper())
-        print(f"FOUND SENSOR {config.device_id} mac={device.address} name={device.name or '-'}")
+        print(f"FOUND SENSOR {human_label(config.label)} -> {config.device_id} mac={device.address} name={device.name or '-'}")
 
     return assignments
 
@@ -269,11 +282,11 @@ async def connect_sensor(state: SensorState) -> None:
 
                 await client.start_notify(state.notify_uuid, handle)
                 state.connected = True
-                print(f"CONNECTED {state.config.device_id} mac={state.address} uuid={state.notify_uuid}")
+                print(f"CONNECTED {human_label(state.config.label)} ({state.config.device_id}) mac={state.address} uuid={state.notify_uuid}")
                 while client.is_connected:
                     await asyncio.sleep(1.0)
         except Exception as exc:  # noqa: BLE001
-            print(f"CONNECT FAILED {state.config.device_id} error={exc}")
+            print(f"CONNECT FAILED {human_label(state.config.label)} ({state.config.device_id}) error={exc}")
         finally:
             state.connected = False
             await asyncio.sleep(2.0)
@@ -291,11 +304,11 @@ async def post_sensor_loop(states: list[SensorState]) -> None:
                 response = session.post(ORTHO_API_URL, json=payload, timeout=5.0)
                 if response.ok:
                     state.last_posted = time.time()
-                    print(f"POST OK {response.status_code} {state.config.device_id}")
+                    print(f"POST OK {response.status_code} {human_label(state.config.label)} ({state.config.device_id})")
                 else:
-                    print(f"POST FAILED {response.status_code} {state.config.device_id} body={response.text[:200]}")
+                    print(f"POST FAILED {response.status_code} {human_label(state.config.label)} ({state.config.device_id}) body={response.text[:200]}")
             except Exception as exc:  # noqa: BLE001
-                print(f"POST FAILED {state.config.device_id} error={exc}")
+                print(f"POST FAILED {human_label(state.config.label)} ({state.config.device_id}) error={exc}")
         await asyncio.sleep(ORTHO_BLE_POST_INTERVAL_SECONDS)
 
 
@@ -312,12 +325,12 @@ async def dashboard_loop(states: list[SensorState]) -> None:
             age = "-" if not state.last_seen else f"{now - state.last_seen:5.1f}s"
             lines.extend([
                 (
-                    f"{state.config.label:<10} {state.config.device_id:<15} "
+                    f"{human_label(state.config.label):<18} {state.config.device_id:<17} "
                     f"mac={state.address or '-':<17} connected={'yes' if state.connected else 'no ':<3} "
                     f"last={age:<6} packets={state.packets:<6}"
                 ),
                 (
-                    f"  leg={state.config.leg:<5} body_part={state.config.body_part:<4} "
+                    f"  leg={state.config.leg:<5} body_part={state.config.body_part:<11} "
                     f"pitch={state.pitch:7.2f} roll={state.roll:7.2f} yaw={state.yaw:7.2f} temp={state.temperature:6.2f}"
                 ),
                 (

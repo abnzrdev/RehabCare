@@ -42,10 +42,11 @@ done
 
 echo
 echo "4) Auto assignment:"
-LABELS=("Left_Arm" "Left_Leg" "Right_Arm" "Right_Leg")
-DEVICE_IDS=("ble_left_arm" "ble_left_leg" "ble_right_arm" "ble_right_leg")
+LABELS=("Left_Thigh_Knee" "Left_Shin_Ankle" "Right_Thigh_Knee" "Right_Shin_Ankle")
+DISPLAY_LABELS=("Left thigh / knee" "Left shin / ankle" "Right thigh / knee" "Right shin / ankle")
+DEVICE_IDS=("ble_left_thigh" "ble_left_shin" "ble_right_thigh" "ble_right_shin")
 LEGS=("left" "left" "right" "right")
-BODY_PARTS=("arm" "leg" "arm" "leg")
+BODY_PARTS=("thigh/knee" "shin/ankle" "thigh/knee" "shin/ankle")
 
 JSON="["
 COUNT=0
@@ -53,7 +54,7 @@ COUNT=0
 for idx in 0 1 2 3; do
   [ -n "${MACS[$idx]:-}" ] || continue
 
-  echo "  ${LABELS[$idx]} -> ${MACS[$idx]}"
+  echo "  ${DISPLAY_LABELS[$idx]} -> ${MACS[$idx]} (${DEVICE_IDS[$idx]})"
 
   [ "$COUNT" -gt 0 ] && JSON+=","
   JSON+="{\"label\":\"${LABELS[$idx]}\",\"device_id\":\"${DEVICE_IDS[$idx]}\",\"leg\":\"${LEGS[$idx]}\",\"body_part\":\"${BODY_PARTS[$idx]}\",\"mac\":\"${MACS[$idx]}\"}"
