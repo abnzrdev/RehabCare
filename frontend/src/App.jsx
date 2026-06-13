@@ -295,7 +295,7 @@ const REALTIME_IMU_COPY = {
     hipSensor: "Hip sensor",
     kneeSensor: "Knee / thigh sensor",
     ankleSensor: "Ankle / shin sensor",
-    recentTable: "Recent IMU data (live)",
+    recentTable: "Recent IMU data (latest 5)",
     refreshNote: "Auto-refresh every 1.5 seconds",
     noSensor: "Waiting for live sensor data.",
     waitingForSensor: "Waiting for sensor",
@@ -1333,7 +1333,7 @@ button,input,select{font:inherit}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .metrics.wideMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}
 .summaryCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.imuSourceCards{grid-template-columns:repeat(2,minmax(0,1fr))}
+.imuSourceCards{grid-template-columns:repeat(2,minmax(220px,1fr))}
 .summaryCard{background:#fffaf0;border:1px solid var(--border);padding:14px 16px;display:grid;gap:6px}
 .summaryCard small{color:var(--muted);font-size:12px;font-weight:700}
 .summaryCard strong{display:block;font-size:30px;line-height:1.05;letter-spacing:-.04em}
@@ -1343,26 +1343,32 @@ button,input,select{font:inherit}
 .sensorCardSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .sensorCardPlaceholder{display:grid;place-items:center;min-height:140px;border:1px dashed var(--border);background:#f8f3e8;color:var(--muted);font-weight:700}
 .sensorMeta{display:grid;gap:8px}
-.sensorMetrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sensorMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .sensorMetric{border:1px solid var(--border);background:#f8f3e8;padding:10px}
-.sensorMetric strong{margin-top:4px;font-size:15px;line-height:1.25;letter-spacing:0}
+.sensorMetric strong{margin-top:4px;font-size:15px;line-height:1.25;letter-spacing:0;word-break:break-word}
 .summaryDate{font-size:16px !important;line-height:1.35 !important;letter-spacing:0 !important}
-.imuRealtimeSections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-.imuSensorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.imuStepLayout{display:grid;gap:18px}
+.imuDashboardTop{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.72fr);gap:18px;align-items:start}
+.imuControlCard,.imuActionCard,.imuSensorPanel{border:1px solid var(--border);background:#fffaf0;padding:16px;min-width:0}
+.imuControlCard{display:grid;gap:16px}
+.imuActionCard{display:grid;gap:12px;align-content:start}
+.imuRealtimeSections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.imuSensorPanel{display:grid;gap:14px}
+.imuSensorGrid{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px}
 .bleLiveLayout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,.95fr);gap:16px;align-items:start}
 .bleVisualizationPanel{border:1px solid var(--border);background:linear-gradient(180deg,#fffaf0,#f5eddc);padding:14px 16px}
 .bleVisualizationGrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:14px}
 .bleVizCard{border:1px solid var(--border);background:rgba(255,255,255,.7);padding:12px;display:grid;gap:8px;justify-items:center;text-align:center}
 .bleVizCard strong{font-size:14px;line-height:1.3}
 .bleVizCard span{font-size:12px;color:var(--muted)}
-.bleVizStage{width:100%;min-height:124px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.08),rgba(255,255,255,.7));display:grid;place-items:center;perspective:900px}
+.bleVizStage{width:100%;min-height:92px;border:1px dashed var(--border);background:linear-gradient(180deg,rgba(24,183,166,.08),rgba(255,255,255,.7));display:grid;place-items:center;perspective:900px}
 .bleVizStage.offline{background:linear-gradient(180deg,rgba(107,98,86,.08),rgba(255,255,255,.7))}
-.bleVizTile{position:relative;width:54px;height:74px;transform-style:preserve-3d;transform:rotateX(var(--tile-rotate-x,0deg)) rotateZ(var(--tile-rotate-z,0deg));transition:transform .24s ease-out}
+.bleVizTile{position:relative;width:44px;height:60px;transform-style:preserve-3d;transform:rotateX(var(--tile-rotate-x,0deg)) rotateZ(var(--tile-rotate-z,0deg));transition:transform .24s ease-out}
 .bleVizFace{position:absolute;inset:0;border:1px solid rgba(17,24,39,.16);border-radius:12px}
-.bleVizFaceTop{background:linear-gradient(180deg,#59d4c7,#18b7a6);transform:translateZ(14px)}
+.bleVizFaceTop{background:linear-gradient(180deg,#59d4c7,#18b7a6);transform:translateZ(12px)}
 .bleVizStage.offline .bleVizFaceTop{background:linear-gradient(180deg,#c7c1b3,#a79f90)}
-.bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(24px);height:28px;inset:auto 0 0}
-.bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(14px);width:28px;inset:0 auto 0 0}
+.bleVizFaceFront{background:rgba(255,255,255,.94);transform:rotateX(90deg) translateZ(18px);height:24px;inset:auto 0 0}
+.bleVizFaceSide{background:rgba(17,24,39,.08);transform:rotateY(90deg) translateZ(12px);width:24px;inset:0 auto 0 0}
 .imuLegResultGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .imuLegResultCard{border:1px solid var(--border);background:#f8f3e8;padding:14px;display:grid;gap:10px}
 .imuLegResultCard h5{margin:0;font-size:16px}
@@ -1524,7 +1530,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
 .reportList li{margin:6px 0}
 .tableTitle{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:10px 12px 0}
 .dataTableWrap{margin-top:14px;overflow:auto;border:1px solid var(--border);background:#f8f3e8}
-.imuTableWrap{max-width:100%;overflow-x:auto}
+.imuTableWrap{max-width:100%;overflow-x:auto;overflow-y:auto}
 .dataTable{width:100%;border-collapse:collapse;font-size:12px}
 .imuDataTable{min-width:1040px;font-size:13px}
 .dataTable th,.dataTable td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
@@ -1548,7 +1554,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .main{padding:28px 34px 52px}
   .klLayout{grid-template-columns:1fr}
   .bleLiveLayout{grid-template-columns:1fr}
-  .imuRealtimeSections,.imuLegResultGrid{grid-template-columns:1fr}
+  .imuDashboardTop,.imuRealtimeSections,.imuLegResultGrid{grid-template-columns:1fr}
   .bleVisualizationGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media (max-width:760px){
@@ -1560,7 +1566,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .bleVisualizationGrid,.imuSensorGrid,.imuSourceCards,.sensorCardSummary{grid-template-columns:1fr}
+  .bleVisualizationGrid,.imuSensorGrid,.imuSourceCards,.sensorCardSummary,.sensorMetrics{grid-template-columns:1fr}
   .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
@@ -2313,7 +2319,8 @@ export default function App() {
         if (imuDataSource === "live") return isPiRow(row) || isWitMotionRow(row);
         return false;
       })
-      .sort((a, b) => (toTimestampMs(b?.timestamp) ?? 0) - (toTimestampMs(a?.timestamp) ?? 0)),
+      .sort((a, b) => (toTimestampMs(b?.timestamp) ?? 0) - (toTimestampMs(a?.timestamp) ?? 0))
+      .slice(0, 5),
     [imuDataSource, normalizedLiveImuRows]
   );
   const step4VisualizationSensors = [...step4PiSensorCards, ...step4WitMotionSensorCards];
@@ -3306,241 +3313,109 @@ export default function App() {
 
           {activeStep === "imu" ? (
             <section className="panel" id="imu-upload">
-              <div className="grid2 sectionBody">
-                <div>
-                  <div className="field">
-                    <label>{step4ImuText.dataSource}</label>
-                    <div className="summaryCards imuSourceCards" role="radiogroup" aria-label={step4ImuText.dataSource}>
-                      {[
-                        { value: "csv", label: step4ImuText.sourceCsv, hint: step4ImuText.sourceCsvHint },
-                        { value: "live", label: step4ImuText.sourceLive, hint: step4ImuText.sourceLiveHint },
-                      ].map((option) => (
-                        <label key={option.value} className="summaryCard" style={{ cursor: "pointer" }}>
-                          <div className="sensorCardHeader">
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <input
-                                type="radio"
-                                name="imu-data-source"
-                                value={option.value}
-                                checked={imuDataSource === option.value}
-                                onChange={(event) => handleImuDataSourceChange(event.target.value)}
-                              />
-                              <strong className="summaryDate">{option.label}</strong>
-                            </div>
-                            <span className={`chip ${imuDataSource === option.value ? "teal" : ""}`}>
-                              {imuDataSource === option.value ? t.status.ready : t.status.pending}
-                            </span>
-                          </div>
-                          <div className="microNote">{option.hint}</div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {imuDataSource === "csv" ? (
-                    <div className="field sectionBody">
-                      <label htmlFor="imu-analysis-leg">{step4ImuText.selectedLeg}</label>
-                      <select id="imu-analysis-leg" value={imuAnalysisLeg} onChange={(event) => handleImuAnalysisLegChange(event.target.value)}>
-                        <option value="left">{step4ImuText.leftLeg}</option>
-                        <option value="right">{step4ImuText.rightLeg}</option>
-                      </select>
-                      <div className="microNote">{step4ImuText.legHint}</div>
-                    </div>
-                  ) : null}
-
-                  {imuDataSource === "csv" ? (
-                    <>
-                      {!imuFile ? (
-                        <button
-                          className="fileDrop sectionBody"
-                          onClick={() => csvInputRef.current?.click()}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            selectImuFile(event.dataTransfer.files?.[0]);
-                          }}
-                        >
-                          <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span><div className="fileHint">{step4ImuText.csvUploadHelper}</div></div>
-                        </button>
-                      ) : (
-                        <div className="fileSummary sectionBody">
-                          <div>
-                            <strong>{t.upload.selectedImu}</strong>
-                            <span>{imuFile.name}</span>
-                          </div>
-                          <button className="btn" onClick={clearImuFile}>{t.buttons.remove}</button>
-                        </div>
-                      )}
-                      <input ref={csvInputRef} type="file" hidden accept={IMU_ACCEPT} onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        selectImuFile(file);
-                        e.target.value = "";
-                      }} />
-                    </>
-                  ) : (
-                    <div className="reportBlock sectionBody">
-                      <div className="reportBlockHead">
-                        <h4>{step4ImuText.sourceLive}</h4>
-                        <span className="microNote">{liveImuText.refreshNote}</span>
-                      </div>
-                      <p className="microNote">{step4ImuText.witmotionLiveNote}</p>
-                      <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
-                      {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
-                      <div className="imuRealtimeSections">
+              <div className="imuStepLayout sectionBody">
+                <div className="imuDashboardTop">
+                  <div className="imuControlCard">
+                    <div className="field">
+                      <label>{step4ImuText.dataSource}</label>
+                      <div className="summaryCards imuSourceCards" role="radiogroup" aria-label={step4ImuText.dataSource}>
                         {[
-                          { title: liveImuText.raspberryPiSensors, cards: step4PiSensorCards },
-                          { title: liveImuText.bluetoothSensors, cards: step4WitMotionSensorCards },
-                        ].map((section) => (
-                          <div className="reportBlock" key={section.title}>
-                            <div className="tableTitle">{section.title}</div>
-                            <div className="imuSensorGrid sectionBody" aria-label={section.title}>
-                              {section.cards.map((card) => (
-                                <article key={card.deviceId} className="summaryCard sensorCard">
-                                  <div className="sensorCardHeader">
-                                    <div>
-                                      <small>{card.deviceId}</small>
-                                      <strong className="summaryDate">{card.label}</strong>
-                                    </div>
-                                    <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.isOnline ? liveImuText.online : step4ImuText.waitingStatus}</span>
-                                  </div>
-                                  {card.latestRow ? (
-                                    <div className="sensorMeta">
-                                      <div className="sensorMetrics">
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.pitch}</small>
-                                          <strong>{f(card.latestRow.pitch, "°")}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.roll}</small>
-                                          <strong>{f(card.latestRow.roll, "°")}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.yaw}</small>
-                                          <strong>{f(card.latestRow.yaw, "°")}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.accX}</small>
-                                          <strong>{f(card.latestRow.acc_x)}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.accY}</small>
-                                          <strong>{f(card.latestRow.acc_y)}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.accZ}</small>
-                                          <strong>{f(card.latestRow.acc_z)}</strong>
-                                        </div>
-                                      </div>
-                                      <div className="sensorCardSummary">
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.leg}</small>
-                                          <strong>{card.leg}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.bodyPart}</small>
-                                          <strong>{card.bodyPart}</strong>
-                                        </div>
-                                        <div className="sensorMetric">
-                                          <small>{liveImuText.lastUpdated}</small>
-                                          <strong>{formatDate(card.latestRow.timestamp)}</strong>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
-                                  )}
-                                </article>
-                              ))}
+                          { value: "csv", label: step4ImuText.sourceCsv, hint: step4ImuText.sourceCsvHint },
+                          { value: "live", label: step4ImuText.sourceLive, hint: step4ImuText.sourceLiveHint },
+                        ].map((option) => (
+                          <label key={option.value} className="summaryCard" style={{ cursor: "pointer" }}>
+                            <div className="sensorCardHeader">
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <input
+                                  type="radio"
+                                  name="imu-data-source"
+                                  value={option.value}
+                                  checked={imuDataSource === option.value}
+                                  onChange={(event) => handleImuDataSourceChange(event.target.value)}
+                                />
+                                <strong className="summaryDate">{option.label}</strong>
+                              </div>
+                              <span className={`chip ${imuDataSource === option.value ? "teal" : ""}`}>
+                                {imuDataSource === option.value ? t.status.ready : t.status.pending}
+                              </span>
                             </div>
-                          </div>
+                            <div className="microNote">{option.hint}</div>
+                          </label>
                         ))}
                       </div>
-
-                      <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
-                        <div className="reportBlockHead">
-                          <h4>{step4ImuText.liveMovementTitle}</h4>
-                        </div>
-                        <p className="microNote">{step4ImuText.witmotionHelperText}</p>
-                        <div className="bleVisualizationGrid">
-                          {step4VisualizationSensors.map((card) => {
-                            const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
-                            const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
-                            const tileStyle = {
-                              "--tile-rotate-x": `${pitch}deg`,
-                              "--tile-rotate-z": `${roll}deg`,
-                            };
-                            return (
-                              <div key={`${card.deviceId}-viz`} className="bleVizCard">
-                                <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
-                                  <div className="bleVizTile" style={tileStyle}>
-                                    <span className="bleVizFace bleVizFaceTop" />
-                                    <span className="bleVizFace bleVizFaceFront" />
-                                    <span className="bleVizFace bleVizFaceSide" />
-                                  </div>
-                                </div>
-                                <strong>{`${card.label} (${card.deviceId})`}</strong>
-                                <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="dataTableWrap imuTableWrap" id="imu-live">
-                        <div className="tableTitle">{liveImuText.recentTable}</div>
-                        {step4RecentLiveRows.length === 0 ? (
-                          <div className="microNote">{liveImuText.noRows}</div>
-                        ) : (
-                          <table className="dataTable imuDataTable">
-                            <thead>
-                              <tr>
-                                <th>{liveImuText.timestamp}</th>
-                                <th>{liveImuText.source}</th>
-                                <th>{liveImuText.deviceId}</th>
-                                <th>{liveImuText.label}</th>
-                                <th>{liveImuText.leg}</th>
-                                <th>{liveImuText.bodyPart}</th>
-                                <th>{liveImuText.pitch}</th>
-                                <th>{liveImuText.roll}</th>
-                                <th>{liveImuText.yaw}</th>
-                                <th>{liveImuText.accX}</th>
-                                <th>{liveImuText.accY}</th>
-                                <th>{liveImuText.accZ}</th>
-                                <th>{liveImuText.temp}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {step4RecentLiveRows.map((row, index) => (
-                                <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
-                                  <td>{formatDate(row.timestamp)}</td>
-                                  <td>{getImuSourceLabel(row, liveImuText)}</td>
-                                  <td>{row.device_id || "-"}</td>
-                                  <td>{getImuLabel(row)}</td>
-                                  <td>{row.leg || "-"}</td>
-                                  <td>{row.body_part || "-"}</td>
-                                  <td>{f(row.pitch, "°")}</td>
-                                  <td>{f(row.roll, "°")}</td>
-                                  <td>{f(row.yaw, "°")}</td>
-                                  <td>{f(row.acc_x)}</td>
-                                  <td>{f(row.acc_y)}</td>
-                                  <td>{f(row.acc_z)}</td>
-                                  <td>{f(row.temperature)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
                     </div>
-                  )}
+
+                    {imuDataSource === "csv" ? (
+                      <>
+                        <div className="field">
+                          <label htmlFor="imu-analysis-leg">{step4ImuText.selectedLeg}</label>
+                          <select id="imu-analysis-leg" value={imuAnalysisLeg} onChange={(event) => handleImuAnalysisLegChange(event.target.value)}>
+                            <option value="left">{step4ImuText.leftLeg}</option>
+                            <option value="right">{step4ImuText.rightLeg}</option>
+                          </select>
+                          <div className="microNote">{step4ImuText.legHint}</div>
+                        </div>
+                        {!imuFile ? (
+                          <button
+                            className="fileDrop"
+                            onClick={() => csvInputRef.current?.click()}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              selectImuFile(event.dataTransfer.files?.[0]);
+                            }}
+                          >
+                            <div><strong>{t.upload.uploadImu}</strong><br /><span>{t.upload.imuTypes}</span><div className="fileHint">{step4ImuText.csvUploadHelper}</div></div>
+                          </button>
+                        ) : (
+                          <div className="fileSummary">
+                            <div>
+                              <strong>{t.upload.selectedImu}</strong>
+                              <span>{imuFile.name}</span>
+                            </div>
+                            <button className="btn" onClick={clearImuFile}>{t.buttons.remove}</button>
+                          </div>
+                        )}
+                        <input ref={csvInputRef} type="file" hidden accept={IMU_ACCEPT} onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          selectImuFile(file);
+                          e.target.value = "";
+                        }} />
+                      </>
+                    ) : (
+                      <>
+                        <div className="reportBlock">
+                          <div className="reportBlockHead">
+                            <h4>{step4ImuText.sourceLive}</h4>
+                            <span className="microNote">{liveImuText.refreshNote}</span>
+                          </div>
+                          <p className="microNote">{step4ImuText.witmotionLiveNote}</p>
+                          <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
+                          {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="imuActionCard" id="imu-result">
+                    <div className="reportBlockHead">
+                      <h4>{t.buttons.analyzeImu}</h4>
+                    </div>
+                    <p className="microNote">
+                      {imuDataSource === "live"
+                        ? "Run combined left/right live ROM analysis from Raspberry Pi and WitMotion sensors."
+                        : "Analyze the uploaded CSV file using the existing offline ROM workflow."}
+                    </p>
+                    <button className="btn primary" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>
+                      {imuLoading ? t.buttons.analyzing : t.buttons.analyzeImu}
+                    </button>
+                    {imuError ? <div className="error">{imuError}</div> : null}
+                  </div>
                 </div>
-                <div id="imu-result">
-                  <button className="btn primary" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>
-                    {imuLoading ? t.buttons.analyzing : t.buttons.analyzeImu}
-                  </button>
-                  {imuError ? <div className="error">{imuError}</div> : null}
-                  {imuResult ? (
-                    imuResult?.analysis_source === "live_combined" ? (
+
+                {imuResult ? (
+                  <div>
+                    {imuResult?.analysis_source === "live_combined" ? (
                       <div className="resultHero">
                         <div className="resultHeroTop">
                           <div>
@@ -3657,9 +3532,161 @@ export default function App() {
                           <button className="btn" onClick={imuDataSource === "csv" ? clearImuFile : () => setImuResult(null)}>{t.buttons.editImuData}</button>
                         </div>
                       </div>
-                    )
-                  ) : null}
-                </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {imuDataSource === "live" ? (
+                  <>
+                    <div className="imuRealtimeSections">
+                      {[
+                        { title: liveImuText.raspberryPiSensors, panelKey: "pi", cards: step4PiSensorCards },
+                        { title: liveImuText.bluetoothSensors, panelKey: "witmotion", cards: step4WitMotionSensorCards },
+                      ].map((section) => (
+                        <div className="imuSensorPanel" key={section.title} data-testid={`sensor-panel-${section.panelKey}`}>
+                          <div className="reportBlockHead">
+                            <h4>{section.title}</h4>
+                          </div>
+                          <div className="imuSensorGrid" aria-label={section.title}>
+                            {section.cards.map((card) => (
+                              <article key={card.deviceId} className="summaryCard sensorCard" data-testid="imu-sensor-card">
+                                <div className="sensorCardHeader">
+                                  <div>
+                                    <small>{card.deviceId}</small>
+                                    <strong className="summaryDate">{card.label}</strong>
+                                  </div>
+                                  <span className={`chip ${card.isOnline ? "teal" : ""}`}>{card.isOnline ? liveImuText.online : step4ImuText.waitingStatus}</span>
+                                </div>
+                                {card.latestRow ? (
+                                  <div className="sensorMeta">
+                                    <div className="sensorMetrics">
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.pitch}</small>
+                                        <strong>{f(card.latestRow.pitch, "°")}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.roll}</small>
+                                        <strong>{f(card.latestRow.roll, "°")}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.yaw}</small>
+                                        <strong>{f(card.latestRow.yaw, "°")}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accX}</small>
+                                        <strong>{f(card.latestRow.acc_x)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accY}</small>
+                                        <strong>{f(card.latestRow.acc_y)}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.accZ}</small>
+                                        <strong>{f(card.latestRow.acc_z)}</strong>
+                                      </div>
+                                    </div>
+                                    <div className="sensorCardSummary">
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.leg}</small>
+                                        <strong>{card.leg}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.bodyPart}</small>
+                                        <strong>{card.bodyPart}</strong>
+                                      </div>
+                                      <div className="sensorMetric">
+                                        <small>{liveImuText.lastUpdated}</small>
+                                        <strong>{formatDate(card.latestRow.timestamp)}</strong>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="sensorCardPlaceholder">{liveImuText.waitingForSensor}</div>
+                                )}
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bleVisualizationPanel" aria-label={step4ImuText.liveMovementTitle}>
+                      <div className="reportBlockHead">
+                        <h4>{step4ImuText.liveMovementTitle}</h4>
+                      </div>
+                      <p className="microNote">{step4ImuText.witmotionHelperText}</p>
+                      <div className="bleVisualizationGrid">
+                        {step4VisualizationSensors.map((card) => {
+                          const pitch = asFiniteNumber(card.latestRow?.pitch) ?? 0;
+                          const roll = asFiniteNumber(card.latestRow?.roll) ?? 0;
+                          const tileStyle = {
+                            "--tile-rotate-x": `${pitch}deg`,
+                            "--tile-rotate-z": `${roll}deg`,
+                          };
+                          return (
+                            <div key={`${card.deviceId}-viz`} className="bleVizCard" data-testid="imu-visualization-block">
+                              <div className={`bleVizStage ${card.isOnline ? "online" : "offline"}`}>
+                                <div className="bleVizTile" style={tileStyle}>
+                                  <span className="bleVizFace bleVizFaceTop" />
+                                  <span className="bleVizFace bleVizFaceFront" />
+                                  <span className="bleVizFace bleVizFaceSide" />
+                                </div>
+                              </div>
+                              <strong>{`${card.label} (${card.deviceId})`}</strong>
+                              <span>{card.isOnline ? `${f(card.latestRow?.pitch, "°")} / ${f(card.latestRow?.roll, "°")}` : liveImuText.waitingForSensor}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="dataTableWrap imuTableWrap" id="imu-live">
+                      <div className="tableTitle">{liveImuText.recentTable}</div>
+                      {step4RecentLiveRows.length === 0 ? (
+                        <div className="microNote">{liveImuText.noRows}</div>
+                      ) : (
+                        <table className="dataTable imuDataTable">
+                          <thead>
+                            <tr>
+                              <th>{liveImuText.timestamp}</th>
+                              <th>{liveImuText.source}</th>
+                              <th>{liveImuText.deviceId}</th>
+                              <th>{liveImuText.label}</th>
+                              <th>{liveImuText.leg}</th>
+                              <th>{liveImuText.bodyPart}</th>
+                              <th>{liveImuText.pitch}</th>
+                              <th>{liveImuText.roll}</th>
+                              <th>{liveImuText.yaw}</th>
+                              <th>{liveImuText.accX}</th>
+                              <th>{liveImuText.accY}</th>
+                              <th>{liveImuText.accZ}</th>
+                              <th>{liveImuText.temp}</th>
+                            </tr>
+                          </thead>
+                          <tbody data-testid="imu-live-table-body">
+                            {step4RecentLiveRows.map((row, index) => (
+                              <tr key={`${row.timestamp || "ts"}_${row.device_id || "dev"}_${index}`}>
+                                <td>{formatDate(row.timestamp)}</td>
+                                <td>{getImuSourceLabel(row, liveImuText)}</td>
+                                <td>{row.device_id || "-"}</td>
+                                <td>{getImuLabel(row)}</td>
+                                <td>{row.leg || "-"}</td>
+                                <td>{row.body_part || "-"}</td>
+                                <td>{f(row.pitch, "°")}</td>
+                                <td>{f(row.roll, "°")}</td>
+                                <td>{f(row.yaw, "°")}</td>
+                                <td>{f(row.acc_x)}</td>
+                                <td>{f(row.acc_y)}</td>
+                                <td>{f(row.acc_z)}</td>
+                                <td>{f(row.temperature)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </>
+                ) : null}
               </div>
             </section>
           ) : null}

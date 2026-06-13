@@ -296,6 +296,7 @@ describe("clinical wizard patient and KOOS flow", () => {
 
   it("shows both left-leg Raspberry Pi and right-leg WitMotion sections together in real-time mode", async () => {
     const now = new Date().toISOString();
+    const older = new Date(Date.now() - 60_000).toISOString();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input) => {
@@ -303,7 +304,15 @@ describe("clinical wizard patient and KOOS flow", () => {
         if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
         if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
         if (url.includes("/api/imu/latest")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
-        if (url.includes("/api/imu/data")) return jsonResponse({ count: 6, items: buildRealtimeMixedRows(now) });
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 7,
+            items: [
+              ...buildRealtimeMixedRows(now),
+              buildImuRow({ timestamp: older, device_id: "pi1", body_part: "hip", pitch: 1.0, roll: 0.4, yaw: 0.1, acc_x: 0.0, acc_y: 0.1, acc_z: 1.0 }),
+            ],
+          });
+        }
         return jsonResponse({});
       }),
     );
@@ -316,6 +325,8 @@ describe("clinical wizard patient and KOOS flow", () => {
 
     expect(screen.getByText(/raspberry pi imu sensors \(left leg\)/i)).toBeInTheDocument();
     expect(screen.getByText(/witmotion imu sensors \(right leg\)/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("sensor-panel-pi")).getAllByTestId("imu-sensor-card")).toHaveLength(3);
+    expect(within(screen.getByTestId("sensor-panel-witmotion")).getAllByTestId("imu-sensor-card")).toHaveLength(3);
     expect(screen.getAllByText(/^pi1$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^pi2$/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/^pi3$/i).length).toBeGreaterThan(0);
@@ -331,8 +342,9 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/arm/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/foot/i)).not.toBeInTheDocument();
     expect(screen.getByText(/live movement visualization/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/left hip \(pi1\)|left thigh \/ knee \(pi2\)|left shin \/ ankle \(pi3\)|right hip \(ble_right_hip\)|right thigh \/ knee \(ble_right_thigh\)|right shin \/ ankle \(ble_right_shin\)/i)).toHaveLength(6);
-    expect(screen.getByText(/recent imu data \(live\)/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId("imu-visualization-block")).toHaveLength(6);
+    expect(screen.getByText(/recent imu data \(latest 5\)/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(5);
     expect(screen.getAllByText(/raspberry pi/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/witmotion/i).length).toBeGreaterThan(0);
   });
