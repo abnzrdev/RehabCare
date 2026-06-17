@@ -129,6 +129,52 @@ function createMockBleConnection(name = "WT901BLE") {
   };
 }
 
+function createMockTextBleConnection({ name = "ORTHO_PI1", uuid = "12345678-1234-5678-1234-56789abcdef1" } = {}) {
+  const listeners = new Set();
+  let disconnectHandler = null;
+  const characteristic = {
+    uuid,
+    properties: { notify: true },
+    startNotifications: vi.fn(async () => characteristic),
+    stopNotifications: vi.fn(async () => {}),
+    addEventListener: vi.fn((event, handler) => {
+      if (event === "characteristicvaluechanged") listeners.add(handler);
+    }),
+    removeEventListener: vi.fn((event, handler) => {
+      if (event === "characteristicvaluechanged") listeners.delete(handler);
+    }),
+  };
+  const service = {
+    getCharacteristics: vi.fn(async () => [characteristic]),
+  };
+  const server = {
+    getPrimaryServices: vi.fn(async () => [service]),
+  };
+  const device = {
+    name,
+    gatt: {
+      connect: vi.fn(async () => server),
+      disconnect: vi.fn(() => {
+        if (disconnectHandler) disconnectHandler();
+      }),
+    },
+    addEventListener: vi.fn((event, handler) => {
+      if (event === "gattserverdisconnected") disconnectHandler = handler;
+    }),
+  };
+
+  return {
+    device,
+    emitText(payload) {
+      const bytes = new TextEncoder().encode(payload);
+      const value = new DataView(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      for (const handler of listeners) {
+        handler({ target: { value } });
+      }
+    },
+  };
+}
+
 async function completeWizardToImuStep(user, container) {
   await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
   await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
@@ -542,11 +588,147 @@ describe("clinical wizard patient and KOOS flow", () => {
     await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
     await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
 
-    expect(screen.getByRole("button", { name: /connect all sensors/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/^right hip$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^right thigh \/ knee$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^right shin \/ ankle$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /^connect$/i })).toHaveLength(3);
+    const witMotionSection = screen.getByTestId("witmotion-browser-ble-section");
+    expect(within(witMotionSection).getByRole("button", { name: /connect all sensors/i })).toBeInTheDocument();
+    expect(within(witMotionSection).getAllByText(/^right hip$/i).length).toBeGreaterThan(0);
+    expect(within(witMotionSection).getAllByText(/^right thigh \/ knee$/i).length).toBeGreaterThan(0);
+    expect(within(witMotionSection).getAllByText(/^right shin \/ ankle$/i).length).toBeGreaterThan(0);
+    expect(within(witMotionSection).getAllByRole("button", { name: /^connect$/i })).toHaveLength(3);
+  });
+
+  it("renders the experimental Raspberry Pi browser BLE section with three Pi cards", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    const piSection = screen.getByTestId("pi-browser-ble-section");
+    expect(within(piSection).getByText(/experimental: connect raspberry pi via browser bluetooth/i)).toBeInTheDocument();
+    expect(within(piSection).getByRole("button", { name: /connect all pi sensors/i })).toBeInTheDocument();
+    expect(within(piSection).getAllByText(/left hip \/ pi1/i).length).toBeGreaterThan(0);
+    expect(within(piSection).getAllByText(/left thigh \/ knee \/ pi2/i).length).toBeGreaterThan(0);
+    expect(within(piSection).getAllByText(/left shin \/ ankle \/ pi3/i).length).toBeGreaterThan(0);
+    expect(within(piSection).getAllByRole("button", { name: /^connect$/i })).toHaveLength(3);
+  });
+
+  it("posts normalized Raspberry Pi browser BLE rows and updates the local UI", async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+      if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu") && init?.method === "POST") return jsonResponse({ status: "ok" });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const piConnection = createMockTextBleConnection({ name: "ORTHO_PI1" });
+    mockBluetoothApi({ requestDevice: vi.fn(async () => piConnection.device) });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    const piSection = screen.getByTestId("pi-browser-ble-section");
+    await user.click(within(piSection).getAllByRole("button", { name: /^connect$/i })[0]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    piConnection.emitText(JSON.stringify({
+      device_id: "pi1",
+      leg: "left",
+      body_part: "hip",
+      pitch: 11.2,
+      roll: -2.4,
+      acc_x: 0.12,
+      acc_y: 0.03,
+      acc_z: 0.98,
+      gyro_x: 1.2,
+      gyro_y: 0.5,
+      gyro_z: -0.1,
+      temperature: 35.9,
+    }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(within(piSection).getByText(/connected \/ receiving data/i)).toBeInTheDocument();
+    expect(within(piSection).getByText(/pitch 11.2° · roll -2.4°/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(1);
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes("/api/imu") && init?.method === "POST",
+    );
+    expect(postCalls).toHaveLength(1);
+    expect(JSON.parse(String(postCalls[0][1]?.body))).toMatchObject({
+      device_id: "pi1",
+      leg: "left",
+      body_part: "hip",
+      pitch: 11.2,
+      roll: -2.4,
+      acc_x: 0.12,
+      acc_y: 0.03,
+      acc_z: 0.98,
+      gyro_x: 1.2,
+      gyro_y: 0.5,
+      gyro_z: -0.1,
+      temperature: 35.9,
+    });
+  });
+
+  it("keeps the latest live table limited to 5 rows for Raspberry Pi browser BLE", async () => {
+    let nowMs = Date.parse("2026-06-17T09:00:00Z");
+    vi.spyOn(Date, "now").mockImplementation(() => nowMs);
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+      if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu") && init?.method === "POST") return jsonResponse({ status: "ok" });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const piConnection = createMockTextBleConnection({ name: "ORTHO_PI1" });
+    mockBluetoothApi({ requestDevice: vi.fn(async () => piConnection.device) });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    const piSection = screen.getByTestId("pi-browser-ble-section");
+    await user.click(within(piSection).getAllByRole("button", { name: /^connect$/i })[0]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    for (let index = 0; index < 6; index += 1) {
+      piConnection.emitText(JSON.stringify({
+        device_id: "pi1",
+        leg: "left",
+        body_part: "hip",
+        pitch: 10 + index,
+        roll: index,
+        acc_x: 0.1,
+        acc_y: 0.0,
+        acc_z: 1.0,
+        gyro_x: 1.0,
+        gyro_y: 0.5,
+        gyro_z: -0.1,
+        temperature: 35.5,
+      }));
+      nowMs += 5000;
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(5);
   });
 
   it("throttles browser BLE posts so multiple packets inside 5 seconds produce one POST", async () => {

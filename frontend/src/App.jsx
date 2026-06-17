@@ -453,6 +453,12 @@ const STEP4_IMU_COPY = {
   bluetoothStatusConnecting: "Connecting",
   bluetoothStatusConnected: "Connected / receiving data",
   bluetoothStatusDisconnected: "Disconnected",
+  piBrowserBleTitle: "Experimental: connect Raspberry Pi via browser Bluetooth",
+  piBrowserBleNote: "Optional experimental mode: stream Raspberry Pi IMU data over browser BLE instead of the stable Pi daemon service.",
+  piBrowserBleWarning: "Use either the stable Pi daemon service or this experimental Pi browser BLE mode, not both at the same time.",
+  piConnectAllSensors: "Connect all Pi sensors",
+  piGuideIdle: "Connect Left hip / pi1, Left thigh / knee / pi2, and Left shin / ankle / pi3 from Chrome or Edge.",
+  piGuideDone: "All three Raspberry Pi browser BLE sensors are connected.",
 };
 
 const STRINGS = {
@@ -1723,6 +1729,8 @@ const LIVE_IMU_RECENT_MS = 2 * 60 * 1000;
 const LIVE_IMU_FETCH_LIMIT = 300;
 const BROWSER_BLE_POST_INTERVAL_MS = 5000;
 const WEB_BLUETOOTH_NAME_PREFIXES = ["WT", "WT901", "WT901BLE", "WIT"];
+const ORTHOSCAN_PI_BLE_SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+const ORTHOSCAN_PI_BLE_NOTIFY_UUID = "12345678-1234-5678-1234-56789abcdef1";
 const WITMOTION_OPTIONAL_SERVICE_UUIDS = [
   "0000ffe5-0000-1000-8000-00805f9a34fb",
   "0000ffe0-0000-1000-8000-00805f9a34fb",
@@ -1744,6 +1752,11 @@ const PI_IMU_DEVICE_CONFIG = [
   { deviceId: "pi2", label: "Left thigh / knee", leg: "left", bodyPart: "thigh/knee" },
   { deviceId: "pi3", label: "Left shin / ankle", leg: "left", bodyPart: "shin/ankle" },
 ];
+const PI_BROWSER_BLE_DEVICE_CONFIG = [
+  { deviceId: "pi1", label: "Left hip / pi1", leg: "left", bodyPart: "hip", bleName: "ORTHO_PI1" },
+  { deviceId: "pi2", label: "Left thigh / knee / pi2", leg: "left", bodyPart: "thigh/knee", bleName: "ORTHO_PI2" },
+  { deviceId: "pi3", label: "Left shin / ankle / pi3", leg: "left", bodyPart: "shin/ankle", bleName: "ORTHO_PI3" },
+];
 const WITMOTION_IMU_DEVICE_CONFIG = [
   { deviceId: "ble_right_hip", label: "Right hip", leg: "right", bodyPart: "hip" },
   { deviceId: "ble_right_thigh", label: "Right thigh / knee", leg: "right", bodyPart: "thigh/knee" },
@@ -1759,13 +1772,14 @@ const LEG_VISUALIZATION_LAYOUT = {
   ble_right_shin: { left: "45%", top: "75%" },
 };
 
-function createBluetoothUiState() {
-  return WITMOTION_IMU_DEVICE_CONFIG.reduce((acc, device) => {
+function createBluetoothUiState(config = WITMOTION_IMU_DEVICE_CONFIG) {
+  return config.reduce((acc, device) => {
     acc[device.deviceId] = {
       status: "not_connected",
       deviceName: "",
       lastError: "",
       lastReceivedAt: "",
+      latestRow: null,
     };
     return acc;
   }, {});
@@ -1786,6 +1800,13 @@ function buildBluetoothRequestOptions() {
   return {
     filters: WEB_BLUETOOTH_NAME_PREFIXES.map((namePrefix) => ({ namePrefix })),
     optionalServices: WITMOTION_OPTIONAL_SERVICE_UUIDS,
+  };
+}
+
+function buildPiBluetoothRequestOptions(device) {
+  return {
+    filters: [{ name: device.bleName }],
+    optionalServices: [ORTHOSCAN_PI_BLE_SERVICE_UUID],
   };
 }
 
@@ -1952,6 +1973,59 @@ async function resolveWitMotionNotifyCharacteristic(server) {
   }
   if (fallback) return fallback;
   throw new Error("No notify characteristic found.");
+}
+
+async function resolvePiNotifyCharacteristic(server) {
+  const services = await server.getPrimaryServices();
+  let fallback = null;
+  for (const service of services) {
+    const characteristics = await service.getCharacteristics();
+    for (const characteristic of characteristics) {
+      const properties = characteristic.properties || {};
+      if (!properties.notify) continue;
+      const uuid = String(characteristic.uuid || "").toLowerCase();
+      if (uuid === ORTHOSCAN_PI_BLE_NOTIFY_UUID) return characteristic;
+      if (!fallback) fallback = characteristic;
+    }
+  }
+  if (fallback) return fallback;
+  throw new Error("No Raspberry Pi notify characteristic found.");
+}
+
+function createPiBleParser(device, onReading) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  function emitFromText(text) {
+    if (!text) return;
+    try {
+      const parsed = JSON.parse(text);
+      onReading({
+        ...createEmptyBluetoothReading(device),
+        ...parsed,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // Ignore partial or malformed experimental packets.
+    }
+  }
+
+  return {
+    push(value) {
+      buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+      while (buffer.includes("\n")) {
+        const newlineIndex = buffer.indexOf("\n");
+        const message = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        emitFromText(message);
+      }
+      const trimmed = buffer.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        emitFromText(trimmed);
+        buffer = "";
+      }
+    },
+  };
 }
 
 function createDefaultLiveSensorConfig() {
@@ -2462,6 +2536,8 @@ export default function App() {
   });
   const [bluetoothUiState, setBluetoothUiState] = useState(() => createBluetoothUiState());
   const [bluetoothGuideDeviceId, setBluetoothGuideDeviceId] = useState("");
+  const [piBluetoothUiState, setPiBluetoothUiState] = useState(() => createBluetoothUiState(PI_BROWSER_BLE_DEVICE_CONFIG));
+  const [piBluetoothGuideDeviceId, setPiBluetoothGuideDeviceId] = useState("");
 
   const [reportResult, setReportResult] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -2602,6 +2678,28 @@ export default function App() {
     }),
     [bluetoothUiState, realtimeLatestByDevice, step4ImuText]
   );
+  const step4PiBleSensorCards = useMemo(
+    () => PI_BROWSER_BLE_DEVICE_CONFIG.map((device) => {
+      const uiState = piBluetoothUiState[device.deviceId] || {};
+      const latestRow = uiState.latestRow || null;
+      const statusMap = {
+        not_connected: step4ImuText.bluetoothStatusNotConnected,
+        connecting: step4ImuText.bluetoothStatusConnecting,
+        connected: step4ImuText.bluetoothStatusConnected,
+        disconnected: step4ImuText.bluetoothStatusDisconnected,
+      };
+      return {
+        ...device,
+        latestRow,
+        statusKey: uiState.status || "not_connected",
+        statusLabel: statusMap[uiState.status || "not_connected"] || step4ImuText.bluetoothStatusNotConnected,
+        deviceName: uiState.deviceName || "",
+        lastError: uiState.lastError || "",
+        lastReceivedAt: uiState.lastReceivedAt || "",
+      };
+    }),
+    [piBluetoothUiState, step4ImuText]
+  );
   const step4RealtimeAnalysis = useMemo(
     () => buildRealtimeAnalysis(normalizedLiveImuRows, step4ImuText),
     [normalizedLiveImuRows, step4ImuText]
@@ -2623,6 +2721,11 @@ export default function App() {
     : step4BleSensorCards.every((card) => card.statusKey === "connected")
       ? step4ImuText.bluetoothGuideDone
       : step4ImuText.bluetoothGuideIdle;
+  const piBluetoothGuideLabel = piBluetoothGuideDeviceId
+    ? `${step4ImuText.bluetoothGuideStepPrefix} ${PI_BROWSER_BLE_DEVICE_CONFIG.find((device) => device.deviceId === piBluetoothGuideDeviceId)?.label || piBluetoothGuideDeviceId}.`
+    : step4PiBleSensorCards.every((card) => card.statusKey === "connected")
+      ? step4ImuText.piGuideDone
+      : step4ImuText.piGuideIdle;
   const koosBreakdowns = useMemo(() => {
     if (!koosResult) return [];
 
@@ -3236,6 +3339,16 @@ export default function App() {
     }));
   }
 
+  function updatePiBluetoothCard(deviceId, updates) {
+    setPiBluetoothUiState((current) => ({
+      ...current,
+      [deviceId]: {
+        ...current[deviceId],
+        ...updates,
+      },
+    }));
+  }
+
   function mergeLiveLatestRow(nextRow) {
     setLiveImuLatest((current) => {
       const rows = Array.isArray(current) ? current : [];
@@ -3268,7 +3381,7 @@ export default function App() {
     return true;
   }
 
-  function handleBleReading(device, nextRow) {
+  function handleBrowserBleReading(device, nextRow, updateCard) {
     const normalizedRow = normalizeImuRow({
       ...nextRow,
       device_id: device.deviceId,
@@ -3277,10 +3390,11 @@ export default function App() {
     });
     if (!normalizedRow) return;
     mergeLiveLatestRow(normalizedRow);
-    updateBluetoothCard(device.deviceId, {
+    updateCard(device.deviceId, {
       status: "connected",
       lastError: "",
       lastReceivedAt: normalizedRow.timestamp || new Date().toISOString(),
+      latestRow: normalizedRow,
     });
     if (!shouldPostBleRow(device.deviceId)) return;
     appendLiveRow(normalizedRow);
@@ -3307,22 +3421,26 @@ export default function App() {
     delete bluetoothLastPostedAtRef.current[deviceId];
   }
 
-  async function connectBluetoothSensor(device) {
+  async function connectBluetoothSensor(device, options = {}) {
     if (!bluetoothSupported || !bluetoothContextAllowed) return false;
     await disconnectBluetoothSensor(device.deviceId);
-    updateBluetoothCard(device.deviceId, { status: "connecting", lastError: "" });
+    const updateCard = options.updateCard || updateBluetoothCard;
+    const requestOptions = options.requestOptions || buildBluetoothRequestOptions();
+    const resolveCharacteristic = options.resolveCharacteristic || resolveWitMotionNotifyCharacteristic;
+    const createParser = options.createParser || ((activeDevice, onReading) => createWitMotionBleParser(activeDevice, onReading));
+    updateCard(device.deviceId, { status: "connecting", lastError: "" });
     try {
-      const selectedDevice = await navigator.bluetooth.requestDevice(buildBluetoothRequestOptions());
+      const selectedDevice = await navigator.bluetooth.requestDevice(requestOptions);
       const server = await selectedDevice.gatt.connect();
-      const characteristic = await resolveWitMotionNotifyCharacteristic(server);
-      const parser = createWitMotionBleParser(device, (nextRow) => handleBleReading(device, nextRow));
+      const characteristic = await resolveCharacteristic(server);
+      const parser = createParser(device, (nextRow) => handleBrowserBleReading(device, nextRow, updateCard));
       const handleNotification = (event) => {
         const value = event?.target?.value;
         if (!value) return;
         parser.push(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
       };
       const handleDisconnect = () => {
-        updateBluetoothCard(device.deviceId, { status: "disconnected" });
+        updateCard(device.deviceId, { status: "disconnected" });
         delete bluetoothConnectionsRef.current[device.deviceId];
       };
 
@@ -3335,14 +3453,14 @@ export default function App() {
         handleNotification,
         handleDisconnect,
       };
-      updateBluetoothCard(device.deviceId, {
+      updateCard(device.deviceId, {
         status: "connected",
         deviceName: selectedDevice.name || "",
         lastError: "",
       });
       return true;
     } catch (error) {
-      updateBluetoothCard(device.deviceId, {
+      updateCard(device.deviceId, {
         status: "disconnected",
         lastError: error instanceof Error ? error.message : "Connection failed",
       });
@@ -3366,6 +3484,34 @@ export default function App() {
       if (!connected) break;
     }
     setBluetoothGuideDeviceId("");
+  }
+
+  async function handleConnectPiBluetoothSensor(device) {
+    setPiBluetoothGuideDeviceId(device.deviceId);
+    try {
+      await connectBluetoothSensor(device, {
+        updateCard: updatePiBluetoothCard,
+        requestOptions: buildPiBluetoothRequestOptions(device),
+        resolveCharacteristic: resolvePiNotifyCharacteristic,
+        createParser: (activeDevice, onReading) => createPiBleParser(activeDevice, onReading),
+      });
+    } finally {
+      setPiBluetoothGuideDeviceId("");
+    }
+  }
+
+  async function handleConnectAllPiBluetoothSensors() {
+    for (const device of PI_BROWSER_BLE_DEVICE_CONFIG) {
+      setPiBluetoothGuideDeviceId(device.deviceId);
+      const connected = await connectBluetoothSensor(device, {
+        updateCard: updatePiBluetoothCard,
+        requestOptions: buildPiBluetoothRequestOptions(device),
+        resolveCharacteristic: resolvePiNotifyCharacteristic,
+        createParser: (activeDevice, onReading) => createPiBleParser(activeDevice, onReading),
+      });
+      if (!connected) break;
+    }
+    setPiBluetoothGuideDeviceId("");
   }
 
   function handleImuAnalysisLegChange(value) {
@@ -3847,7 +3993,7 @@ export default function App() {
                           </div>
                           <p className="microNote">{step4ImuText.witmotionLiveNote}</p>
                           <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
-                          <div className="bleConnectPanel">
+                          <div className="bleConnectPanel" data-testid="witmotion-browser-ble-section">
                             <div className="bleConnectPanelTop">
                               <div>
                                 <strong>{step4ImuText.bluetoothGuideLabel}</strong>
@@ -3887,6 +4033,53 @@ export default function App() {
                                     className="btn"
                                     onClick={() => handleConnectBluetoothSensor(card)}
                                     disabled={!bluetoothSupported || !bluetoothContextAllowed || bluetoothGuideDeviceId === card.deviceId}
+                                  >
+                                    {step4ImuText.connectSensor}
+                                  </button>
+                                </article>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="bleConnectPanel" data-testid="pi-browser-ble-section">
+                            <div className="bleConnectPanelTop">
+                              <div>
+                                <strong>{step4ImuText.piBrowserBleTitle}</strong>
+                                <div className="microNote">{piBluetoothGuideLabel}</div>
+                              </div>
+                              <button
+                                className="btn"
+                                onClick={handleConnectAllPiBluetoothSensors}
+                                disabled={!bluetoothSupported || !bluetoothContextAllowed || piBluetoothGuideDeviceId.length > 0}
+                              >
+                                {step4ImuText.piConnectAllSensors}
+                              </button>
+                            </div>
+                            <p className="microNote">{step4ImuText.piBrowserBleNote}</p>
+                            <p className="microNote">{step4ImuText.piBrowserBleWarning}</p>
+                            <div className="bleConnectGrid">
+                              {step4PiBleSensorCards.map((card) => (
+                                <article key={`${card.deviceId}-pi-ble`} className="bleConnectCard">
+                                  <div className="bleConnectCardTop">
+                                    <div>
+                                      <strong>{card.label}</strong>
+                                      <div className="imuStatusSource">{card.bleName}</div>
+                                    </div>
+                                    <span className={`chip ${card.statusKey === "connected" ? "teal" : card.statusKey === "connecting" ? "amber" : ""}`}>{card.statusLabel}</span>
+                                  </div>
+                                  <div className="microNote">{card.deviceName || "OrthoScan Pi BLE"}</div>
+                                  {card.lastReceivedAt ? <div className="microNote">Last received {formatDate(card.lastReceivedAt)}</div> : null}
+                                  {card.latestRow ? (
+                                    <div className="imuStatusMetrics">
+                                      Pitch {f(card.latestRow.pitch, "°")} · Roll {f(card.latestRow.roll, "°")}
+                                    </div>
+                                  ) : (
+                                    <div className="imuStatusMetrics">{step4ImuText.bluetoothStatusNotConnected}</div>
+                                  )}
+                                  {card.lastError ? <div className="microNote">{card.lastError}</div> : null}
+                                  <button
+                                    className="btn"
+                                    onClick={() => handleConnectPiBluetoothSensor(card)}
+                                    disabled={!bluetoothSupported || !bluetoothContextAllowed || piBluetoothGuideDeviceId === card.deviceId}
                                   >
                                     {step4ImuText.connectSensor}
                                   </button>
