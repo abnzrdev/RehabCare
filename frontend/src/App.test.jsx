@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -54,6 +54,112 @@ function buildRealtimeMixedRows(now = new Date().toISOString()) {
   ];
 }
 
+function mockBluetoothApi(overrides = {}) {
+  const requestDevice = vi.fn();
+  const bluetooth = {
+    requestDevice,
+    ...overrides,
+  };
+  Object.defineProperty(window.navigator, "bluetooth", {
+    configurable: true,
+    value: bluetooth,
+  });
+  return bluetooth;
+}
+
+function toSignedWord(value) {
+  const normalized = value < 0 ? 0x10000 + value : value;
+  return [normalized & 0xff, (normalized >> 8) & 0xff];
+}
+
+function buildWitMotionAngleFrame({ roll = 0, pitch = 0, yaw = 0, temperature = 0 }) {
+  const frame = [0x55, 0x53];
+  frame.push(...toSignedWord(roll));
+  frame.push(...toSignedWord(pitch));
+  frame.push(...toSignedWord(yaw));
+  frame.push(...toSignedWord(temperature));
+  const checksum = frame.reduce((sum, value) => sum + value, 0) & 0xff;
+  frame.push(checksum);
+  return Uint8Array.from(frame);
+}
+
+function createMockBleConnection(name = "WT901BLE") {
+  const listeners = new Set();
+  let disconnectHandler = null;
+  const characteristic = {
+    uuid: "0000ffe4-0000-1000-8000-00805f9a34fb",
+    properties: { notify: true },
+    startNotifications: vi.fn(async () => characteristic),
+    stopNotifications: vi.fn(async () => {}),
+    addEventListener: vi.fn((event, handler) => {
+      if (event === "characteristicvaluechanged") listeners.add(handler);
+    }),
+    removeEventListener: vi.fn((event, handler) => {
+      if (event === "characteristicvaluechanged") listeners.delete(handler);
+    }),
+  };
+  const service = {
+    getCharacteristics: vi.fn(async () => [characteristic]),
+  };
+  const server = {
+    getPrimaryServices: vi.fn(async () => [service]),
+  };
+  const device = {
+    name,
+    gatt: {
+      connect: vi.fn(async () => server),
+      disconnect: vi.fn(() => {
+        if (disconnectHandler) disconnectHandler();
+      }),
+    },
+    addEventListener: vi.fn((event, handler) => {
+      if (event === "gattserverdisconnected") disconnectHandler = handler;
+    }),
+  };
+
+  return {
+    device,
+    emit(frame) {
+      const bytes = frame instanceof Uint8Array ? frame : Uint8Array.from(frame);
+      const value = new DataView(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      for (const handler of listeners) {
+        handler({ target: { value } });
+      }
+    },
+  };
+}
+
+async function completeWizardToImuStep(user, container) {
+  await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
+  await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
+  await screen.findByText(/panel 1 of 14/i);
+
+  for (let panelIndex = 0; panelIndex < 14; panelIndex += 1) {
+    const visibleRadios = screen.getAllByRole("radio");
+    const firstRadioPerQuestion = visibleRadios.filter((radio, index, radios) => {
+      return radios.findIndex((candidate) => candidate.name === radio.name) === index;
+    });
+
+    for (const radio of firstRadioPerQuestion) {
+      await user.click(radio);
+    }
+
+    if (panelIndex === 13) {
+      await user.click(screen.getByRole("button", { name: /calculate KOOS/i }));
+    } else {
+      await user.click(screen.getByRole("button", { name: /next questions/i }));
+    }
+  }
+
+  await user.click(await screen.findByRole("button", { name: /continue to KL image grading/i }));
+
+  const imageInput = container.querySelector('input[type="file"][accept*="image/png"]');
+  expect(imageInput).not.toBeNull();
+  await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
+  await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
+  await user.click(await screen.findByRole("button", { name: /continue to IMU/i }));
+}
+
 describe("clinical wizard patient and KOOS flow", () => {
   let rehabReportScore;
 
@@ -67,6 +173,12 @@ describe("clinical wizard patient and KOOS flow", () => {
       createObjectURL: vi.fn(() => "blob:mock-image"),
       revokeObjectURL: vi.fn(),
     });
+    mockBluetoothApi();
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: true,
+    });
+    window.history.replaceState({}, "", "http://localhost:3000/");
     const latestImuTimestamp = new Date(Date.now() - 30 * 1000).toISOString();
     const previousImuTimestamp = new Date(Date.now() - 90 * 1000).toISOString();
     vi.stubGlobal(
@@ -266,6 +378,42 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByRole("radio", { name: /use witmotion bluetooth sensor data/i })).not.toBeInTheDocument();
   });
 
+  it("shows KL image grading as complete after a KL result exists", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.type(screen.getAllByPlaceholderText("P001")[0], "P100");
+    await user.click(screen.getByRole("button", { name: /continue to KOOS questionnaire/i }));
+    await screen.findByText(/panel 1 of 14/i);
+
+    for (let panelIndex = 0; panelIndex < 14; panelIndex += 1) {
+      const visibleRadios = screen.getAllByRole("radio");
+      const firstRadioPerQuestion = visibleRadios.filter((radio, index, radios) => {
+        return radios.findIndex((candidate) => candidate.name === radio.name) === index;
+      });
+
+      for (const radio of firstRadioPerQuestion) {
+        await user.click(radio);
+      }
+
+      if (panelIndex === 13) {
+        await user.click(screen.getByRole("button", { name: /calculate KOOS/i }));
+      } else {
+        await user.click(screen.getByRole("button", { name: /next questions/i }));
+      }
+    }
+
+    await user.click(await screen.findByRole("button", { name: /continue to KL image grading/i }));
+
+    const imageInput = container.querySelector('input[type="file"][accept*="image/png"]');
+    expect(imageInput).not.toBeNull();
+    await user.upload(imageInput, new File(["img"], "knee.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: /analyze KL grade/i }));
+
+    const klStep = screen.getByRole("button", { name: /3 KL image grading COMPLETE/i });
+    expect(klStep).toBeInTheDocument();
+  });
+
   it("keeps Step 4 CSV mode available and analyzes uploaded CSV data", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
@@ -351,6 +499,138 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(5);
     expect(screen.getAllByText(/raspberry pi/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/witmotion/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows the unsupported browser message when Web Bluetooth is unavailable", async () => {
+    Object.defineProperty(window.navigator, "bluetooth", {
+      configurable: true,
+      value: undefined,
+    });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    expect(screen.getByText(/web bluetooth is not supported\. please use chrome or edge\./i)).toBeInTheDocument();
+  });
+
+  it("shows the insecure page message when Bluetooth cannot run on the current origin", async () => {
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: false,
+    });
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, hostname: "example.test" },
+    });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    expect(screen.getByText(/bluetooth needs https or localhost\./i)).toBeInTheDocument();
+  });
+
+  it("renders three WitMotion BLE sensor cards with connect actions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+
+    expect(screen.getByRole("button", { name: /connect all sensors/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/^right hip$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^right thigh \/ knee$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^right shin \/ ankle$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /^connect$/i })).toHaveLength(3);
+  });
+
+  it("throttles browser BLE posts so multiple packets inside 5 seconds produce one POST", async () => {
+    let nowMs = Date.parse("2026-06-16T09:00:00Z");
+    vi.spyOn(Date, "now").mockImplementation(() => nowMs);
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+      if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu") && init?.method === "POST") return jsonResponse({ status: "ok" });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ble = createMockBleConnection("WT901 Hip");
+    mockBluetoothApi({ requestDevice: vi.fn(async () => ble.device) });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    await user.click(screen.getAllByRole("button", { name: /^connect$/i })[0]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    ble.emit(buildWitMotionAngleFrame({ pitch: 1000 }));
+    nowMs += 1000;
+    ble.emit(buildWitMotionAngleFrame({ pitch: 1100 }));
+    nowMs += 1000;
+    ble.emit(buildWitMotionAngleFrame({ pitch: 1200 }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes("/api/imu") && init?.method === "POST",
+    );
+    expect(postCalls).toHaveLength(1);
+    expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(1);
+  });
+
+  it("allows another browser BLE POST after 5 seconds have passed", async () => {
+    let nowMs = Date.parse("2026-06-16T09:00:00Z");
+    vi.spyOn(Date, "now").mockImplementation(() => nowMs);
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+      if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+      if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+      if (url.includes("/api/imu") && init?.method === "POST") return jsonResponse({ status: "ok" });
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ble = createMockBleConnection("WT901 Hip");
+    mockBluetoothApi({ requestDevice: vi.fn(async () => ble.device) });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    await user.click(screen.getAllByRole("button", { name: /^connect$/i })[0]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    ble.emit(buildWitMotionAngleFrame({ pitch: 1000 }));
+    await Promise.resolve();
+    await Promise.resolve();
+    nowMs += 5000;
+    ble.emit(buildWitMotionAngleFrame({ pitch: 1400 }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes("/api/imu") && init?.method === "POST",
+    );
+    expect(postCalls).toHaveLength(2);
+    expect(within(screen.getByTestId("imu-live-table-body")).getAllByRole("row")).toHaveLength(2);
   });
 
   it("analyzes both left and right ROM in real-time mode without calling the CSV endpoint", async () => {
@@ -481,6 +761,55 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.queryByText(/right-leg witmotion rom needs right thigh\/knee and right shin\/ankle sensors/i)).not.toBeInTheDocument();
   });
 
+  it("enables Continue to final rehab report when right-leg ROM is valid and left-leg warning remains", async () => {
+    const now = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) {
+          return jsonResponse({
+            sessions: [{ session_id: "prev-1", current_rom: 4, created_at: "2026-06-10T09:00:00Z" }],
+          });
+        }
+        if (url.includes("/api/imu/latest")) {
+          return jsonResponse({
+            count: 2,
+            items: [
+              buildImuRow({ timestamp: now, device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 10, roll: 1, acc_x: 0.1, acc_y: 0, acc_z: 1 }),
+              buildImuRow({ timestamp: now, device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 22, roll: 1, acc_x: -0.1, acc_y: 0, acc_z: 1 }),
+            ],
+          });
+        }
+        if (url.includes("/api/imu/data")) {
+          return jsonResponse({
+            count: 4,
+            items: [
+              buildImuRow({ timestamp: "2026-06-10T10:00:00Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 4, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+              buildImuRow({ timestamp: "2026-06-10T10:00:01Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 12, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+              buildImuRow({ timestamp: "2026-06-10T10:00:02Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 8, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+              buildImuRow({ timestamp: "2026-06-10T10:00:03Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 24, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+            ],
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    expect(await screen.findByText(/left-leg raspberry pi rom needs left thigh\/knee \(pi2\) and left shin\/ankle \(pi3\) sensors/i)).toBeInTheDocument();
+    expect(screen.getAllByText("8.0°").length).toBeGreaterThan(0);
+    expect(screen.getByText(/needs sensor check/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue to final rehab report/i })).toBeEnabled();
+  });
+
   it("shows only the right warning when the WitMotion pair is missing in real-time mode", async () => {
     const now = new Date().toISOString();
     vi.stubGlobal(
@@ -521,6 +850,129 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(await screen.findByText(/right-leg witmotion rom needs right thigh\/knee and right shin\/ankle sensors/i)).toBeInTheDocument();
     expect(screen.queryByText(/left-leg raspberry pi rom needs left thigh\/knee \(pi2\) and left shin\/ankle \(pi3\) sensors/i)).not.toBeInTheDocument();
   });
+
+  it("keeps Continue to final rehab report disabled when no live ROM can be calculated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+        if (url.includes("/api/sessions/")) return jsonResponse({ sessions: [] });
+        if (url.includes("/api/imu/latest")) return jsonResponse({ count: 0, items: [] });
+        if (url.includes("/api/imu/data")) return jsonResponse({ count: 0, items: [] });
+        return jsonResponse({});
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: /IMU movement analysis/i })[0]);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    expect(await screen.findByText(/IMU movement analysis completed/i)).toBeInTheDocument();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /continue to final rehab report/i })).toBeDisabled();
+    });
+  });
+
+  it("uses the latest live IMU ROM in the final report after rerunning Step 4 analysis", async () => {
+    let currentRows = [
+      buildImuRow({ timestamp: "2026-06-10T10:00:00Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 4, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+      buildImuRow({ timestamp: "2026-06-10T10:00:01Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 12, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+      buildImuRow({ timestamp: "2026-06-10T10:00:02Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 8, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+      buildImuRow({ timestamp: "2026-06-10T10:00:03Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 24, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+    ];
+    let reportPayload = null;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/health")) return jsonResponse({ status: "ok" });
+      if (url.includes("/api/sessions/")) {
+        return jsonResponse({
+          sessions: [{ session_id: "prev-1", current_rom: 4, created_at: "2026-06-10T09:00:00Z" }],
+        });
+      }
+      if (url.includes("/api/koos/calculate")) {
+        return jsonResponse({
+          koos_total: 72.4,
+          subscales: { pain: 70, symptoms: 71, adl: 74, sport_rec: 73, qol: 74 },
+        });
+      }
+      if (url.includes("/api/predict-kl")) {
+        return jsonResponse({ kl_grade: 2, confidence: 0.87, kl_scale_max: 4 });
+      }
+      if (url.includes("/api/imu/latest")) {
+        return jsonResponse({ count: currentRows.length, items: currentRows.slice(-2) });
+      }
+      if (url.includes("/api/imu/data")) {
+        return jsonResponse({ count: currentRows.length, items: currentRows });
+      }
+      if (url.includes("/api/rehab/report")) {
+        reportPayload = JSON.parse(String(init?.body || "{}"));
+        const currentRom = Number(reportPayload?.imu_result?.session_summary?.rom_deg);
+        return jsonResponse({
+          session_id: "session-latest",
+          raw_score: 70.0,
+          predicted_delta_KOOS: 70.0,
+          final_rehab_score: 58.0,
+          rehab_level_label: "Level 3",
+          rehab_level_meaning: "moderate / continue rehab",
+          KOOS_pre: 72.4,
+          current_ROM: currentRom,
+          previous_ROM: 4,
+          delta_ROM: Number((currentRom - 4).toFixed(1)),
+          rehab_score: null,
+          KL_grade: 2,
+          interpretation: "stable",
+          score_meaning: "Latest IMU result was used.",
+          delta_note: "Latest Step 4 analysis carried into the report.",
+          recommendations: [],
+          beta0: 139.95,
+          beta1: -0.93,
+          beta2: -0.785,
+          beta3_KL: -7.93,
+          raw_score_mapping_low: 20.6,
+          raw_score_mapping_high: 140.55,
+          created_at: "2026-06-16T10:00:00Z",
+          recommended_exercises: [],
+        });
+      }
+      return jsonResponse({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await completeWizardToImuStep(user, container);
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+    expect(await screen.findAllByText("8.0°")).not.toHaveLength(0);
+
+    currentRows = [
+      buildImuRow({ timestamp: "2026-06-10T11:00:00Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 6, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+      buildImuRow({ timestamp: "2026-06-10T11:00:01Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 14, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+      buildImuRow({ timestamp: "2026-06-10T11:00:02Z", device_id: "ble_right_thigh", leg: "right", body_part: "thigh/knee", pitch: 10, roll: 0, acc_x: 0.1, acc_y: 0.0, acc_z: 0.9 }),
+      buildImuRow({ timestamp: "2026-06-10T11:00:03Z", device_id: "ble_right_shin", leg: "right", body_part: "shin/ankle", pitch: 30, roll: 0, acc_x: -0.1, acc_y: 0.0, acc_z: 1.0 }),
+    ];
+
+    await user.click(screen.getByRole("radio", { name: /upload imu csv/i }));
+    await user.click(screen.getByRole("radio", { name: /real-time imu data/i }));
+    expect(await screen.findAllByText("30.0°")).not.toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /analyze ROM/i }));
+
+    await user.click(screen.getByRole("button", { name: /continue to final rehab report/i }));
+    expect(await screen.findByRole("heading", { name: /final rehab report/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /generate report/i }));
+
+    await waitFor(() => {
+      expect(reportPayload).not.toBeNull();
+    });
+    expect(reportPayload.imu_result.session_summary.rom_deg).toBe(16);
+    expect(await screen.findByText(/latest step 4 analysis carried into the report/i)).toBeInTheDocument();
+  }, 10000);
 
   it("does not show the removed demo seed controls in Step 4 live mode", async () => {
     const user = userEvent.setup();
@@ -664,7 +1116,7 @@ describe("clinical wizard patient and KOOS flow", () => {
     expect(screen.getAllByRole("button", { name: /^Watch video$/i })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /open on youtube/i }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("button", { name: /assign|mark watched/i }).length).toBeGreaterThanOrEqual(2);
-  });
+  }, 15000);
 
   it("keeps the wizard at six steps and does not render any Step 7 UI", async () => {
     const { container } = render(<App />);

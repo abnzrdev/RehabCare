@@ -16,6 +16,8 @@ This keeps the browser pointed at your own server API for:
 - `GET /api/imu/latest`
 - `GET /api/imu/data?limit=100`
 
+For Raspberry Pi left-leg sensors, install the boot-time sender described in [raspberry-pi-imu-service.md](raspberry-pi-imu-service.md). It keeps the server as the source of truth and sends Pi data directly to `/api/imu` every 5 seconds by default.
+
 Do not create a Vercel database for IMU data, and do not move IMU storage off the backend server.
 
 ## Docker Compose

@@ -22,6 +22,12 @@ Clinical knee rehabilitation workflow with a FastAPI backend, React frontend, KL
 - Connect to hotspot `pi1`
 - Open `http://10.42.0.1:8080` to enter Wi-Fi credentials
 
+### Raspberry Pi IMU Auto-Start
+
+- Use [`raspberry/install_imu_service.sh`](raspberry/install_imu_service.sh) to install a boot-time sender service on the Pi.
+- Default config posts to `http://89.218.178.215:18190/api/imu` every `5` seconds.
+- Full setup, status, restart, logs, and verification commands are in [docs/raspberry-pi-imu-service.md](docs/raspberry-pi-imu-service.md).
+
 ## Local Deploy And Preview
 
 Run the local container deployment:

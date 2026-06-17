@@ -441,6 +441,18 @@ const STEP4_IMU_COPY = {
   leftLegRomTitle: "Left-leg ROM (Raspberry Pi)",
   rightLegRomTitle: "Right-leg ROM (WitMotion)",
   liveCombinedStatus: "Live dual-leg analysis",
+  connectAllSensors: "Connect all sensors",
+  connectSensor: "Connect",
+  bluetoothNeedsSecureContext: "Bluetooth needs HTTPS or localhost.",
+  bluetoothUnsupported: "Web Bluetooth is not supported. Please use Chrome or Edge.",
+  bluetoothGuideLabel: "Guided sensor connection",
+  bluetoothGuideIdle: "Connect Right hip, Right thigh / knee, and Right shin / ankle from Chrome or Edge.",
+  bluetoothGuideStepPrefix: "Select",
+  bluetoothGuideDone: "All three WitMotion sensors are connected.",
+  bluetoothStatusNotConnected: "Not connected",
+  bluetoothStatusConnecting: "Connecting",
+  bluetoothStatusConnected: "Connected / receiving data",
+  bluetoothStatusDisconnected: "Disconnected",
 };
 
 const STRINGS = {
@@ -1333,6 +1345,7 @@ button,input,select{font:inherit}
 .chip{padding:5px 8px;border:1px solid var(--border);font-size:11px;font-weight:800;background:#f8f3e8;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .chip.coral{border-color:rgba(255,107,87,.45);color:#9b3a2c;background:var(--coral-soft)}
 .chip.teal{border-color:rgba(24,183,166,.45);color:#0c746b;background:var(--teal-soft)}
+.chip.amber{border-color:rgba(194,132,45,.45);color:#8c5b12;background:#f7e8c9}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .metrics.wideMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}
 .summaryCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
@@ -1363,6 +1376,12 @@ button,input,select{font:inherit}
 .imuStatusCard strong{font-size:14px;line-height:1.25;letter-spacing:0}
 .imuStatusCard small{font-size:11px;color:var(--muted)}
 .imuStatusMetrics{font-size:12px;color:var(--text);line-height:1.35}
+.bleConnectPanel{display:grid;gap:12px;margin-top:12px}
+.bleConnectPanelTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.bleConnectGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.bleConnectCard{border:1px solid var(--border);background:#fff;padding:12px;display:grid;gap:10px}
+.bleConnectCardTop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.bleConnectCard strong{font-size:15px;line-height:1.2}
 .bleVisualizationPanel{border:1px solid var(--border);background:linear-gradient(180deg,#fffaf0,#f5eddc);padding:14px 16px}
 .bleVisualizationGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:14px}
 .legVizPanel{border:1px solid var(--border);background:rgba(255,255,255,.72);padding:14px;display:grid;gap:12px;min-width:0}
@@ -1582,7 +1601,7 @@ linear-gradient(0deg, transparent 0 62%, rgba(17,24,39,.06) 62% 64%, transparent
   .topToolbar{justify-content:flex-start}
   .hero h2{font-size:42px}
   .hero p{font-size:16px}
-  .bleVisualizationGrid,.imuStatusGrid,.imuSourceCards,.sensorCardSummary,.sensorMetrics,.legVizLegend{grid-template-columns:1fr}
+  .bleVisualizationGrid,.imuStatusGrid,.imuSourceCards,.sensorCardSummary,.sensorMetrics,.legVizLegend,.bleConnectGrid{grid-template-columns:1fr}
   .grid2,.metrics,.metrics.wideMetrics,.klLayout,.recommendationCards,.detailGrid,.exerciseGrid,.calcInputs{grid-template-columns:1fr}
   .resultValue{text-align:left;font-size:40px}
   .resultBarRow{grid-template-columns:1fr}
@@ -1702,6 +1721,18 @@ function realtimeImuCopy(lang) {
 
 const LIVE_IMU_RECENT_MS = 2 * 60 * 1000;
 const LIVE_IMU_FETCH_LIMIT = 300;
+const BROWSER_BLE_POST_INTERVAL_MS = 5000;
+const WEB_BLUETOOTH_NAME_PREFIXES = ["WT", "WT901", "WT901BLE", "WIT"];
+const WITMOTION_OPTIONAL_SERVICE_UUIDS = [
+  "0000ffe5-0000-1000-8000-00805f9a34fb",
+  "0000ffe0-0000-1000-8000-00805f9a34fb",
+  "0000ffe4-0000-1000-8000-00805f9a34fb",
+  "0000ffe1-0000-1000-8000-00805f9a34fb",
+];
+const WITMOTION_NOTIFY_UUID_CANDIDATES = new Set([
+  "0000ffe4-0000-1000-8000-00805f9a34fb",
+  "0000ffe1-0000-1000-8000-00805f9a34fb",
+]);
 const LEGACY_BLE_DEVICE_ID_MAP = {
   ble_left_arm: "ble_right_hip",
   ble_left_leg: "ble_right_thigh",
@@ -1727,6 +1758,201 @@ const LEG_VISUALIZATION_LAYOUT = {
   ble_right_thigh: { left: "49%", top: "47%" },
   ble_right_shin: { left: "45%", top: "75%" },
 };
+
+function createBluetoothUiState() {
+  return WITMOTION_IMU_DEVICE_CONFIG.reduce((acc, device) => {
+    acc[device.deviceId] = {
+      status: "not_connected",
+      deviceName: "",
+      lastError: "",
+      lastReceivedAt: "",
+    };
+    return acc;
+  }, {});
+}
+
+function isBluetoothSupported() {
+  return typeof navigator !== "undefined" && Boolean(navigator.bluetooth?.requestDevice);
+}
+
+function isBluetoothContextAllowed() {
+  if (typeof window === "undefined") return false;
+  const hostname = String(window.location?.hostname || "").toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+  return Boolean(window.isSecureContext);
+}
+
+function buildBluetoothRequestOptions() {
+  return {
+    filters: WEB_BLUETOOTH_NAME_PREFIXES.map((namePrefix) => ({ namePrefix })),
+    optionalServices: WITMOTION_OPTIONAL_SERVICE_UUIDS,
+  };
+}
+
+function createEmptyBluetoothReading(device) {
+  return {
+    device_id: device.deviceId,
+    leg: device.leg,
+    body_part: device.bodyPart,
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    acc_x: 0,
+    acc_y: 0,
+    acc_z: 0,
+    gyro_x: 0,
+    gyro_y: 0,
+    gyro_z: 0,
+    temperature: 0,
+  };
+}
+
+function toSignedInt16(low, high) {
+  const value = (high << 8) | low;
+  return value > 0x7fff ? value - 0x10000 : value;
+}
+
+function parseStandardFrameValues(frame) {
+  return [
+    toSignedInt16(frame[2], frame[3]),
+    toSignedInt16(frame[4], frame[5]),
+    toSignedInt16(frame[6], frame[7]),
+    toSignedInt16(frame[8], frame[9]),
+  ];
+}
+
+function parseCombinedFrameValues(frame) {
+  const values = [];
+  for (let index = 2; index < 20; index += 2) {
+    values.push(toSignedInt16(frame[index], frame[index + 1]));
+  }
+  return values;
+}
+
+function applyCombinedWitMotionReading(current, values) {
+  const [accX, accY, accZ, gyroX, gyroY, gyroZ, roll, pitch, yaw] = values;
+  return {
+    ...current,
+    acc_x: accX / 32768 * 16,
+    acc_y: accY / 32768 * 16,
+    acc_z: accZ / 32768 * 16,
+    gyro_x: gyroX / 32768 * 2000,
+    gyro_y: gyroY / 32768 * 2000,
+    gyro_z: gyroZ / 32768 * 2000,
+    roll: roll / 32768 * 180,
+    pitch: pitch / 32768 * 180,
+    yaw: yaw / 32768 * 180,
+  };
+}
+
+function applyStandardWitMotionReading(current, frameType, values) {
+  const [x, y, z, tempRaw] = values;
+  if (frameType === 0x51) {
+    return {
+      ...current,
+      acc_x: x / 32768 * 16,
+      acc_y: y / 32768 * 16,
+      acc_z: z / 32768 * 16,
+      temperature: tempRaw / 100,
+    };
+  }
+  if (frameType === 0x52) {
+    return {
+      ...current,
+      gyro_x: x / 32768 * 2000,
+      gyro_y: y / 32768 * 2000,
+      gyro_z: z / 32768 * 2000,
+      temperature: tempRaw / 100,
+    };
+  }
+  if (frameType === 0x53) {
+    return {
+      ...current,
+      roll: x / 32768 * 180,
+      pitch: y / 32768 * 180,
+      yaw: z / 32768 * 180,
+    };
+  }
+  return current;
+}
+
+function createWitMotionBleParser(device, onReading) {
+  let buffer = [];
+  let reading = createEmptyBluetoothReading(device);
+
+  function emit(nextReading) {
+    reading = nextReading;
+    onReading({
+      ...nextReading,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  function parseCombinedFrames() {
+    const frameLen = 20;
+    while (true) {
+      const start = buffer.findIndex((value, index) => value === 0x55 && buffer[index + 1] === 0x61);
+      if (start < 0) {
+        if (buffer.length > 128) buffer = buffer.slice(-32);
+        return;
+      }
+      if (buffer.length - start < frameLen) {
+        if (start > 0) buffer = buffer.slice(start);
+        return;
+      }
+      const frame = buffer.slice(start, start + frameLen);
+      buffer = buffer.slice(start + frameLen);
+      emit(applyCombinedWitMotionReading(reading, parseCombinedFrameValues(frame)));
+    }
+  }
+
+  function parseStandardFrames() {
+    while (true) {
+      const start = buffer.indexOf(0x55);
+      if (start < 0) {
+        if (buffer.length > 128) buffer = buffer.slice(-32);
+        return;
+      }
+      if (buffer.length - start < 11) {
+        if (start > 0) buffer = buffer.slice(start);
+        return;
+      }
+      const frame = buffer.slice(start, start + 11);
+      const checksum = frame.slice(0, 10).reduce((sum, value) => sum + value, 0) & 0xff;
+      if (checksum !== frame[10]) {
+        buffer.splice(start, 1);
+        continue;
+      }
+      buffer = buffer.slice(start + 11);
+      emit(applyStandardWitMotionReading(reading, frame[1], parseStandardFrameValues(frame)));
+    }
+  }
+
+  return {
+    push(value) {
+      buffer.push(...Array.from(value || []));
+      parseCombinedFrames();
+      parseStandardFrames();
+    },
+  };
+}
+
+async function resolveWitMotionNotifyCharacteristic(server) {
+  const services = await server.getPrimaryServices();
+  let fallback = null;
+  for (const service of services) {
+    const characteristics = await service.getCharacteristics();
+    for (const characteristic of characteristics) {
+      const properties = characteristic.properties || {};
+      if (!properties.notify) continue;
+      const uuid = String(characteristic.uuid || "").toLowerCase();
+      if (WITMOTION_NOTIFY_UUID_CANDIDATES.has(uuid)) return characteristic;
+      if (!fallback) fallback = characteristic;
+    }
+  }
+  if (fallback) return fallback;
+  throw new Error("No notify characteristic found.");
+}
 
 function createDefaultLiveSensorConfig() {
   return {
@@ -1915,7 +2141,9 @@ function buildRealtimeAnalysis(rows, step4Copy) {
     warningText: step4Copy.bluetoothMappingWarning,
   });
   const warnings = [...leftLeg.warnings, ...rightLeg.warnings];
-  const availableRoms = [leftLeg.rom_deg, rightLeg.rom_deg].filter((value) => Number.isFinite(Number(value)));
+  const availableRoms = [leftLeg.rom_deg, rightLeg.rom_deg].filter(
+    (value) => value !== null && value !== undefined && Number.isFinite(Number(value))
+  );
   const combinedRom = availableRoms.length > 0
     ? roundCalc(availableRoms.reduce((sum, value) => sum + Number(value), 0) / availableRoms.length, 1)
     : null;
@@ -2232,6 +2460,8 @@ export default function App() {
     knee: null,
     ankle: null,
   });
+  const [bluetoothUiState, setBluetoothUiState] = useState(() => createBluetoothUiState());
+  const [bluetoothGuideDeviceId, setBluetoothGuideDeviceId] = useState("");
 
   const [reportResult, setReportResult] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -2242,6 +2472,8 @@ export default function App() {
 
   const imageInputRef = useRef(null);
   const csvInputRef = useRef(null);
+  const bluetoothConnectionsRef = useRef({});
+  const bluetoothLastPostedAtRef = useRef({});
   const t = STRINGS[lang];
   const liveImuText = realtimeImuCopy(lang);
   const step4ImuText = STEP4_IMU_COPY;
@@ -2252,7 +2484,9 @@ export default function App() {
   const currentMaxAngle = imuResult?.max_angle_deg ?? imuResult?.session_summary?.max_angle_deg ?? imuResult?.rom_scores?.[0]?.max_angle_deg ?? null;
   const currentRom = imuResult?.rom_deg ?? imuResult?.session_summary?.rom_deg ?? imuResult?.rom_scores?.[0]?.rom_deg ?? null;
   const imuSummary = imuResult?.session_summary || {};
-  const imuRomValid = imuSummary.rom_valid !== false && currentRom !== null && currentRom !== undefined;
+  const imuHasUsableRom = currentRom !== null && currentRom !== undefined && Number.isFinite(Number(currentRom));
+  const imuNeedsSensorCheck = imuHasUsableRom && imuSummary.rom_valid === false;
+  const imuRomValid = imuHasUsableRom;
   const imuRomMethodUsed = imuSummary.rom_method_used || "-";
   const imuRomDiagnostics = Array.isArray(imuSummary.rom_candidate_diagnostics) ? imuSummary.rom_candidate_diagnostics : [];
   const gyroRomDiagnostic = imuRomDiagnostics.find((item) => item?.name === "gyro_integrated_detrended");
@@ -2287,19 +2521,30 @@ export default function App() {
       patient: patientId.trim().length > 0,
       koos: Boolean(koosResult?.koos_total !== undefined),
       kl: Boolean(klResult?.kl_grade !== undefined),
-      imu: Boolean(imuResult && imuRomValid),
+      imu: Boolean(imuResult && imuHasUsableRom),
       report: Boolean(reportResult?.session_id),
       videos: Boolean(reportResult?.session_id),
     }),
-    [patientId, koosResult, klResult, imuResult, imuRomValid, reportResult]
+    [patientId, koosResult, klResult, imuResult, imuHasUsableRom, reportResult]
+  );
+  const completedState = useMemo(
+    () => ({
+      patient: Boolean(completedSteps.patient || readyState.patient),
+      koos: Boolean(completedSteps.koos || readyState.koos),
+      kl: Boolean(completedSteps.kl || readyState.kl),
+      imu: Boolean(completedSteps.imu || readyState.imu),
+      report: Boolean(completedSteps.report || readyState.report),
+      videos: Boolean(completedSteps.videos),
+    }),
+    [completedSteps, readyState]
   );
   const activeStepComplete =
-    (activeStep === "patient" && readyState.patient) ||
-    (activeStep === "koos" && readyState.koos) ||
-    (activeStep === "kl" && readyState.kl) ||
-    (activeStep === "imu" && readyState.imu) ||
-    (activeStep === "report" && readyState.report) ||
-    (activeStep === "videos" && readyState.videos);
+    (activeStep === "patient" && completedState.patient) ||
+    (activeStep === "koos" && completedState.koos) ||
+    (activeStep === "kl" && completedState.kl) ||
+    (activeStep === "imu" && completedState.imu) ||
+    (activeStep === "report" && completedState.report) ||
+    (activeStep === "videos" && completedState.videos);
   const showGlobalWizardNav = !["koos", "videos"].includes(activeStep) && !activeStepComplete;
   const klModelStatus = klResult?.kl_model || health?.kl_model;
   const klGradeLabel = klResult ? t.klLabels[String(klResult.kl_grade)] || klResult.label || t.labels.klGrade : "-";
@@ -2321,6 +2566,8 @@ export default function App() {
       : currentKoosPanel.note || "";
   const normalizedLiveImuLatest = useMemo(() => normalizeImuRows(liveImuLatest), [liveImuLatest]);
   const normalizedLiveImuRows = useMemo(() => normalizeImuRows(liveImuRows), [liveImuRows]);
+  const bluetoothSupported = isBluetoothSupported();
+  const bluetoothContextAllowed = isBluetoothContextAllowed();
   const realtimeLatestByDevice = useMemo(
     () => buildLatestRowsByDevice([...(Array.isArray(normalizedLiveImuLatest) ? normalizedLiveImuLatest : []), ...(Array.isArray(normalizedLiveImuRows) ? normalizedLiveImuRows : [])]),
     [normalizedLiveImuLatest, normalizedLiveImuRows]
@@ -2332,6 +2579,28 @@ export default function App() {
   const step4WitMotionSensorCards = useMemo(
     () => buildRealtimeSensorCards(WITMOTION_IMU_DEVICE_CONFIG, realtimeLatestByDevice, liveImuText),
     [realtimeLatestByDevice, liveImuText]
+  );
+  const step4BleSensorCards = useMemo(
+    () => WITMOTION_IMU_DEVICE_CONFIG.map((device) => {
+      const uiState = bluetoothUiState[device.deviceId] || {};
+      const latestRow = realtimeLatestByDevice.get(device.deviceId) || null;
+      const statusMap = {
+        not_connected: step4ImuText.bluetoothStatusNotConnected,
+        connecting: step4ImuText.bluetoothStatusConnecting,
+        connected: step4ImuText.bluetoothStatusConnected,
+        disconnected: step4ImuText.bluetoothStatusDisconnected,
+      };
+      return {
+        ...device,
+        latestRow,
+        statusKey: uiState.status || "not_connected",
+        statusLabel: statusMap[uiState.status || "not_connected"] || step4ImuText.bluetoothStatusNotConnected,
+        deviceName: uiState.deviceName || "",
+        lastError: uiState.lastError || "",
+        lastReceivedAt: uiState.lastReceivedAt || "",
+      };
+    }),
+    [bluetoothUiState, realtimeLatestByDevice, step4ImuText]
   );
   const step4RealtimeAnalysis = useMemo(
     () => buildRealtimeAnalysis(normalizedLiveImuRows, step4ImuText),
@@ -2349,6 +2618,11 @@ export default function App() {
   );
   const step4VisualizationSensors = [...step4PiSensorCards, ...step4WitMotionSensorCards];
   const step4VisibleSampleRows = Array.isArray(step4RealtimeAnalysis.live_samples) ? step4RealtimeAnalysis.live_samples : [];
+  const bluetoothGuideLabel = bluetoothGuideDeviceId
+    ? `${step4ImuText.bluetoothGuideStepPrefix} ${getImuLabel({ device_id: bluetoothGuideDeviceId, label: getDeviceConfig(bluetoothGuideDeviceId)?.label })}.`
+    : step4BleSensorCards.every((card) => card.statusKey === "connected")
+      ? step4ImuText.bluetoothGuideDone
+      : step4ImuText.bluetoothGuideIdle;
   const koosBreakdowns = useMemo(() => {
     if (!koosResult) return [];
 
@@ -2751,6 +3025,7 @@ export default function App() {
       setImuLoading(true);
       setImuError("");
       try {
+        invalidateReportFlow();
         setImuResult(step4RealtimeAnalysis);
         return;
       } finally {
@@ -2771,6 +3046,7 @@ export default function App() {
       const res = await fetch(`${API}/imu/analyze?lang=${lang}&sensor_location=${sensorLocation}`, { method: "POST", body: form });
       const data = await readResponsePayload(res);
       if (!res.ok) throw { ...data, status: res.status };
+      invalidateReportFlow();
       setImuResult(data);
       setImuError("");
     } catch (error) {
@@ -2816,6 +3092,12 @@ export default function App() {
     setCompletedSteps((prev) => ({ ...prev, [id]: true }));
   }
 
+  function invalidateReportFlow() {
+    setReportResult(null);
+    setReportError("");
+    setCompletedSteps((prev) => ({ ...prev, report: false, videos: false }));
+  }
+
   function nextStep() {
     const idx = STEPS.findIndex((s) => s.id === activeStep);
     if (idx < 0 || idx === STEPS.length - 1) return;
@@ -2845,7 +3127,8 @@ export default function App() {
   }
 
   function continueToReport() {
-    if (!imuRomValid) return;
+    if (!imuHasUsableRom) return;
+    invalidateReportFlow();
     markComplete("imu");
     setActiveStep("report");
   }
@@ -2943,6 +3226,148 @@ export default function App() {
     setReportResult(null);
   }
 
+  function updateBluetoothCard(deviceId, updates) {
+    setBluetoothUiState((current) => ({
+      ...current,
+      [deviceId]: {
+        ...current[deviceId],
+        ...updates,
+      },
+    }));
+  }
+
+  function mergeLiveLatestRow(nextRow) {
+    setLiveImuLatest((current) => {
+      const rows = Array.isArray(current) ? current : [];
+      const nextRows = rows.filter((row) => row?.device_id !== nextRow.device_id);
+      return [nextRow, ...nextRows];
+    });
+  }
+
+  function appendLiveRow(nextRow) {
+    setLiveImuRows((current) => [nextRow, ...(Array.isArray(current) ? current : [])].slice(0, LIVE_IMU_FETCH_LIMIT));
+  }
+
+  async function postLiveBleRow(nextRow) {
+    try {
+      await fetch(`${API}/imu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextRow),
+      });
+    } catch {
+      // Keep live visualization responsive even if the POST fails.
+    }
+  }
+
+  function shouldPostBleRow(deviceId) {
+    const now = Date.now();
+    const lastPostedAt = Number(bluetoothLastPostedAtRef.current[deviceId] || 0);
+    if (now - lastPostedAt < BROWSER_BLE_POST_INTERVAL_MS) return false;
+    bluetoothLastPostedAtRef.current[deviceId] = now;
+    return true;
+  }
+
+  function handleBleReading(device, nextRow) {
+    const normalizedRow = normalizeImuRow({
+      ...nextRow,
+      device_id: device.deviceId,
+      leg: device.leg,
+      body_part: device.bodyPart,
+    });
+    if (!normalizedRow) return;
+    mergeLiveLatestRow(normalizedRow);
+    updateBluetoothCard(device.deviceId, {
+      status: "connected",
+      lastError: "",
+      lastReceivedAt: normalizedRow.timestamp || new Date().toISOString(),
+    });
+    if (!shouldPostBleRow(device.deviceId)) return;
+    appendLiveRow(normalizedRow);
+    void postLiveBleRow(normalizedRow);
+  }
+
+  async function disconnectBluetoothSensor(deviceId) {
+    const connection = bluetoothConnectionsRef.current[deviceId];
+    if (!connection) return;
+    try {
+      connection.characteristic?.removeEventListener?.("characteristicvaluechanged", connection.handleNotification);
+      if (connection.characteristic?.stopNotifications) {
+        await connection.characteristic.stopNotifications();
+      }
+    } catch {
+      // Ignore stop-notification failures during teardown.
+    }
+    try {
+      connection.device?.gatt?.disconnect?.();
+    } catch {
+      // Ignore disconnect failures during teardown.
+    }
+    delete bluetoothConnectionsRef.current[deviceId];
+    delete bluetoothLastPostedAtRef.current[deviceId];
+  }
+
+  async function connectBluetoothSensor(device) {
+    if (!bluetoothSupported || !bluetoothContextAllowed) return false;
+    await disconnectBluetoothSensor(device.deviceId);
+    updateBluetoothCard(device.deviceId, { status: "connecting", lastError: "" });
+    try {
+      const selectedDevice = await navigator.bluetooth.requestDevice(buildBluetoothRequestOptions());
+      const server = await selectedDevice.gatt.connect();
+      const characteristic = await resolveWitMotionNotifyCharacteristic(server);
+      const parser = createWitMotionBleParser(device, (nextRow) => handleBleReading(device, nextRow));
+      const handleNotification = (event) => {
+        const value = event?.target?.value;
+        if (!value) return;
+        parser.push(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+      };
+      const handleDisconnect = () => {
+        updateBluetoothCard(device.deviceId, { status: "disconnected" });
+        delete bluetoothConnectionsRef.current[device.deviceId];
+      };
+
+      selectedDevice.addEventListener?.("gattserverdisconnected", handleDisconnect);
+      await characteristic.startNotifications();
+      characteristic.addEventListener?.("characteristicvaluechanged", handleNotification);
+      bluetoothConnectionsRef.current[device.deviceId] = {
+        device: selectedDevice,
+        characteristic,
+        handleNotification,
+        handleDisconnect,
+      };
+      updateBluetoothCard(device.deviceId, {
+        status: "connected",
+        deviceName: selectedDevice.name || "",
+        lastError: "",
+      });
+      return true;
+    } catch (error) {
+      updateBluetoothCard(device.deviceId, {
+        status: "disconnected",
+        lastError: error instanceof Error ? error.message : "Connection failed",
+      });
+      return false;
+    }
+  }
+
+  async function handleConnectBluetoothSensor(device) {
+    setBluetoothGuideDeviceId(device.deviceId);
+    try {
+      await connectBluetoothSensor(device);
+    } finally {
+      setBluetoothGuideDeviceId("");
+    }
+  }
+
+  async function handleConnectAllBluetoothSensors() {
+    for (const device of WITMOTION_IMU_DEVICE_CONFIG) {
+      setBluetoothGuideDeviceId(device.deviceId);
+      const connected = await connectBluetoothSensor(device);
+      if (!connected) break;
+    }
+    setBluetoothGuideDeviceId("");
+  }
+
   function handleImuAnalysisLegChange(value) {
     setImuAnalysisLeg(value);
     setImuResult(null);
@@ -2988,6 +3413,13 @@ export default function App() {
     setReportResult(null);
   }
 
+  useEffect(() => () => {
+    const deviceIds = Object.keys(bluetoothConnectionsRef.current);
+    for (const deviceId of deviceIds) {
+      void disconnectBluetoothSensor(deviceId);
+    }
+  }, []);
+
   return (
     <div className="app">
       <style>{GLOBAL_CSS}</style>
@@ -3000,7 +3432,7 @@ export default function App() {
 
           <div className="stepList">
             {STEPS.map((step, i) => {
-              const complete = Boolean(completedSteps[step.id] || readyState.report && step.id === "report");
+              const complete = Boolean(completedState[step.id]);
               const ready = Boolean(readyState[step.id]);
               const active = activeStep === step.id;
               return (
@@ -3415,6 +3847,53 @@ export default function App() {
                           </div>
                           <p className="microNote">{step4ImuText.witmotionLiveNote}</p>
                           <p className="microNote">{step4ImuText.witmotionMappingNote}</p>
+                          <div className="bleConnectPanel">
+                            <div className="bleConnectPanelTop">
+                              <div>
+                                <strong>{step4ImuText.bluetoothGuideLabel}</strong>
+                                <div className="microNote">{bluetoothGuideLabel}</div>
+                              </div>
+                              <button
+                                className="btn primary"
+                                onClick={handleConnectAllBluetoothSensors}
+                                disabled={!bluetoothSupported || !bluetoothContextAllowed || bluetoothGuideDeviceId.length > 0}
+                              >
+                                {step4ImuText.connectAllSensors}
+                              </button>
+                            </div>
+                            {!bluetoothSupported ? <div className="error">{step4ImuText.bluetoothUnsupported}</div> : null}
+                            {bluetoothSupported && !bluetoothContextAllowed ? <div className="error">{step4ImuText.bluetoothNeedsSecureContext}</div> : null}
+                            <div className="bleConnectGrid">
+                              {step4BleSensorCards.map((card) => (
+                                <article key={`${card.deviceId}-ble`} className="bleConnectCard">
+                                  <div className="bleConnectCardTop">
+                                    <div>
+                                      <strong>{card.label}</strong>
+                                      <div className="imuStatusSource">{card.deviceId}</div>
+                                    </div>
+                                    <span className={`chip ${card.statusKey === "connected" ? "teal" : card.statusKey === "connecting" ? "amber" : ""}`}>{card.statusLabel}</span>
+                                  </div>
+                                  <div className="microNote">{card.deviceName || "WitMotion BLE"}</div>
+                                  {card.lastReceivedAt ? <div className="microNote">Last received {formatDate(card.lastReceivedAt)}</div> : null}
+                                  {card.latestRow ? (
+                                    <div className="imuStatusMetrics">
+                                      Pitch {f(card.latestRow.pitch, "°")} · Roll {f(card.latestRow.roll, "°")}
+                                    </div>
+                                  ) : (
+                                    <div className="imuStatusMetrics">{step4ImuText.bluetoothStatusNotConnected}</div>
+                                  )}
+                                  {card.lastError ? <div className="microNote">{card.lastError}</div> : null}
+                                  <button
+                                    className="btn"
+                                    onClick={() => handleConnectBluetoothSensor(card)}
+                                    disabled={!bluetoothSupported || !bluetoothContextAllowed || bluetoothGuideDeviceId === card.deviceId}
+                                  >
+                                    {step4ImuText.connectSensor}
+                                  </button>
+                                </article>
+                              ))}
+                            </div>
+                          </div>
                           {liveImuLoading && step4RecentLiveRows.length === 0 ? <div className="empty">{t.labels.loading}</div> : null}
                         </div>
                       </>
@@ -3478,14 +3957,14 @@ export default function App() {
                           <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
                           <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
                           <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
-                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{imuRomValid ? t.labels.readyForReport : "Needs sensor check"}</strong></div>
+                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{imuNeedsSensorCheck ? "Needs sensor check" : t.labels.readyForReport}</strong></div>
                           <div className="metric"><small>ROM method used</small><strong style={{ fontSize: 16 }}>{imuRomMethodUsed}</strong></div>
                           <div className="metric"><small>Sensor format</small><strong style={{ fontSize: 16 }}>{imuSensorFormat}</strong></div>
                           <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
                         </div>
                         <div className="formulaBox">{imuSensorSetupNote}</div>
                         <div className="resultActions">
-                          <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
+                          <button className="btn primary" onClick={continueToReport} disabled={!imuHasUsableRom}>{t.buttons.continueToReport}</button>
                           <button className="btn" onClick={analyzeImu} disabled={imuLoading}>{t.buttons.rerunImu}</button>
                           <button className="btn" onClick={() => setImuResult(null)}>{t.buttons.editImuData}</button>
                         </div>
@@ -3513,7 +3992,7 @@ export default function App() {
                           <div className="metric"><small>{t.labels.exercise}</small><strong style={{ fontSize: 18 }}>{t.exercises[exercise] || movementResult}</strong></div>
                           <div className="metric"><small>{t.labels.sensorSetup}</small><strong style={{ fontSize: 18 }}>{t.sensorSetups[sensorLocation] || sensorLocation}</strong></div>
                           <div className="metric"><small>{t.labels.repetitions}</small><strong>{imuRepetitions}</strong></div>
-                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{t.labels.readyForReport}</strong></div>
+                          <div className="metric"><small>{t.labels.movementStatus}</small><strong style={{ fontSize: 18 }}>{imuNeedsSensorCheck ? "Needs sensor check" : t.labels.readyForReport}</strong></div>
                           <div className="metric"><small>{t.labels.previousRom}</small><strong>{f(previousSessionRom, "°")}</strong></div>
                           <div className="metric"><small>Signed Delta ROM</small><strong>{f(imuSignedDeltaRom, "°")}</strong></div>
                           <div className="metric"><small>Absolute Delta ROM</small><strong>{f(imuAbsoluteDeltaRom, "°")}</strong></div>
@@ -3525,7 +4004,7 @@ export default function App() {
                         </div>
                         <div className="formulaBox">{imuSensorSetupNote}</div>
                         {imuFallbackWarning ? (
-                          <div className={imuRomValid ? "empty" : "error"}>{imuFallbackWarning}</div>
+                          <div className={imuNeedsSensorCheck || !imuRomValid ? "error" : "empty"}>{imuFallbackWarning}</div>
                         ) : null}
                         {imuRomDetail ? (
                           <div className="calcCardGrid">
@@ -3551,7 +4030,7 @@ export default function App() {
                           </div>
                         ) : null}
                         <div className="resultActions">
-                          <button className="btn primary" onClick={continueToReport} disabled={!imuRomValid}>{t.buttons.continueToReport}</button>
+                          <button className="btn primary" onClick={continueToReport} disabled={!imuHasUsableRom}>{t.buttons.continueToReport}</button>
                           <button className="btn" onClick={analyzeImu} disabled={(imuDataSource === "csv" && !imuFile) || imuLoading}>{t.buttons.rerunImu}</button>
                           <button className="btn" onClick={imuDataSource === "csv" ? clearImuFile : () => setImuResult(null)}>{t.buttons.editImuData}</button>
                         </div>

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import signal
 import sys
 import time
@@ -17,11 +18,29 @@ except ImportError:  # pragma: no cover - runtime dependency on Raspberry Pi
     smbus = None
 
 
-API_URL = "http://89.218.178.215:18190/api/imu"
-DEVICE_ID = "pi1"
-LEG = "left"
-BODY_PART = "hip"
-SEND_INTERVAL_SECONDS = 1
+DEFAULT_API_URL = "http://89.218.178.215:18190/api/imu"
+DEFAULT_DEVICE_ID = "pi1"
+DEFAULT_LEG = "left"
+DEFAULT_BODY_PART = "hip"
+DEFAULT_SEND_INTERVAL_SECONDS = 5.0
+
+
+def get_env_float(name, default):
+    raw = os.environ.get(name)
+    if raw in (None, ""):
+        return float(default)
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"WARNING: {name}={raw!r} is invalid. Using default {default}.", file=sys.stderr)
+        return float(default)
+
+
+API_URL = os.environ.get("ORTHO_API_URL", DEFAULT_API_URL)
+DEVICE_ID = os.environ.get("ORTHO_DEVICE_ID", DEFAULT_DEVICE_ID)
+LEG = os.environ.get("ORTHO_LEG", DEFAULT_LEG)
+BODY_PART = os.environ.get("ORTHO_BODY_PART", DEFAULT_BODY_PART)
+SEND_INTERVAL_SECONDS = get_env_float("ORTHO_SEND_INTERVAL_SECONDS", DEFAULT_SEND_INTERVAL_SECONDS)
 
 DEVICE_ADDRESS = 0x68
 PWR_MGMT_1 = 0x6B
