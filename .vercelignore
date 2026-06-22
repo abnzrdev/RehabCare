@@ -1,9 +1,15 @@
 .git
+.vercel
 node_modules
 frontend/node_modules
-venv
+frontend/.vercel
+frontend/.env.local
 .venv
+venv
 .venv-ble
+api
+rehab_platform
+rehab_imu_extracted
 models
 data
 test_data
