@@ -1,6 +1,6 @@
-# OrthoScan AI
+# RehabCare
 
-Clinical knee rehabilitation workflow with a FastAPI backend, React frontend, KL grading, IMU ROM analysis, and a final rehab report wizard.
+RehabCare is a clinical knee rehabilitation workflow with a FastAPI backend, React frontend, KL grading, IMU ROM analysis, and a final rehab report wizard.
 
 ## Frontend / Backend Architecture
 

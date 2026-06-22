@@ -463,7 +463,7 @@ const STEP4_IMU_COPY = {
 
 const STRINGS = {
   en: {
-    app: "OrthoScan AI",
+    app: "RehabCare",
     clinicalLine: "Clinical rehabilitation workflow",
     sidebarSubtitle: "Clinical rehabilitation wizard",
     steps: {
@@ -727,7 +727,7 @@ const STRINGS = {
     },
   },
   ru: {
-    app: "OrthoScan AI",
+    app: "RehabCare",
     clinicalLine: "Клинический реабилитационный процесс",
     sidebarSubtitle: "Клинический мастер реабилитации",
     steps: {
@@ -993,7 +993,7 @@ const STRINGS = {
     },
   },
   kz: {
-    app: "OrthoScan AI",
+    app: "RehabCare",
     clinicalLine: "Клиникалық оңалту процесі",
     sidebarSubtitle: "Клиникалық оңалту шебері",
     steps: {
